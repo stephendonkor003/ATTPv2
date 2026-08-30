@@ -167,6 +167,7 @@
                                         <th>Criteria</th>
                                         <th class="text-end">Max</th>
                                         <th class="text-end">Score</th>
+                                        <th>Evaluator response</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -178,6 +179,7 @@
                                             <td>{{ $criteria->name }}</td>
                                             <td class="text-end">{{ number_format($criteria->max_score ?? 0, 2) }}</td>
                                             <td class="text-end fw-semibold">{{ number_format($criteriaScore->score ?? 0, 2) }}</td>
+                                            <td>{{ $criteriaScore->comment ?? 'N/A' }}</td>
                                         </tr>
                                     @endforeach
                                 </tbody>

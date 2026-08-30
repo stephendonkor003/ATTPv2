@@ -60,7 +60,8 @@ it('renders the correct response controls for services goods and expression of i
 
     expect($workspace)
         ->toContain('@if ($isNumeric)')
-        ->toContain('<input type="number" name="criteria[{{ $criterion->id }}]"')
+        ->toContain('<input id="{{ $scoreInputId }}" type="number"')
+        ->toContain('name="criteria[{{ $criterion->id }}][score]"')
         ->toContain('max="{{ $criterion->max_score }}"')
         ->toContain('data-max="{{ $criterion->max_score }}"')
         ->toContain('class="decision-options {{ $evaluation->isEoi() ? \'is-eoi\' : \'is-goods\' }}"')
@@ -82,13 +83,48 @@ it('renders the correct response controls for services goods and expression of i
         ]);
 });
 
+it('renders numeric scoring as accessible responsive question cards', function () {
+    $workspace = file_get_contents(
+        dirname(__DIR__, 2).'/resources/views/evaluations/submit.blade.php'
+    );
+
+    expect($workspace)
+        ->toContain('<div class="numeric-question-list numeric-criteria-wrap" role="list"')
+        ->toContain('<article class="numeric-question-card criterion-row" data-criterion-row role="listitem">')
+        ->toContain('<label for="{{ $scoreInputId }}">Evaluator score</label>')
+        ->toContain('<input id="{{ $scoreInputId }}" type="number"')
+        ->toContain('name="criteria[{{ $criterion->id }}][score]"')
+        ->toContain('class="form-control score-input" min="0"')
+        ->toContain('inputmode="decimal" placeholder="0.00"')
+        ->toContain('data-section-id="{{ $section->id }}"')
+        ->toContain('aria-describedby="{{ $scoreRangeId }}"')
+        ->toContain('<label for="{{ $scoreCommentId }}" class="evidence-label">')
+        ->toContain('<strong>Evidence response</strong>')
+        ->toContain('name="criteria[{{ $criterion->id }}][comment]"')
+        ->toContain('class="form-control evidence-comment numeric-evidence-comment" rows="5" maxlength="5000"')
+        ->toContain('placeholder="Explain the evidence and reasoning for this score" required>')
+        ->toContain('.numeric-evidence-response { min-width: 0; grid-column: 1 / -1;')
+        ->toContain('.numeric-evidence-comment { display: block; width: 100%; max-width: 100%; min-height: 120px;')
+        ->toContain('.score-input { flex: 1 1 12rem; width: 100%; min-width: 8rem; min-height: 52px;')
+        ->toContain('.score-input:focus, .score-input:focus-visible')
+        ->toContain('.numeric-response-panel { display: grid; min-width: 0; grid-template-columns: minmax(170px, .55fr) minmax(280px, 1fr);')
+        ->toContain('.numeric-response-panel { grid-template-columns: 1fr; }')
+        ->toContain('.score-entry { flex-direction: column; }')
+        ->toContain('function numericResponseComplete(input)')
+        ->toContain("row?.querySelector('.numeric-evidence-comment')")
+        ->toContain('? numericResponseComplete(scoreInput)')
+        ->toContain('const answered = relevant.filter(input => numericResponseComplete(input)).length;')
+        ->toContain("event.target.matches('.score-input, .decision-input, .evidence-comment')")
+        ->not->toContain('<div class="table-responsive numeric-criteria-wrap">')
+        ->not->toContain('.score-column { width: 130px; }');
+});
+
 it('renders categorical responses as overflow-safe question cards instead of a table', function () {
     $workspace = file_get_contents(
         dirname(__DIR__, 2).'/resources/views/evaluations/submit.blade.php'
     );
 
     expect($workspace)
-        ->toContain('<div class="table-responsive numeric-criteria-wrap">')
         ->toContain('<div class="categorical-question-list" role="list"')
         ->toContain('<article class="categorical-question-card" data-criterion-row role="listitem">')
         ->toContain('<header class="categorical-question-header">')
@@ -103,9 +139,50 @@ it('renders categorical responses as overflow-safe question cards instead of a t
         ->toContain('.decision-option:focus-within')
         ->toContain('.decision-option > span:last-child { min-width: 0; overflow-wrap: anywhere; }')
         ->toContain('.evidence-comment { display: block; width: 100%; max-width: 100%;')
+        ->toContain('function categoricalResponseComplete(input)')
+        ->toContain("row?.querySelector('.evidence-comment')")
+        ->toContain(": categoricalResponseComplete(row.querySelector('.decision-input:checked'))")
+        ->toContain('const completeInputs = selectedInputs.filter(input => categoricalResponseComplete(input));')
+        ->toContain('const relevantComplete = completeInputs.filter(input => ids.includes(String(input.dataset.sectionId)));')
+        ->toContain('const answered = relevantComplete.length;')
+        ->toContain("event.target.matches('.score-input, .decision-input, .evidence-comment')")
         ->not->toContain('<th>Evaluation question and response</th>')
         ->not->toContain('class="categorical-criterion-cell"')
         ->not->toContain('categorical-response-grid');
+});
+
+it('presents section strengths and weaknesses as optional summaries', function () {
+    $workspace = file_get_contents(
+        dirname(__DIR__, 2).'/resources/views/evaluations/submit.blade.php'
+    );
+
+    expect($workspace)
+        ->toContain('<span>Section strengths</span>')
+        ->toContain('<span>Section weaknesses</span>')
+        ->toContain('<small>Optional summary</small>')
+        ->toContain('placeholder="Optional: summarise the strongest evidence">')
+        ->toContain('placeholder="Optional: summarise cross-cutting gaps or concerns">')
+        ->toContain('.section-notes label small { color: #98a2b3;')
+        ->not->toContain('placeholder="Optional: summarise the strongest evidence" required')
+        ->not->toContain('placeholder="Optional: summarise cross-cutting gaps or concerns" required');
+});
+
+it('reveals and focuses invalid question controls inside collapsed sections', function () {
+    $workspace = file_get_contents(
+        dirname(__DIR__, 2).'/resources/views/evaluations/submit.blade.php'
+    );
+
+    expect($workspace)
+        ->toContain("finalForm?.addEventListener('invalid', event => {")
+        ->toContain("invalidControl.closest('[data-criterion-row]')")
+        ->toContain("const content = invalidControl.closest('.assessment-node-body');")
+        ->toContain("const section = invalidControl.closest('[data-evaluation-section]');")
+        ->toContain("content?.classList.contains('is-collapsed')")
+        ->toContain("content.classList.remove('is-collapsed');")
+        ->toContain("toggle?.setAttribute('aria-expanded', 'true');")
+        ->toContain("invalidControl.scrollIntoView({ behavior: 'smooth', block: 'center' });")
+        ->toContain('invalidControl.focus({ preventScroll: true });')
+        ->toContain('}, true);');
 });
 
 it('uses applicant-scoped canonical evaluator routes', function () {

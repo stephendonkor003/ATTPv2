@@ -111,11 +111,11 @@
                         <h1>{{ $evaluation->name }}</h1>
                         <p>
                             @if ($isServices)
-                                Build a scored evaluation form with up to four clear levels and optional rolled-up subtotals.
+                                Build a scored evaluation form with up to four clear levels. Every question requires its own score and evidence response.
                             @elseif ($isEoi)
-                                Organize EOI evidence into four levels and optionally show category-count summaries at any section.
+                                Organize EOI evidence into four levels. Every question requires its own decision and evidence comment.
                             @else
-                                Organize compliance checks into four levels and optionally show Yes/No category summaries.
+                                Organize compliance checks into four levels. Every question requires its own decision and evidence comment.
                             @endif
                         </p>
                     </div>
@@ -194,8 +194,12 @@
             <div class="structure-guide-copy">
                 <span class="guide-icon"><i class="feather-info" aria-hidden="true"></i></span>
                 <div>
-                    <strong>Start simple. Add depth only where it helps.</strong>
-                    <span>Questions can sit at any level. A parent can contain both its own questions and child sections.</span>
+                    <strong>Every configured question requires an individual evaluator response.</strong>
+                    <span>
+                        {{ $isServices
+                            ? 'Evaluators must enter both a score and supporting evidence for each question; section summaries are optional.'
+                            : 'Evaluators must select a decision and add an evidence comment for each question; section summaries are optional.' }}
+                    </span>
                 </div>
             </div>
             <div class="tier-route" aria-label="Available hierarchy levels">

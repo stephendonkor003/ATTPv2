@@ -367,11 +367,11 @@
                         <span class="criteria-eyebrow">Questions</span>
                         <span class="criteria-helper">
                             @if ($isServices)
-                                Scores entered here contribute to this section and its parent subtotals.
+                                Every question requires its own score and supporting evidence response. Scores contribute to section and parent subtotals.
                             @elseif ($evaluation->isEoi())
-                                Evaluators classify each criterion using the EOI qualification scale.
+                                Evaluators classify and add an evidence comment for every question.
                             @else
-                                Evaluators record a Yes or No decision for each criterion.
+                                Evaluators record a Yes or No decision and evidence comment for every question.
                             @endif
                         </span>
                     </div>

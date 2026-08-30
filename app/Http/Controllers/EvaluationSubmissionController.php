@@ -14,6 +14,7 @@ use App\Models\FormSubmission;
 use App\Models\Procurement;
 use App\Models\ReworkRequest;
 use App\Models\User;
+use App\Services\EndowmentFundTechnicalProposalDocumentRehydrator;
 use App\Services\EoiQualificationService;
 use App\Services\EvaluationAssignmentTargetResolver;
 use App\Services\EvaluationReworkService;
@@ -389,7 +390,27 @@ class EvaluationSubmissionController extends Controller
                 abort_unless($evaluation->usesNumericScoring(), 422, 'Unsupported evaluation type.');
 
                 // SERVICES
-                if ($data === null || $data === '') {
+                // Numeric responses now carry both the score and the evaluator's
+                // question-specific evidence. Continue accepting the former scalar
+                // score shape for draft autosaves so a stale browser tab cannot lose
+                // work during deployment; final submission uses the strict nested
+                // contract enforced in finalSubmissionRules().
+                $isStructuredResponse = is_array($data);
+                if (! $isStructuredResponse && $data !== null && ! is_scalar($data)) {
+                    throw ValidationException::withMessages([
+                        "criteria.{$criteriaId}" => 'Invalid criterion response.',
+                    ]);
+                }
+
+                $rawScore = $isStructuredResponse ? ($data['score'] ?? null) : $data;
+                $comment = $isStructuredResponse
+                    ? $this->validatedDraftText(
+                        $data['comment'] ?? null,
+                        "criteria.{$criteriaId}.comment"
+                    )
+                    : null;
+
+                if (($rawScore === null || $rawScore === '') && $comment === null) {
                     $submission->criteriaScores()
                         ->where('evaluation_criteria_id', $criteriaId)
                         ->delete();
@@ -397,27 +418,35 @@ class EvaluationSubmissionController extends Controller
                     continue;
                 }
 
-                if (! is_numeric($data)) {
-                    throw ValidationException::withMessages([
-                        "criteria.{$criteriaId}" => 'The score must be numeric.',
-                    ]);
+                $score = null;
+                if ($rawScore !== null && $rawScore !== '') {
+                    if (! is_numeric($rawScore)) {
+                        throw ValidationException::withMessages([
+                            "criteria.{$criteriaId}.score" => 'The score must be numeric.',
+                        ]);
+                    }
+
+                    $score = round((float) $rawScore, 2);
+                    if ($score < 0 || $score > (float) $criteria->max_score) {
+                        throw ValidationException::withMessages([
+                            "criteria.{$criteriaId}.score" => "Enter a score from 0 to {$criteria->max_score}.",
+                        ]);
+                    }
                 }
 
-                $score = round((float) $data, 2);
-                if ($score < 0 || $score > (float) $criteria->max_score) {
-                    throw ValidationException::withMessages([
-                        "criteria.{$criteriaId}" => "Enter a score from 0 to {$criteria->max_score}.",
-                    ]);
+                $values = [
+                    'submission_id' => $submission->id,
+                    'score' => $score,
+                    'decision' => null,
+                ];
+
+                if ($isStructuredResponse) {
+                    $values['comment'] = $comment;
                 }
 
                 $submission->criteriaScores()->updateOrCreate(
                     ['evaluation_criteria_id' => $criteriaId],
-                    [
-                        'submission_id' => $submission->id,
-                        'score' => $score,
-                        'decision' => null,
-                        'comment' => null,
-                    ]
+                    $values
                 );
             }
 
@@ -479,10 +508,9 @@ class EvaluationSubmissionController extends Controller
             'video.required' => 'Complete identity verification or attach a verification video before final submission.',
             'video.mimes' => 'The verification recording must be a WebM or MP4 video.',
             'criteria.*.required' => 'Every evaluation criterion must be completed.',
+            'criteria.*.score.required' => 'Enter a score for every evaluation question.',
+            'criteria.*.comment.required' => 'Add an evaluator response for every evaluation question.',
             'criteria.*.decision.required' => 'Select a decision for every criterion.',
-            'criteria.*.comment.required' => 'Add an evidence comment for every decision.',
-            'sections.*.strengths.required' => 'Summarise the strengths for every scored section.',
-            'sections.*.weaknesses.required' => 'Summarise the weaknesses for every scored section.',
         ]);
 
         $this->assertCompleteSubmissionPayload($request, $evaluation);
@@ -517,7 +545,7 @@ class EvaluationSubmissionController extends Controller
             /* =====================================================
              | CRITERIA SCORING
              | GOODS → YES/NO + COMMENT
-             | SERVICES → NUMERIC SCORE
+             | SERVICES → NUMERIC SCORE + EVIDENCE RESPONSE
              ===================================================== */
             foreach ($request->criteria as $criteriaId => $data) {
 
@@ -564,15 +592,18 @@ class EvaluationSubmissionController extends Controller
 
                 /* ---------- SERVICES ---------- */
                 abort_unless($evaluation->usesNumericScoring(), 422, 'Unsupported evaluation type.');
-                abort_if(! is_numeric($data), 422, 'Score must be numeric.');
+                abort_unless(is_array($data), 422, 'Invalid criterion response.');
+                abort_if(! is_numeric($data['score'] ?? null), 422, 'Score must be numeric.');
 
-                $score = round((float) $data, 2);
+                $score = round((float) $data['score'], 2);
+                $comment = trim((string) ($data['comment'] ?? ''));
 
                 abort_if(
                     $score < 0 || $score > $criteria->max_score,
                     422,
                     'Score exceeds allowed maximum.'
                 );
+                abort_if($comment === '', 422, 'Evaluator response is required.');
 
                 $submission->criteriaScores()->updateOrCreate(
                     ['evaluation_criteria_id' => $criteriaId],
@@ -580,38 +611,32 @@ class EvaluationSubmissionController extends Controller
                         'submission_id' => $submission->id,
                         'score' => $score,
                         'decision' => null,
-                        'comment' => null,
+                        'comment' => $comment,
                     ]
                 );
             }
 
             /* =====================================================
              | SECTION SUMMARIES
-             | Strengths & Weaknesses always required
+             | Strengths & Weaknesses are optional summaries
              | Section score only for SERVICES
              ===================================================== */
             foreach ($sectionPayload as $sectionId => $data) {
 
                 abort_unless(is_array($data), 422, 'Invalid evaluation section payload.');
 
-                abort_if(
-                    trim($data['strengths'] ?? '') === '',
-                    422,
-                    'Section strengths are required.'
-                );
-
-                abort_if(
-                    trim($data['weaknesses'] ?? '') === '',
-                    422,
-                    'Section weaknesses are required.'
-                );
-
                 $submission->sectionScores()->updateOrCreate(
                     ['evaluation_section_id' => $sectionId],
                     [
                         'submission_id' => $submission->id,
-                        'strengths' => trim($data['strengths']),
-                        'weaknesses' => trim($data['weaknesses']),
+                        'strengths' => $this->validatedDraftText(
+                            $data['strengths'] ?? null,
+                            "sections.{$sectionId}.strengths"
+                        ),
+                        'weaknesses' => $this->validatedDraftText(
+                            $data['weaknesses'] ?? null,
+                            "sections.{$sectionId}.weaknesses"
+                        ),
                     ]
                 );
             }
@@ -831,9 +856,20 @@ class EvaluationSubmissionController extends Controller
                 ),
             404
         );
-        abort_unless(Storage::disk('local')->exists($document->file_path), 404);
+        $privateDisk = Storage::disk('local');
 
-        return Storage::disk('local')->download($document->file_path, $document->original_filename, [
+        if (! $privateDisk->exists($document->file_path)) {
+            // The four historical Endowment Fund scans are bundled with exact
+            // fingerprints. Recover only a recognized copy after every
+            // assignment, nesting and snapshot authorization check above has
+            // passed; arbitrary missing proposal documents remain fail-closed.
+            app(EndowmentFundTechnicalProposalDocumentRehydrator::class)
+                ->recoverMissing($document);
+        }
+
+        abort_unless($privateDisk->exists($document->file_path), 404);
+
+        return $privateDisk->download($document->file_path, $document->original_filename, [
             'Content-Type' => $document->mime_type,
             'Cache-Control' => 'private, no-store, max-age=0',
             'Pragma' => 'no-cache',
@@ -1242,7 +1278,7 @@ class EvaluationSubmissionController extends Controller
     {
         $rules = [
             'criteria' => ['required', 'array'],
-            'sections' => ['required', 'array'],
+            'sections' => ['sometimes', 'array'],
             'video' => ['required', 'file', 'mimes:webm,mp4', 'max:20480'],
         ];
 
@@ -1250,12 +1286,14 @@ class EvaluationSubmissionController extends Controller
             $criterionKey = "criteria.{$criterion->id}";
 
             if ($evaluation->usesNumericScoring()) {
-                $rules[$criterionKey] = [
+                $rules[$criterionKey] = ['required', 'array'];
+                $rules["{$criterionKey}.score"] = [
                     'required',
                     'numeric',
                     'min:0',
                     'max:'.(float) $criterion->max_score,
                 ];
+                $rules["{$criterionKey}.comment"] = ['required', 'string', 'max:5000'];
 
                 continue;
             }
@@ -1270,9 +1308,9 @@ class EvaluationSubmissionController extends Controller
         }
 
         foreach ($evaluation->sections->filter(fn ($section) => $section->criteria->isNotEmpty()) as $section) {
-            $rules["sections.{$section->id}"] = ['required', 'array'];
-            $rules["sections.{$section->id}.strengths"] = ['required', 'string', 'max:5000'];
-            $rules["sections.{$section->id}.weaknesses"] = ['required', 'string', 'max:5000'];
+            $rules["sections.{$section->id}"] = ['sometimes', 'array'];
+            $rules["sections.{$section->id}.strengths"] = ['nullable', 'string', 'max:5000'];
+            $rules["sections.{$section->id}.weaknesses"] = ['nullable', 'string', 'max:5000'];
         }
 
         return $rules;
@@ -1291,23 +1329,9 @@ class EvaluationSubmissionController extends Controller
             ->sort()
             ->values();
 
-        $expectedSections = $evaluation->sections
-            ->filter(fn ($section) => $section->criteria->isNotEmpty())
-            ->pluck('id')
-            ->map(fn ($id): string => (string) $id)
-            ->sort()
-            ->values();
-        $providedSections = collect(array_keys($request->input('sections', [])))
-            ->map(fn ($id): string => (string) $id)
-            ->sort()
-            ->values();
-
         $errors = [];
         if ($expectedCriteria->all() !== $providedCriteria->all()) {
             $errors['criteria'] = 'Complete every configured criterion and remove invalid criterion responses.';
-        }
-        if ($expectedSections->all() !== $providedSections->all()) {
-            $errors['sections'] = 'Complete the strengths and weaknesses for every scored section.';
         }
 
         if ($errors !== []) {

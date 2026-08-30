@@ -66,6 +66,8 @@ return [
         'base_url' => env('THREEPAP_CHECKER_BASE_URL', 'https://checker.3pap.africa/api/v1'),
         'api_token' => env('THREEPAP_CHECKER_API_TOKEN'),
         'timeout' => (int) env('THREEPAP_CHECKER_TIMEOUT', 20),
+        'connect_timeout' => (int) env('THREEPAP_CHECKER_CONNECT_TIMEOUT', 5),
+        'ca_bundle' => env('THREEPAP_CHECKER_CA_BUNDLE'),
     ],
 
 ];

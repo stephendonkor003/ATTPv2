@@ -92,36 +92,9 @@ class ProcurementSubmissionController extends Controller
         ]);
     }
 
-    public function screeningReport(Request $request, FormSubmission $submission, ProcurementSubmissionScreeningService $screeningService)
+    public function screeningReport(FormSubmission $submission, ProcurementSubmissionScreeningService $screeningService)
     {
         $this->assertSubmissionInScope($submission);
-
-        if ($request->boolean('run')) {
-            if (! $screeningService->isConfigured()) {
-                return redirect()
-                    ->route('procurement.submissions.screening.report', $submission)
-                    ->with('error', 'International screening is not configured.');
-            }
-
-            $screening = $screeningService->screenSubmission(
-                $submission->loadMissing(['values', 'submitter']),
-                $request->user(),
-                'manual'
-            );
-
-            return redirect()
-                ->route('procurement.submissions.screening.report', $submission)
-                ->with(
-                    $screening->request_status === 'error' ? 'error' : 'success',
-                    $screening->request_status === 'error'
-                        ? ($screening->error_message ?: 'International screening failed.')
-                        : sprintf(
-                            'International screening completed for %s. Risk level: %s.',
-                            $screening->entity_name ?: $submission->procurement_submission_code,
-                            strtoupper((string) $screening->risk_level)
-                        )
-                );
-        }
 
         $submission->load([
             'procurement',

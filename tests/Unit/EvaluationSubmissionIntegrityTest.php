@@ -3,6 +3,7 @@
 use App\Http\Controllers\EvaluationScoringController;
 use App\Http\Controllers\EvaluationSubmissionController;
 use App\Models\Evaluation;
+use App\Models\EvaluationCriteria;
 use App\Models\EvaluationSection;
 use App\Models\EvaluationSubmission;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -74,4 +75,42 @@ it('blocks autosave scoring and note writes after final submission', function ()
         ->and($submissionController)->toContain('Submitted evaluations cannot be modified.')
         ->and(substr_count($scoringController, 'submissionIsMutable($submission)'))->toBe(2)
         ->and($scoringController)->toContain('Submitted evaluations cannot be modified.');
+});
+
+it('requires a score and response for every numeric question while section summaries remain optional', function () {
+    $evaluation = (new Evaluation)->forceFill([
+        'id' => 'evaluation-a',
+        'type' => Evaluation::TYPE_SERVICES,
+    ]);
+    $section = (new EvaluationSection)->forceFill([
+        'id' => 'section-a',
+        'evaluation_id' => 'evaluation-a',
+    ]);
+    $criterion = (new EvaluationCriteria)->forceFill([
+        'id' => 'criterion-a',
+        'evaluation_section_id' => 'section-a',
+        'max_score' => 10,
+    ]);
+    $section->setRelation('criteria', new EloquentCollection([$criterion]));
+    $evaluation->setRelation('sections', new EloquentCollection([$section]));
+
+    $rulesMethod = new ReflectionMethod(
+        EvaluationSubmissionController::class,
+        'finalSubmissionRules'
+    );
+    $rules = $rulesMethod->invoke(new EvaluationSubmissionController, $evaluation);
+
+    expect($rules)
+        ->toHaveKey('criteria.criterion-a', ['required', 'array'])
+        ->toHaveKey('criteria.criterion-a.score', [
+            'required',
+            'numeric',
+            'min:0',
+            'max:10',
+        ])
+        ->toHaveKey('criteria.criterion-a.comment', ['required', 'string', 'max:5000'])
+        ->toHaveKey('sections', ['sometimes', 'array'])
+        ->toHaveKey('sections.section-a', ['sometimes', 'array'])
+        ->toHaveKey('sections.section-a.strengths', ['nullable', 'string', 'max:5000'])
+        ->toHaveKey('sections.section-a.weaknesses', ['nullable', 'string', 'max:5000']);
 });

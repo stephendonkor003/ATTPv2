@@ -420,7 +420,7 @@
                                                 </span>
                                             </span>
                                             <strong class="mb-1">Services</strong>
-                                            <span class="method-copy mb-3">Score each criterion numerically against a defined maximum.</span>
+                                            <span class="method-copy mb-3">Score each criterion against its maximum and require a supporting response.</span>
                                             <span class="badge bg-primary-subtle text-primary align-self-start mt-auto">Numeric scoring</span>
                                         </label>
                                     </div>
@@ -480,7 +480,7 @@
 
                             <div class="method-guidance mt-3" id="methodGuidance" aria-live="polite">
                                 <strong id="methodGuidanceTitle">Services evaluation</strong>
-                                <div id="methodGuidanceText">Evaluators award points for each criterion and totals are calculated automatically.</div>
+                                <div id="methodGuidanceText">Evaluators award points and record supporting evidence for each criterion; totals are calculated automatically.</div>
                             </div>
                         </div>
 
@@ -618,7 +618,7 @@
                     label: 'Services',
                     result: 'Numeric score',
                     title: 'Services evaluation',
-                    guidance: 'Evaluators award points for each criterion and totals are calculated automatically.',
+                    guidance: 'Evaluators award points and record supporting evidence for each criterion; totals are calculated automatically.',
                 },
                 goods: {
                     label: 'Goods',

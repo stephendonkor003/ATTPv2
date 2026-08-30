@@ -152,11 +152,11 @@
                         <strong>{{ $evaluation->typeLabel() }} response model</strong>
                         <p>
                             @if ($evaluation->usesNumericScoring())
-                                Evaluators enter numeric scores against each question's configured maximum.
+                                Evaluators enter a numeric score and supporting evidence response for every question.
                             @elseif ($evaluation->isEoi())
-                                Evaluators choose Qualified, Average Qualified, or Not Qualified.
+                                Evaluators choose Qualified, Average Qualified, or Not Qualified and add an evidence comment for every question.
                             @else
-                                Evaluators answer each compliance question with Yes or No.
+                                Evaluators answer each compliance question with Yes or No and add an evidence comment.
                             @endif
                         </p>
                         <span><i class="feather-lock me-1" aria-hidden="true"></i>The evaluation type is fixed after creation.</span>

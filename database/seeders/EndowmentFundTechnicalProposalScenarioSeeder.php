@@ -16,6 +16,7 @@ use App\Models\FormSubmission;
 use App\Models\Procurement;
 use App\Models\User;
 use App\Services\EoiQualificationService;
+use App\Support\EndowmentFundTechnicalProposalDocumentManifest;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
@@ -37,9 +38,9 @@ use Throwable;
  */
 final class EndowmentFundTechnicalProposalScenarioSeeder extends Seeder
 {
-    public const PROCUREMENT_REFERENCE = 'ET-AUC- 494958-CS-QCBS';
+    public const PROCUREMENT_REFERENCE = EndowmentFundTechnicalProposalDocumentManifest::PROCUREMENT_REFERENCE;
 
-    public const ROUND_TITLE = 'Technical Proposal Submission — AU Physical Delivery';
+    public const ROUND_TITLE = EndowmentFundTechnicalProposalDocumentManifest::ROUND_TITLE;
 
     private const COMMUNICATION_SUBJECT = 'Request for Technical Proposal — physical delivery to the AU office';
 
@@ -87,36 +88,6 @@ final class EndowmentFundTechnicalProposalScenarioSeeder extends Seeder
             'outcome_label' => 'Fully Qualified (historical RFP recipient override)',
             'workflow_decision' => 'Technical Evaluation - documented historical RFP recipient override',
         ],
-    ];
-
-    /**
-     * These proposal scans are committed with the dedicated seeder, rather
-     * than being read from a developer's Downloads directory. This makes a
-     * deployment deterministic after `git pull` and `git lfs pull`.
-     */
-    private const BUNDLED_ASSET_DIRECTORY = 'seeders/assets/endowment-fund-technical-proposals';
-
-    /**
-     * @var array<string, array<int, string>>
-     */
-    private const PROPOSAL_DOCUMENT_FILENAMES = [
-        'KPMG' => ['Auc (KPMG)_compressed.pdf'],
-        'Impact Africa Consulting' => ['Impact Africa August 2026_compressed.pdf'],
-        'BwB' => ['Power of Attorney_compressed.pdf'],
-        'LNO' => ['LNO.pdf'],
-    ];
-
-    /**
-     * Immutable fingerprints of the supplied historical files. The dedicated
-     * reconstruction must never accept a correctly named but wrong scan.
-     *
-     * @var array<string, string>
-     */
-    private const PROPOSAL_DOCUMENT_SHA256 = [
-        'Auc (KPMG)_compressed.pdf' => '23f91a5c03a4fec91a0fe4f643b0da49bf5b6ed2efdf7a1f8f38f2613fd06aec',
-        'Impact Africa August 2026_compressed.pdf' => '485876f28273730375b3809964a5a5714560049a92b15f6f66bae202d38f1b21',
-        'Power of Attorney_compressed.pdf' => '6e9ffbc85841f12c9d138fb4c2db697183615456ee17f7ec8150c99ab87ddbb7',
-        'LNO.pdf' => 'dafe11cbf0e757f73739248bfe62336105b8e7bc09c7357e2077df2da4a1a182',
     ];
 
     /**
@@ -768,8 +739,13 @@ final class EndowmentFundTechnicalProposalScenarioSeeder extends Seeder
     /** @return array<int, string> */
     private function proposalSourcesFor(string $applicantName): array
     {
-        $filenames = self::PROPOSAL_DOCUMENT_FILENAMES[$applicantName] ?? [];
-        $sourceDirectories = [database_path(self::BUNDLED_ASSET_DIRECTORY)];
+        $filenames = array_column(
+            EndowmentFundTechnicalProposalDocumentManifest::forApplicant($applicantName),
+            'filename'
+        );
+        $sourceDirectories = [database_path(
+            EndowmentFundTechnicalProposalDocumentManifest::BUNDLED_ASSET_DIRECTORY
+        )];
         $overrideDirectory = trim((string) env('EOI_ENDOWMENT_TECHNICAL_PROPOSAL_SOURCE_DIR', ''));
 
         if ($overrideDirectory !== '') {
@@ -893,11 +869,12 @@ final class EndowmentFundTechnicalProposalScenarioSeeder extends Seeder
 
     private function documentLabelFor(string $applicantName, string $source): string
     {
-        if ($applicantName === 'BwB' && basename($source) === 'Power of Attorney_compressed.pdf') {
-            return 'Supporting document — Power of Attorney';
-        }
+        $manifestDocument = EndowmentFundTechnicalProposalDocumentManifest::find(
+            $applicantName,
+            basename($source)
+        );
 
-        return 'Physical proposal scan';
+        return $manifestDocument['document_label'] ?? 'Physical proposal scan';
     }
 
     private function isUsablePdfSource(string $path): bool
@@ -943,7 +920,8 @@ final class EndowmentFundTechnicalProposalScenarioSeeder extends Seeder
         string $source,
         string $applicantName
     ): void {
-        $expectedHash = self::PROPOSAL_DOCUMENT_SHA256[$filename] ?? null;
+        $manifestDocument = EndowmentFundTechnicalProposalDocumentManifest::find($applicantName, $filename);
+        $expectedHash = $manifestDocument['sha256'] ?? null;
         $actualHash = hash_file('sha256', $source);
 
         if (! $expectedHash || ! is_string($actualHash) || ! hash_equals($expectedHash, strtolower($actualHash))) {
@@ -960,7 +938,10 @@ final class EndowmentFundTechnicalProposalScenarioSeeder extends Seeder
         EoiTechnicalProposalCandidate $candidate,
         EoiTechnicalProposalSubmission $proposal
     ): void {
-        $currentFilenames = collect(self::PROPOSAL_DOCUMENT_FILENAMES[$applicantName] ?? []);
+        $currentFilenames = collect(array_column(
+            EndowmentFundTechnicalProposalDocumentManifest::forApplicant($applicantName),
+            'filename'
+        ));
         $knownFilenames = $currentFilenames->merge([
             $this->receiptRecordFilename($applicantName.' physical proposal receipt record', $candidate),
         ]);

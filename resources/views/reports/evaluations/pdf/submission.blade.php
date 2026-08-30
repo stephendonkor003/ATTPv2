@@ -475,6 +475,7 @@
                                 <th>Criteria</th>
                                 <th class="text-right">Max</th>
                                 <th class="text-right">Score</th>
+                                <th>Evaluator response</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -486,6 +487,7 @@
                                     <td>{{ $criteria->name }}</td>
                                     <td class="text-right">{{ number_format($criteria->max_score ?? 0, 2) }}</td>
                                     <td class="text-right">{{ number_format($criteriaScore->score ?? 0, 2) }}</td>
+                                    <td class="comments">{{ $redact($criteriaScore->comment ?? 'N/A') }}</td>
                                 </tr>
                             @endforeach
                             @if ($section->show_subtotal)
@@ -493,6 +495,7 @@
                                     <th>Sub-total (including child sections)</th>
                                     <th class="text-right">{{ number_format($sectionMax, 2) }}</th>
                                     <th class="text-right">{{ number_format($sectionTotal, 2) }}</th>
+                                    <th></th>
                                 </tr>
                             @endif
                         </tbody>

@@ -218,3 +218,20 @@ it('wires hierarchy subtotals into evaluator, read-only, panel PDF and report pr
             ->toContain('@if ($section->criteria->isNotEmpty())');
     }
 });
+
+it('carries numeric per-question evaluator responses into every detailed presentation', function () {
+    $root = dirname(__DIR__, 2);
+    $views = [
+        'resources/views/evaluations/view.blade.php' => '$score?->comment',
+        'resources/views/evaluations/panel/pdf/single.blade.php' => '$cs->comment',
+        'resources/views/evaluations/panel/pdf/bulk.blade.php' => '$cs->comment',
+        'resources/views/reports/evaluations/submission.blade.php' => '$criteriaScore->comment',
+        'resources/views/reports/evaluations/pdf/submission.blade.php' => '$criteriaScore->comment',
+    ];
+
+    foreach ($views as $view => $commentExpression) {
+        expect(file_get_contents($root.'/'.$view))
+            ->toContain('Evaluator response')
+            ->toContain($commentExpression);
+    }
+});

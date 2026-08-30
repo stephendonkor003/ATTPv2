@@ -500,7 +500,7 @@
             <td>
                 <span class="field-label">Evaluation type</span>
                 <span class="field-value">{{ $evaluation->typeLabel() }}</span>
-                <span class="field-detail">{{ $evaluation->usesNumericScoring() ? 'Numeric scoring' : 'Categorical assessment' }}</span>
+                <span class="field-detail">{{ $evaluation->usesNumericScoring() ? 'Numeric score plus evidence response per question' : 'Decision plus evidence comment per question' }}</span>
             </td>
             <td>
                 <span class="field-label">Template owner</span>
@@ -631,7 +631,7 @@
                         <th style="width: {{ $evaluation->usesNumericScoring() ? '29%' : '25%' }};">Evaluation question / criterion</th>
                         <th style="width: {{ $evaluation->usesNumericScoring() ? '44%' : '36%' }};">Description / guidance</th>
                         @if($evaluation->usesNumericScoring())
-                            <th style="width: 18%; text-align: right;">Maximum score</th>
+                            <th style="width: 18%;">Maximum / required response</th>
                         @else
                             <th style="width: 30%;">Permitted response</th>
                         @endif
@@ -644,12 +644,16 @@
                             <td class="criterion-name">{{ $criterion->name }}</td>
                             <td class="criterion-guidance">{{ $criterion->description ?: 'No additional guidance supplied.' }}</td>
                             @if($evaluation->usesNumericScoring())
-                                <td class="criterion-value">{{ number_format((float) $criterion->max_score, 2) }}</td>
+                                <td class="criterion-value">
+                                    {{ number_format((float) $criterion->max_score, 2) }} points<br>
+                                    <span style="font-weight: 400;">Score + evidence response</span>
+                                </td>
                             @else
                                 <td class="response-cell">
                                     @foreach($evaluation->decisionOptions() as $option)
                                         <span class="choice"><span class="choice-box"></span>{{ $option }}</span>
                                     @endforeach
+                                    <span class="choice">Evidence comment required</span>
                                 </td>
                             @endif
                         </tr>

@@ -22,6 +22,28 @@ it('renders root-toned branches with direct and rolled-up question counts', func
         ->toContain('--section-color');
 });
 
+it('makes the individual response requirement explicit throughout the form builder and previews', function () {
+    $root = dirname(__DIR__, 2);
+    $builder = file_get_contents($root.'/resources/views/evaluations/show.blade.php');
+    $node = file_get_contents($root.'/resources/views/evaluations/partials/section-builder-node.blade.php');
+    $preview = file_get_contents($root.'/resources/views/evaluations/partials/template-preview.blade.php');
+    $pdfTemplate = file_get_contents($root.'/resources/views/evaluations/pdf/template.blade.php');
+
+    expect($builder)
+        ->toContain('Every configured question requires an individual evaluator response.')
+        ->toContain('both a score and supporting evidence for each question')
+        ->and($node)
+        ->toContain('Every question requires its own score and supporting evidence response.')
+        ->toContain('decision and evidence comment for every question')
+        ->and($preview)
+        ->toContain('<strong>Required per question:</strong>')
+        ->toContain('Score + evidence response')
+        ->toContain('+ evidence comment')
+        ->and($pdfTemplate)
+        ->toContain('Numeric score plus evidence response per question')
+        ->toContain('Evidence comment required');
+});
+
 it('keeps section and question mutations inside the dynamic builder flow', function () {
     $root = dirname(__DIR__, 2);
     $builder = file_get_contents($root.'/resources/views/evaluations/show.blade.php');
@@ -135,6 +157,9 @@ it('uses a consistent guided details screen that returns to the builder', functi
         ->toContain('Save and return to builder')
         ->toContain('data-description-count')
         ->toContain('data-summary-name')
+        ->toContain('numeric score and supporting evidence response for every question')
+        ->toContain('Not Qualified and add an evidence comment for every question')
+        ->toContain('Yes or No and add an evidence comment')
         ->and($controller)
         ->toContain("->route('evals.cfg.show', \$evaluation)")
         ->toContain("'description' => 'nullable|string|max:1000'");

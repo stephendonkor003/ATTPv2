@@ -22,10 +22,10 @@
 
             <div class="d-flex gap-2">
                 @if ($screeningConfigured)
-                    <a href="{{ route('procurement.submissions.screening.report', ['submission' => $submission, 'run' => $screening ? null : 1]) }}"
+                    <a href="{{ route('procurement.submissions.screening.report', $submission) }}"
                         class="btn btn-primary btn-sm">
                         <i class="feather-shield me-1"></i>
-                        {{ $screening ? 'Open Screening Report' : 'Check Applicant' }}
+                        Open 3PAP Screening Report
                     </a>
                 @endif
 
@@ -87,13 +87,13 @@
 
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                <h6 class="mb-0 fw-bold">International Screening</h6>
+                <h6 class="mb-0 fw-bold">3PAP Sanctions Screening</h6>
                 <div class="d-flex gap-2 align-items-center">
                     @if (!$screeningConfigured)
                         <span class="badge bg-secondary-subtle text-secondary">Not Configured</span>
                     @endif
                     @if ($screeningConfigured)
-                        <a href="{{ route('procurement.submissions.screening.report', ['submission' => $submission, 'run' => $screening ? null : 1]) }}"
+                        <a href="{{ route('procurement.submissions.screening.report', $submission) }}"
                             class="btn btn-sm btn-outline-primary">
                             <i class="feather-external-link me-1"></i> Full Report
                         </a>
@@ -101,9 +101,13 @@
                 </div>
             </div>
             <div class="card-body">
+                <div class="alert alert-light border small mb-3" role="note">
+                    3PAP results support human review and do not automatically determine applicant eligibility.
+                </div>
+
                 @if (!$screeningConfigured)
                     <div class="alert alert-warning mb-0">
-                        International screening is not configured in this environment.
+                        3PAP Sanctions Screening is not configured in this environment.
                     </div>
                 @elseif (!$screening)
                     <div class="alert alert-light border mb-0">
@@ -111,8 +115,8 @@
                     </div>
                 @elseif ($screening->request_status === 'error')
                     <div class="alert alert-danger mb-0">
-                        <div class="fw-semibold mb-1">Screening failed</div>
-                        <div>{{ $screening->error_message ?: 'International screening did not complete successfully.' }}</div>
+                        <div class="fw-semibold mb-1">3PAP screening failed</div>
+                        <div>{{ $screening->error_message ?: '3PAP sanctions screening did not complete successfully.' }}</div>
                         <div class="small mt-2">
                             Last attempted: {{ optional($screening->last_checked_at)->format('d M Y, H:i') ?? '—' }}
                         </div>
@@ -179,6 +183,14 @@
                                 </thead>
                                 <tbody>
                                     @foreach ($matches as $match)
+                                        @php
+                                            $sourceUrl = isset($match['source_url']) && is_string($match['source_url'])
+                                                ? trim($match['source_url'])
+                                                : '';
+                                            $sourceScheme = strtolower((string) parse_url($sourceUrl, PHP_URL_SCHEME));
+                                            $sourceUrlIsSafe = filter_var($sourceUrl, FILTER_VALIDATE_URL) !== false
+                                                && in_array($sourceScheme, ['http', 'https'], true);
+                                        @endphp
                                         <tr>
                                             <td class="fw-medium">{{ $match['name'] ?? '—' }}</td>
                                             <td>{{ $match['dataset'] ?? '—' }}</td>
@@ -192,8 +204,8 @@
                                                 @endif
                                             </td>
                                             <td>
-                                                @if (!empty($match['source_url']))
-                                                    <a href="{{ $match['source_url'] }}" target="_blank" rel="noopener">
+                                                @if ($sourceUrlIsSafe)
+                                                    <a href="{{ $sourceUrl }}" target="_blank" rel="noopener noreferrer">
                                                         View Source
                                                     </a>
                                                 @else

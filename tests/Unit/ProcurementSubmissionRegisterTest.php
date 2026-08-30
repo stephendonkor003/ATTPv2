@@ -11,6 +11,12 @@ function procurementSubmissionRegisterSources(): array
         'view' => file_get_contents(
             $root.'/resources/views/procurement/procuresubmissions/index.blade.php'
         ),
+        'show_view' => file_get_contents(
+            $root.'/resources/views/procurement/procuresubmissions/show.blade.php'
+        ),
+        'screening_report_view' => file_get_contents(
+            $root.'/resources/views/procurement/procuresubmissions/screening-report.blade.php'
+        ),
         'routes' => file_get_contents($root.'/routes/web.php'),
     ];
 }
@@ -58,9 +64,9 @@ it('limits bulk screening to the selected scoped procurement while retaining acc
         ->toContain("\$screeningService->screenSubmissions(\$submissions, \$request->user(), 'bulk')")
         ->and($view)
         ->toContain('@if (!$selectedProcurement)')
-        ->toContain('Check all accessible applicants')
+        ->toContain('Run 3PAP checks for all applicants')
         ->toContain('<input type="hidden" name="procurement_id" value="{{ $selectedProcurement->id }}">')
-        ->toContain('Check this procurement')
+        ->toContain('Run 3PAP checks for this procurement')
         ->and(substr_count($view, "route('procurement.submissions.screen-all')"))->toBe(2);
 });
 
@@ -90,8 +96,8 @@ it('renders filterable procurement cards and preserves applicant row actions', f
         ->toContain("firstWhere('field_key', 'official_name')")
         ->toContain("firstWhere('field_key', 'official_email')")
         ->toContain("route('procurement.submissions.show', \$submission)")
-        ->toContain("route('procurement.submissions.screening.report', ['submission' => \$submission")
-        ->toContain("{{ \$screening ? 'Report' : 'Check' }}")
+        ->toContain("route('procurement.submissions.screening.report', \$submission)")
+        ->toContain('<i class="feather-shield me-1" aria-hidden="true"></i> Report')
         ->and($routes)
         ->toContain("Route::prefix('procurement/submissions')")
         ->toContain("->middleware(['auth', 'not.funding.partner'])")
@@ -99,6 +105,42 @@ it('renders filterable procurement cards and preserves applicant row actions', f
         ->toContain("->name('procurement.submissions.screen-all')")
         ->toContain("->name('procurement.submissions.show')")
         ->toContain("->name('procurement.submissions.screening.report')");
+});
+
+it('presents 3PAP sanctions screening as human-reviewed and keeps report navigation read only', function () {
+    $sources = procurementSubmissionRegisterSources();
+    $index = $sources['view'];
+    $show = $sources['show_view'];
+    $report = $sources['screening_report_view'];
+    $screeningViews = $index."\n".$show."\n".$report;
+
+    expect($index)
+        ->toContain('3PAP Sanctions Screening')
+        ->toContain("route('procurement.submissions.screening.report', \$submission)")
+        ->and($show)
+        ->toContain('3PAP Sanctions Screening')
+        ->toContain('Open 3PAP Screening Report')
+        ->toContain("route('procurement.submissions.screening.report', \$submission)")
+        ->and($report)
+        ->toContain('3PAP Sanctions Screening Report')
+        ->toContain('<form method="POST" action="{{ route(\'procurement.submissions.screen\', $submission) }}">')
+        ->toContain("{{ \$screening ? 'Re-run 3PAP Screening' : 'Run 3PAP Screening' }}")
+        ->and($screeningViews)
+        ->not->toContain("'run' =>")
+        ->not->toContain('run=1')
+        ->and(substr_count($screeningViews, '3PAP results support human review and do not automatically determine applicant eligibility.'))->toBe(3);
+});
+
+it('only makes validated http and https screening sources clickable', function () {
+    $sources = procurementSubmissionRegisterSources();
+    $sourceViews = $sources['show_view']."\n".$sources['screening_report_view'];
+
+    expect(substr_count($sourceViews, 'FILTER_VALIDATE_URL'))->toBe(2)
+        ->and(substr_count($sourceViews, "in_array(\$sourceScheme, ['http', 'https'], true)"))->toBe(2)
+        ->and(substr_count($sourceViews, 'rel="noopener noreferrer"'))->toBe(2)
+        ->and($sourceViews)
+        ->not->toContain('href="{{ $match[\'source_url\'] }}"')
+        ->not->toContain('href="{{ $sourceUrl }}" target="_blank" rel="noopener">');
 });
 
 it('uses one client-side applicant paginator and no competing server paginator', function () {

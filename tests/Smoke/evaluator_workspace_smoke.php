@@ -248,7 +248,12 @@ class EvaluatorWorkspaceSmoke
         $route = route('my.eval.save', [$fixture['assignment'], $fixture['applicant']]);
 
         $valid = $this->postJsonAs($evaluator, $route, [
-            'criteria' => [$criterion->id => '7.25'],
+            'criteria' => [
+                $criterion->id => [
+                    'score' => '7.25',
+                    'comment' => '  Strong evidence supports this score.  ',
+                ],
+            ],
             'sections' => [
                 $section->id => [
                     'strengths' => '  Strong technical response.  ',
@@ -263,6 +268,10 @@ class EvaluatorWorkspaceSmoke
         $notes = $draft->sectionScores()->where('evaluation_section_id', $section->id)->firstOrFail();
 
         $this->assertTrue((float) $score->score === 7.25, 'The Services criterion score did not persist.');
+        $this->assertTrue(
+            $score->comment === 'Strong evidence supports this score.',
+            'The per-question Services response was not trimmed and persisted.'
+        );
         $this->assertTrue($score->decision === null, 'A Services score retained a categorical decision.');
         $this->assertTrue((float) $draft->overall_score === 7.25, 'The Services overall total was not recalculated.');
         $this->assertTrue((float) $notes->section_score === 7.25, 'The Services section total was not recalculated.');
@@ -274,7 +283,12 @@ class EvaluatorWorkspaceSmoke
 
         foreach ([-0.01, 10.01] as $invalidScore) {
             $response = $this->postJsonAs($evaluator, $route, [
-                'criteria' => [$criterion->id => $invalidScore],
+                'criteria' => [
+                    $criterion->id => [
+                        'score' => $invalidScore,
+                        'comment' => 'Evidence for an invalid score.',
+                    ],
+                ],
                 'sections' => [],
             ]);
             $this->assertResponseStatus(
@@ -407,15 +421,46 @@ class EvaluatorWorkspaceSmoke
     private function assertFinalSubmissionAndImmutability(User $evaluator, array $fixture): void
     {
         $criterion = $fixture['criteria']->first();
+        $submitRoute = route('my.eval.submit', [$fixture['assignment'], $fixture['applicant']]);
+
+        $missingResponse = $this->postAs(
+            $evaluator,
+            $submitRoute,
+            [
+                'criteria' => [
+                    $criterion->id => [
+                        'score' => '8.75',
+                        'comment' => '',
+                    ],
+                ],
+                'video' => UploadedFile::fake()->create('identity-missing-response.webm', 24, 'video/webm'),
+            ]
+        );
+        $this->assertResponseStatus(
+            $missingResponse,
+            422,
+            'A Services evaluation without a response to every question passed validation.'
+        );
+        $this->assertTrue(
+            array_key_exists(
+                "criteria.{$criterion->id}.comment",
+                (array) $missingResponse->json('errors')
+            ),
+            'A missing per-question Services response did not produce a field validation error.'
+        );
+        $this->assertTrue(
+            $this->submissionFor($fixture)->fresh()->submitted_at === null,
+            'A Services evaluation was finalised without a response to every question.'
+        );
+
         $response = $this->postAs(
             $evaluator,
-            route('my.eval.submit', [$fixture['assignment'], $fixture['applicant']]),
+            $submitRoute,
             [
-                'criteria' => [$criterion->id => '8.75'],
-                'sections' => [
-                    $fixture['section']->id => [
-                        'strengths' => 'Strong and complete response.',
-                        'weaknesses' => 'Minor delivery risk.',
+                'criteria' => [
+                    $criterion->id => [
+                        'score' => '8.75',
+                        'comment' => 'The documented approach fully supports this score.',
                     ],
                 ],
                 'video' => UploadedFile::fake()->create('identity.webm', 24, 'video/webm'),
@@ -426,6 +471,11 @@ class EvaluatorWorkspaceSmoke
         $submitted = $this->submissionFor($fixture)->fresh();
         $this->assertTrue($submitted->submitted_at !== null, 'Final submission did not set submitted_at.');
         $this->assertTrue((float) $submitted->overall_score === 8.75, 'Final Services total is incorrect.');
+        $this->assertTrue(
+            $submitted->criteriaScores()->where('evaluation_criteria_id', $criterion->id)->value('comment')
+                === 'The documented approach fully supports this score.',
+            'The final Services evaluation did not retain its per-question response.'
+        );
         $this->assertTrue(
             filled($submitted->video_path) && Storage::disk('local')->exists($submitted->video_path),
             'The final verification video was not stored privately.'
@@ -439,7 +489,12 @@ class EvaluatorWorkspaceSmoke
             $evaluator,
             route('my.eval.save', [$fixture['assignment'], $fixture['applicant']]),
             [
-                'criteria' => [$criterion->id => 1],
+                'criteria' => [
+                    $criterion->id => [
+                        'score' => 1,
+                        'comment' => 'Attempted post-submit mutation.',
+                    ],
+                ],
                 'sections' => [],
             ]
         );

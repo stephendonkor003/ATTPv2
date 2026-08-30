@@ -21,6 +21,12 @@
             {{ implode(' / ', $evaluation->decisionOptions()) }}
         </div>
     @endif
+    <div class="alert alert-info py-2 px-3 small mt-2 mb-0">
+        <strong>Required per question:</strong>
+        {{ $evaluation->usesNumericScoring()
+            ? 'a numeric score within the configured maximum and an evidence response.'
+            : 'one permitted decision and an evidence comment.' }}
+    </div>
 </div>
 
 @forelse ($sectionOutline as $node)
@@ -58,7 +64,7 @@
                                 <th>Criteria</th>
                                 <th>Description</th>
                                 @if ($evaluation->usesNumericScoring())
-                                    <th width="120" class="text-end">Max Score</th>
+                                    <th width="210">Maximum / required response</th>
                                 @else
                                     <th width="240">Response</th>
                                 @endif
@@ -71,9 +77,12 @@
                                     <td class="fw-semibold">{{ $criterion->name }}</td>
                                     <td>{{ $criterion->description ?: '—' }}</td>
                                     @if ($evaluation->usesNumericScoring())
-                                        <td class="text-end">{{ number_format((float) $criterion->max_score, 2) }}</td>
+                                        <td>
+                                            <strong>{{ number_format((float) $criterion->max_score, 2) }} points</strong><br>
+                                            <small class="text-muted">Score + evidence response</small>
+                                        </td>
                                     @else
-                                        <td>{{ implode(' / ', $evaluation->decisionOptions()) }}</td>
+                                        <td>{{ implode(' / ', $evaluation->decisionOptions()) }} + evidence comment</td>
                                     @endif
                                 </tr>
                             @endforeach

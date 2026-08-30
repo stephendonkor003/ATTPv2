@@ -188,7 +188,12 @@ class PanelEvaluationReworkSmoke
             $this->assertStatus($otherEvaluatorWorkspace, 403, 'A user other than the assigned evaluator opened the returned evaluation.');
 
             $autosaved = $this->postAs($evaluator, route('my.eval.save', [$assignment, $applicant]), [
-                'criteria' => [$criterion->id => 8.5],
+                'criteria' => [
+                    $criterion->id => [
+                        'score' => 8.5,
+                        'comment' => 'The revised evidence supports the corrected draft score.',
+                    ],
+                ],
                 'sections' => [
                     $section->id => [
                         'strengths' => 'The revised approach is supported by clearer evidence.',
@@ -202,10 +207,20 @@ class PanelEvaluationReworkSmoke
                 (float) $submission->fresh()->criteriaScores()->where('evaluation_criteria_id', $criterion->id)->value('score'),
                 'The rework autosave did not persist the evaluator correction.'
             );
+            $this->assertSame(
+                'The revised evidence supports the corrected draft score.',
+                $submission->fresh()->criteriaScores()->where('evaluation_criteria_id', $criterion->id)->value('comment'),
+                'The rework autosave did not persist the evaluator response.'
+            );
             $this->assertSame(ReworkRequest::STATUS_PENDING, $rework->fresh()->status, 'Saving rework as a draft closed the request before final resubmission.');
 
             $resubmitted = $this->postAs($evaluator, route('my.eval.submit', [$assignment, $applicant]), [
-                'criteria' => [$criterion->id => 9],
+                'criteria' => [
+                    $criterion->id => [
+                        'score' => 9,
+                        'comment' => 'The revised technical evidence justifies the final score.',
+                    ],
+                ],
                 'sections' => [
                     $section->id => [
                         'strengths' => 'The revised technical approach now has clear and verifiable strengths.',

@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\FormSubmission;
 use App\Models\ProcurementSubmissionScreening;
 use App\Models\User;
+use Composer\CaBundle\CaBundle;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
@@ -51,6 +53,101 @@ class ProcurementSubmissionScreeningService
             && filled($config['base_url']);
     }
 
+    /**
+     * Verify the configured account without consuming a sanctions-search
+     * credit. The official /usage endpoint authenticates the token and
+     * exposes its scopes and current monthly allowance.
+     *
+     * @return array{
+     *     ok: bool,
+     *     configured: bool,
+     *     authenticated: bool,
+     *     scope_enabled: bool,
+     *     plan: null|string,
+     *     scopes: array<int, string>,
+     *     usage: array{used: null|int, limit: null|int, remaining: null|int},
+     *     message: string
+     * }
+     */
+    public function accountStatus(): array
+    {
+        $result = [
+            'ok' => false,
+            'configured' => $this->isConfigured(),
+            'authenticated' => false,
+            'scope_enabled' => false,
+            'plan' => null,
+            'scopes' => [],
+            'usage' => [
+                'used' => null,
+                'limit' => null,
+                'remaining' => null,
+            ],
+            'message' => '3PAP sanctions screening is not configured.',
+        ];
+
+        if (! $result['configured']) {
+            return $result;
+        }
+
+        try {
+            $response = $this->client()->get('/usage');
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return [
+                ...$result,
+                'message' => 'The 3PAP service could not be reached. Check network access and the configured base URL.',
+            ];
+        }
+
+        if ($response->failed()) {
+            return [
+                ...$result,
+                'message' => $this->extractErrorMessage($response),
+            ];
+        }
+
+        $payload = $this->responsePayload($response);
+        if (! ($payload['success'] ?? false)) {
+            return [
+                ...$result,
+                'message' => $this->payloadErrorMessage($payload, '3PAP did not confirm the configured account.'),
+            ];
+        }
+
+        $scopes = collect((array) data_get($payload, 'token.scopes', []))
+            ->filter(fn ($scope): bool => is_string($scope) && $scope !== '')
+            ->map(fn (string $scope): string => strtolower(trim($scope)))
+            ->unique()
+            ->values()
+            ->all();
+        $scopeEnabled = in_array('sanctions_search', $scopes, true);
+        $usage = (array) data_get($payload, 'usage.sanctions_search', []);
+        $normalizedUsage = [
+            'used' => $this->nullableInteger($usage['used'] ?? null),
+            'limit' => $this->nullableInteger($usage['limit'] ?? null),
+            'remaining' => $this->nullableInteger($usage['remaining'] ?? null),
+        ];
+        $quotaAvailable = $normalizedUsage['remaining'] === null || $normalizedUsage['remaining'] > 0;
+        $ok = $scopeEnabled && $quotaAvailable;
+
+        return [
+            ...$result,
+            'ok' => $ok,
+            'authenticated' => true,
+            'scope_enabled' => $scopeEnabled,
+            'plan' => filled($payload['plan'] ?? null) ? (string) $payload['plan'] : null,
+            'scopes' => $scopes,
+            'usage' => $normalizedUsage,
+            'message' => match (true) {
+                ! $scopeEnabled => 'The token is valid but does not include the required sanctions_search scope.',
+                ! $quotaAvailable => 'The token is valid, but its monthly sanctions-search quota is exhausted.',
+                default => 'The 3PAP token, sanctions_search scope, and monthly quota are available.',
+            },
+        ];
+    }
+
     public function deferSubmissionScreening(string $submissionId): void
     {
         if (! $this->isConfigured()) {
@@ -89,11 +186,23 @@ class ProcurementSubmissionScreeningService
             );
         }
 
-        $response = $this->client()->post('/sanctions/screen', array_filter([
-            'name' => $entity['name'],
-            'country' => $entity['country'],
-            'max_results' => 10,
-        ], fn ($value) => filled($value)));
+        try {
+            $response = $this->client()->post('/sanctions/screen', array_filter([
+                'name' => $entity['name'],
+                'country' => $entity['country'],
+                'max_results' => 10,
+            ], fn ($value) => filled($value)));
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return $this->storeFailure(
+                $submission,
+                $entity,
+                'The 3PAP screening service could not be reached. Try again later.',
+                $actor,
+                $checkedVia
+            );
+        }
 
         if ($response->failed()) {
             return $this->storeFailure(
@@ -103,11 +212,24 @@ class ProcurementSubmissionScreeningService
                 $actor,
                 $checkedVia,
                 $response->status(),
-                $response->json()
+                $this->responsePayload($response)
             );
         }
 
-        $payload = $this->normalizeSingleResponse($entity, (array) $response->json());
+        $responsePayload = $this->responsePayload($response);
+        if (! ($responsePayload['success'] ?? false)) {
+            return $this->storeFailure(
+                $submission,
+                $entity,
+                $this->payloadErrorMessage($responsePayload, '3PAP did not complete the sanctions screening.'),
+                $actor,
+                $checkedVia,
+                $response->status(),
+                $responsePayload
+            );
+        }
+
+        $payload = $this->normalizeSingleResponse($entity, $responsePayload);
 
         return $this->storeSuccess($submission, $entity, $payload, $actor, $checkedVia);
     }
@@ -155,15 +277,33 @@ class ProcurementSubmissionScreeningService
                 continue;
             }
 
-            $response = $this->client()->post('/sanctions/batch', [
-                'entities' => $ready->map(fn (array $item) => array_filter([
-                    'name' => $item['entity']['name'],
-                    'country' => $item['entity']['country'],
-                ], fn ($value) => filled($value)))->all(),
-            ]);
+            try {
+                $response = $this->client()->post('/sanctions/batch', [
+                    'entities' => $ready->map(fn (array $item) => array_filter([
+                        'name' => $item['entity']['name'],
+                        'country' => $item['entity']['country'],
+                    ], fn ($value) => filled($value)))->all(),
+                ]);
+            } catch (Throwable $exception) {
+                report($exception);
+
+                foreach ($ready as $item) {
+                    $this->storeFailure(
+                        $item['submission'],
+                        $item['entity'],
+                        'The 3PAP screening service could not be reached. Try again later.',
+                        $actor,
+                        $checkedVia
+                    );
+                    $summary['failed']++;
+                }
+
+                continue;
+            }
 
             if ($response->failed()) {
                 $message = $this->extractErrorMessage($response);
+                $responsePayload = $this->responsePayload($response);
 
                 foreach ($ready as $item) {
                     $this->storeFailure(
@@ -173,7 +313,7 @@ class ProcurementSubmissionScreeningService
                         $actor,
                         $checkedVia,
                         $response->status(),
-                        $response->json()
+                        $responsePayload
                     );
                     $summary['failed']++;
                 }
@@ -181,10 +321,37 @@ class ProcurementSubmissionScreeningService
                 continue;
             }
 
-            $results = array_values((array) data_get($response->json(), 'results', []));
+            $responsePayload = $this->responsePayload($response);
+            if (! ($responsePayload['success'] ?? false)) {
+                $message = $this->payloadErrorMessage(
+                    $responsePayload,
+                    '3PAP did not complete the batch sanctions screening.'
+                );
+
+                foreach ($ready as $item) {
+                    $this->storeFailure(
+                        $item['submission'],
+                        $item['entity'],
+                        $message,
+                        $actor,
+                        $checkedVia,
+                        $response->status(),
+                        $responsePayload
+                    );
+                    $summary['failed']++;
+                }
+
+                continue;
+            }
+
+            $results = array_values((array) data_get($responsePayload, 'results', []));
 
             foreach ($ready as $index => $item) {
-                $result = $results[$index] ?? $this->matchBatchResultByName($results, $item['entity']['name']);
+                $result = $results[$index] ?? null;
+                if (! is_array($result)
+                    || strcasecmp(trim((string) data_get($result, 'name')), trim($item['entity']['name'])) !== 0) {
+                    $result = $this->matchBatchResultByName($results, $item['entity']['name']);
+                }
 
                 if (! is_array($result)) {
                     $this->storeFailure(
@@ -194,9 +361,25 @@ class ProcurementSubmissionScreeningService
                         $actor,
                         $checkedVia,
                         $response->status(),
-                        $response->json()
+                        $responsePayload
                     );
                     $summary['failed']++;
+
+                    continue;
+                }
+
+                if (! ($result['success'] ?? false)) {
+                    $this->storeFailure(
+                        $item['submission'],
+                        $item['entity'],
+                        $this->payloadErrorMessage($result, '3PAP did not screen this applicant.'),
+                        $actor,
+                        $checkedVia,
+                        $response->status(),
+                        $result
+                    );
+                    $summary['failed']++;
+
                     continue;
                 }
 
@@ -209,13 +392,18 @@ class ProcurementSubmissionScreeningService
         return $summary;
     }
 
-    private function client()
+    private function client(): PendingRequest
     {
         $config = $this->screeningConfig();
+        $caBundle = filled($config['ca_bundle'])
+            ? (string) $config['ca_bundle']
+            : CaBundle::getSystemCaRootBundlePath();
 
         return Http::acceptJson()
             ->asJson()
             ->withToken((string) $config['api_token'])
+            ->withOptions(['verify' => $caBundle])
+            ->connectTimeout((int) $config['connect_timeout'])
             ->timeout((int) $config['timeout'])
             ->baseUrl(rtrim((string) $config['base_url'], '/'));
     }
@@ -243,10 +431,19 @@ class ProcurementSubmissionScreeningService
                 'services.threepap_checker.api_token',
                 'THREEPAP_CHECKER_API_TOKEN'
             ),
-            'timeout' => (int) $this->resolveRuntimeConfigValue(
+            'timeout' => max(1, (int) $this->resolveRuntimeConfigValue(
                 'services.threepap_checker.timeout',
                 'THREEPAP_CHECKER_TIMEOUT',
                 20
+            )),
+            'connect_timeout' => max(1, (int) $this->resolveRuntimeConfigValue(
+                'services.threepap_checker.connect_timeout',
+                'THREEPAP_CHECKER_CONNECT_TIMEOUT',
+                5
+            )),
+            'ca_bundle' => $this->resolveRuntimeConfigValue(
+                'services.threepap_checker.ca_bundle',
+                'THREEPAP_CHECKER_CA_BUNDLE'
             ),
         ];
     }
@@ -376,10 +573,15 @@ class ProcurementSubmissionScreeningService
     private function normalizeSingleResponse(array $entity, array $response): array
     {
         return [
-            'success' => (bool) data_get($response, 'success', true),
+            'success' => (bool) data_get($response, 'success', false),
             'query' => $entity,
-            'risk_level' => data_get($response, 'risk_level', 'clear'),
+            'risk_level' => strtolower((string) data_get($response, 'risk_level', 'clear')),
             'total_matches' => (int) data_get($response, 'total_matches', 0),
+            'is_flagged' => in_array(
+                strtolower((string) data_get($response, 'risk_level', 'clear')),
+                ['medium', 'high', 'critical'],
+                true
+            ),
             'matches' => array_values((array) data_get($response, 'results', [])),
             'raw' => $response,
         ];
@@ -388,10 +590,19 @@ class ProcurementSubmissionScreeningService
     private function normalizeBatchResponse(array $entity, array $result): array
     {
         return [
-            'success' => (bool) data_get($result, 'success', true),
+            'success' => (bool) data_get($result, 'success', false),
             'query' => $entity,
-            'risk_level' => data_get($result, 'risk_level', 'clear'),
+            'risk_level' => strtolower((string) data_get($result, 'risk_level', 'clear')),
             'total_matches' => (int) data_get($result, 'total_matches', 0),
+            'is_flagged' => (bool) data_get(
+                $result,
+                'is_flagged',
+                in_array(
+                    strtolower((string) data_get($result, 'risk_level', 'clear')),
+                    ['medium', 'high', 'critical'],
+                    true
+                )
+            ),
             'matches' => array_values((array) data_get($result, 'matches', [])),
             'raw' => $result,
         ];
@@ -404,7 +615,10 @@ class ProcurementSubmissionScreeningService
         ?User $actor,
         string $checkedVia
     ): ProcurementSubmissionScreening {
-        $riskLevel = (string) ($payload['risk_level'] ?? 'clear');
+        $riskLevel = strtolower((string) ($payload['risk_level'] ?? 'clear'));
+        if (! in_array($riskLevel, ['clear', 'low', 'medium', 'high', 'critical'], true)) {
+            $riskLevel = 'clear';
+        }
         $totalMatches = (int) ($payload['total_matches'] ?? 0);
 
         return ProcurementSubmissionScreening::updateOrCreate(
@@ -418,10 +632,18 @@ class ProcurementSubmissionScreeningService
                 'entity_country' => $entity['country'],
                 'risk_level' => $riskLevel,
                 'total_matches' => $totalMatches,
-                'is_flagged' => in_array($riskLevel, ['medium', 'high', 'critical'], true),
+                'is_flagged' => (bool) ($payload['is_flagged'] ?? in_array(
+                    $riskLevel,
+                    ['medium', 'high', 'critical'],
+                    true
+                )),
                 'error_message' => null,
                 'last_checked_at' => now(),
                 'response_payload' => $payload,
+                'review_decision' => null,
+                'review_notes' => null,
+                'reviewed_by' => null,
+                'reviewed_at' => null,
             ]
         );
     }
@@ -449,6 +671,10 @@ class ProcurementSubmissionScreeningService
                 'is_flagged' => false,
                 'error_message' => $message,
                 'last_checked_at' => now(),
+                'review_decision' => null,
+                'review_notes' => null,
+                'reviewed_by' => null,
+                'reviewed_at' => null,
                 'response_payload' => [
                     'success' => false,
                     'query' => $entity,
@@ -462,16 +688,36 @@ class ProcurementSubmissionScreeningService
 
     private function extractErrorMessage(Response $response): string
     {
-        $payload = $response->json();
-        $message = is_array($payload)
-            ? (string) (data_get($payload, 'error') ?: data_get($payload, 'message'))
-            : '';
+        return $this->payloadErrorMessage(
+            $this->responsePayload($response),
+            sprintf('3PAP screening request failed with HTTP %s.', $response->status())
+        );
+    }
 
-        if ($message !== '') {
-            return $message;
+    /** @return array<string, mixed> */
+    private function responsePayload(Response $response): array
+    {
+        $payload = $response->json();
+
+        return is_array($payload) ? $payload : [];
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function payloadErrorMessage(array $payload, string $fallback): string
+    {
+        $message = trim((string) (data_get($payload, 'error') ?: data_get($payload, 'message')));
+        $code = trim((string) data_get($payload, 'code'));
+
+        if ($message === '') {
+            return $fallback;
         }
 
-        return sprintf('International screening request failed with HTTP %s.', $response->status());
+        return $code !== '' ? $message.' ('.$code.')' : $message;
+    }
+
+    private function nullableInteger(mixed $value): ?int
+    {
+        return is_numeric($value) ? (int) $value : null;
     }
 
     private function matchBatchResultByName(array $results, string $name): ?array

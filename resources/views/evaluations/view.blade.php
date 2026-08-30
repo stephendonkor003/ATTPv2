@@ -234,6 +234,7 @@
                                                         @if ($isNumeric)
                                                             <th class="text-center score-column">Maximum</th>
                                                             <th class="text-center score-column">Score</th>
+                                                            <th>Evaluator response</th>
                                                         @else
                                                             <th class="decision-column">{{ $evaluation->isEoi() ? 'Qualification' : 'Decision' }}</th>
                                                             <th>Evidence comment</th>
@@ -268,6 +269,7 @@
                                                                 <td class="text-center">
                                                                     <span class="score-result">{{ number_format($score?->score ?? 0, 2) }}</span>
                                                                 </td>
+                                                                <td class="evidence-copy">{{ $score?->comment ?: '—' }}</td>
                                                             @else
                                                                 <td>
                                                                     <span class="decision-badge {{ $decisionClass }}">{{ $decisionLabel ?? 'Not answered' }}</span>

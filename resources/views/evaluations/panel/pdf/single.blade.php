@@ -144,6 +144,7 @@
                         <tr>
                             <th>Criteria</th>
                             <th width="80">Score</th>
+                            <th>Evaluator response</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -156,6 +157,7 @@
                                 <td align="center">
                                     {{ number_format($cs->score ?? 0, 2) }}
                                 </td>
+                                <td>{{ $cs->comment ?? '—' }}</td>
                             </tr>
                         @endforeach
                     </tbody>

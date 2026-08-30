@@ -150,7 +150,7 @@
                             default => [
                                 'icon' => 'feather-bar-chart-2',
                                 'mode' => 'Numeric scoring',
-                                'guidance' => 'Score every criterion numerically without exceeding its defined maximum.',
+                                'guidance' => 'Score every criterion within its maximum and record a supporting evidence response for each question.',
                             ],
                         };
                         $methodLabel = $evaluation?->typeLabel() ?? 'Services';

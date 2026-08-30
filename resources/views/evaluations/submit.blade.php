@@ -40,7 +40,7 @@
                             ? 'Classify each question using the documented EOI evidence.'
                             : ($evaluation->isGoods()
                                 ? 'Record a Yes or No decision and explain the evidence.'
-                                : 'Enter an objective score within each configured maximum.') }}
+                                : 'Enter an objective score within each configured maximum and explain the evidence for every question.') }}
                     </span>
                 </div>
             </div>
@@ -81,7 +81,7 @@
                         <strong>{{ $openRework ? 'Your previous answers are ready to revise' : 'Your evaluation is ready' }}</strong>
                         <p>{{ $openRework
                             ? 'Correct the requested areas and save as you work. A new identity verification is required when you resubmit.'
-                            : 'Enter scores now and save a draft at any time. Identity verification is only required for final submission.' }}</p>
+                            : 'Score and respond to every question, then save a draft at any time. Identity verification is only required for final submission.' }}</p>
                     </div>
                 </div>
 
@@ -243,51 +243,63 @@
                                         <div class="assessment-node-body" id="{{ $contentId }}">
                                             @if ($section->criteria->isNotEmpty())
                                                 @if ($isNumeric)
-                                                    <div class="table-responsive numeric-criteria-wrap">
-                                                        <table class="table criteria-table align-middle mb-0">
-                                                            <thead>
-                                                                <tr>
-                                                                    <th class="question-index-column">#</th>
-                                                                    <th>Evaluation question</th>
-                                                                    <th class="text-center score-column">Maximum</th>
-                                                                    <th class="score-column">Score</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                @foreach ($section->criteria as $criterion)
-                                                                    @php
-                                                                        $saved = $submission?->criteriaScores->firstWhere(
-                                                                            'evaluation_criteria_id',
-                                                                            $criterion->id,
-                                                                        );
-                                                                    @endphp
-                                                                    <tr class="criterion-row" data-criterion-row>
-                                                                        <td class="question-index-column">
-                                                                            <span class="question-number">{{ $loop->iteration }}</span>
-                                                                        </td>
-                                                                        <td>
-                                                                            <strong>{{ $criterion->name }}</strong>
-                                                                            @if (filled($criterion->description))
-                                                                                <p>{{ $criterion->description }}</p>
-                                                                            @endif
-                                                                        </td>
-                                                                        <td class="text-center score-maximum">{{ number_format($criterion->max_score, 2) }}</td>
-                                                                        <td>
-                                                                            <div class="score-entry">
-                                                                                <input type="number" name="criteria[{{ $criterion->id }}]"
-                                                                                    class="form-control score-input" min="0"
-                                                                                    max="{{ $criterion->max_score }}" step="0.01"
-                                                                                    data-max="{{ $criterion->max_score }}"
-                                                                                    data-section-id="{{ $section->id }}"
-                                                                                    value="{{ old("criteria.{$criterion->id}", $saved?->score) }}" required
-                                                                                    aria-label="Score for {{ $criterion->name }}">
-                                                                                <span>/ {{ number_format($criterion->max_score, 2) }}</span>
-                                                                            </div>
-                                                                        </td>
-                                                                    </tr>
-                                                                @endforeach
-                                                            </tbody>
-                                                        </table>
+                                                    <div class="numeric-question-list numeric-criteria-wrap" role="list"
+                                                        aria-label="Scored evaluation questions">
+                                                        @foreach ($section->criteria as $criterion)
+                                                            @php
+                                                                $saved = $submission?->criteriaScores->firstWhere(
+                                                                    'evaluation_criteria_id',
+                                                                    $criterion->id,
+                                                                );
+                                                                $scoreInputId = "score-{$criterion->id}";
+                                                                $scoreRangeId = "score-range-{$criterion->id}";
+                                                                $scoreCommentId = "score-comment-{$criterion->id}";
+                                                            @endphp
+                                                            <article class="numeric-question-card criterion-row" data-criterion-row role="listitem">
+                                                                <header class="numeric-question-header">
+                                                                    <span class="question-number">{{ $loop->iteration }}</span>
+                                                                    <div class="numeric-question-copy">
+                                                                        <span class="question-eyebrow">Evaluation question {{ $loop->iteration }}</span>
+                                                                        <h3>{{ $criterion->name }}</h3>
+                                                                        @if (filled($criterion->description))
+                                                                            <p>{{ $criterion->description }}</p>
+                                                                        @endif
+                                                                    </div>
+                                                                    <span class="numeric-maximum" aria-label="Maximum score {{ number_format($criterion->max_score, 2) }} points">
+                                                                        <small>Maximum</small>
+                                                                        <strong>{{ number_format($criterion->max_score, 2) }}</strong>
+                                                                    </span>
+                                                                </header>
+
+                                                                <div class="numeric-response-panel">
+                                                                    <div class="score-field-heading">
+                                                                        <label for="{{ $scoreInputId }}">Evaluator score</label>
+                                                                        <span id="{{ $scoreRangeId }}">Required · Enter a value from 0 to {{ number_format($criterion->max_score, 2) }}</span>
+                                                                    </div>
+                                                                    <div class="score-entry">
+                                                                        <input id="{{ $scoreInputId }}" type="number"
+                                                                            name="criteria[{{ $criterion->id }}][score]"
+                                                                            class="form-control score-input" min="0"
+                                                                            max="{{ $criterion->max_score }}" step="0.01"
+                                                                            inputmode="decimal" placeholder="0.00"
+                                                                            data-max="{{ $criterion->max_score }}"
+                                                                            data-section-id="{{ $section->id }}"
+                                                                            value="{{ old("criteria.{$criterion->id}.score", $saved?->score) }}" required
+                                                                            aria-describedby="{{ $scoreRangeId }}">
+                                                                        <span class="score-cap" aria-hidden="true">/ {{ number_format($criterion->max_score, 2) }} points</span>
+                                                                    </div>
+                                                                    <div class="numeric-evidence-response">
+                                                                        <label for="{{ $scoreCommentId }}" class="evidence-label">
+                                                                            <strong>Evidence response</strong>
+                                                                            <span>Required for final submission</span>
+                                                                        </label>
+                                                                        <textarea id="{{ $scoreCommentId }}" name="criteria[{{ $criterion->id }}][comment]"
+                                                                            class="form-control evidence-comment numeric-evidence-comment" rows="5" maxlength="5000"
+                                                                            placeholder="Explain the evidence and reasoning for this score" required>{{ old("criteria.{$criterion->id}.comment", $saved?->comment) }}</textarea>
+                                                                    </div>
+                                                                </div>
+                                                            </article>
+                                                        @endforeach
                                                     </div>
                                                 @else
                                                     <div class="categorical-question-list" role="list"
@@ -365,14 +377,20 @@
 
                                                 <div class="section-notes">
                                                     <div>
-                                                        <label for="strengths-{{ $section->id }}">Section strengths</label>
+                                                        <label for="strengths-{{ $section->id }}">
+                                                            <span>Section strengths</span>
+                                                            <small>Optional summary</small>
+                                                        </label>
                                                         <textarea id="strengths-{{ $section->id }}" name="sections[{{ $section->id }}][strengths]"
-                                                            class="form-control" rows="3" maxlength="5000" placeholder="Summarise the strongest evidence" required>{{ old("sections.{$section->id}.strengths", $savedSectionScore?->strengths) }}</textarea>
+                                                            class="form-control" rows="3" maxlength="5000" placeholder="Optional: summarise the strongest evidence">{{ old("sections.{$section->id}.strengths", $savedSectionScore?->strengths) }}</textarea>
                                                     </div>
                                                     <div>
-                                                        <label for="weaknesses-{{ $section->id }}">Section weaknesses</label>
+                                                        <label for="weaknesses-{{ $section->id }}">
+                                                            <span>Section weaknesses</span>
+                                                            <small>Optional summary</small>
+                                                        </label>
                                                         <textarea id="weaknesses-{{ $section->id }}" name="sections[{{ $section->id }}][weaknesses]"
-                                                            class="form-control" rows="3" maxlength="5000" placeholder="Summarise gaps or concerns" required>{{ old("sections.{$section->id}.weaknesses", $savedSectionScore?->weaknesses) }}</textarea>
+                                                            class="form-control" rows="3" maxlength="5000" placeholder="Optional: summarise cross-cutting gaps or concerns">{{ old("sections.{$section->id}.weaknesses", $savedSectionScore?->weaknesses) }}</textarea>
                                                     </div>
                                                 </div>
 
@@ -636,20 +654,31 @@
         .assessment-node-body { min-width: 0; padding: .85rem .9rem 1rem; border-top: 1px solid #edf0f4; }
         .assessment-node-body.is-collapsed { display: none; }
 
-        .criteria-table { font-size: .82rem; }
-        .criteria-table thead th { padding: .55rem .6rem; color: #667085; border-bottom: 1px solid #e4e8ee; background: #f8fafc; font-size: .7rem; font-weight: 750; letter-spacing: .035em; text-transform: uppercase; }
-        .criteria-table td { padding: .62rem .55rem; border-color: #edf0f4; }
-        .criteria-table td strong { color: #273246; font-size: .84rem; }
-        .criteria-table td p { margin: .18rem 0 0; color: var(--workspace-muted); font-size: .76rem; line-height: 1.45; }
-        .criteria-table .form-control, .criteria-table .form-select { min-height: 42px; border-color: #d8dee8; border-radius: 8px; font-size: .84rem; }
-        .criteria-table .form-control:focus, .criteria-table .form-select:focus, .section-notes .form-control:focus { border-color: var(--section-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--section-color) 10%, transparent); }
-        .question-index-column { width: 38px; text-align: center; }
         .question-number { display: grid; width: 25px; height: 25px; margin: auto; place-items: center; color: var(--section-deep); border-radius: 7px; background: var(--section-soft); font-size: .6rem; font-weight: 750; }
-        .score-column { width: 130px; }
-        .score-maximum { color: var(--section-deep); font-weight: 750; }
-        .score-entry { display: flex; align-items: center; gap: .35rem; }
-        .score-entry span { color: #98a2b3; white-space: nowrap; }
-        .criterion-row.is-answered { background: color-mix(in srgb, var(--section-soft) 42%, white); }
+        .numeric-question-list { display: grid; width: 100%; max-width: 100%; min-width: 0; gap: .9rem; }
+        .numeric-question-card { width: 100%; max-width: 100%; min-width: 0; overflow: hidden; border: 1px solid #e1e6ee; border-radius: 13px; background: #fff; box-shadow: 0 4px 12px rgba(20,34,66,.035); }
+        .numeric-question-card.is-answered { border-color: color-mix(in srgb, var(--section-color) 38%, white); box-shadow: 0 0 0 3px color-mix(in srgb, var(--section-color) 7%, transparent); }
+        .numeric-question-header { display: grid; min-width: 0; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: flex-start; gap: .75rem; padding: .9rem; border-bottom: 1px solid #edf0f4; background: linear-gradient(100deg, var(--section-soft), #fff 62%); }
+        .numeric-question-header .question-number { width: 30px; height: 30px; margin: 0; }
+        .numeric-question-copy { min-width: 0; }
+        .numeric-question-copy h3 { margin: 0; color: #273246; font-size: .9rem; font-weight: 730; line-height: 1.4; overflow-wrap: anywhere; }
+        .numeric-question-copy p { max-width: 100%; margin: .28rem 0 0; color: var(--workspace-muted); font-size: .76rem; line-height: 1.55; white-space: normal; overflow-wrap: anywhere; }
+        .numeric-maximum { display: grid; min-width: 88px; padding: .45rem .6rem; justify-items: end; color: var(--section-deep); border: 1px solid color-mix(in srgb, var(--section-color) 24%, white); border-radius: 9px; background: rgba(255,255,255,.82); }
+        .numeric-maximum small { color: var(--workspace-muted); font-size: .58rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+        .numeric-maximum strong { margin-top: .05rem; font-size: .85rem; }
+        .numeric-response-panel { display: grid; min-width: 0; grid-template-columns: minmax(170px, .55fr) minmax(280px, 1fr); align-items: end; gap: .75rem 1rem; padding: .85rem .9rem .95rem; background: #f8fafc; }
+        .score-field-heading { display: grid; gap: .2rem; align-self: center; }
+        .score-field-heading label { margin: 0; color: #344054; font-size: .82rem; font-weight: 750; }
+        .score-field-heading span { color: var(--workspace-muted); font-size: .7rem; line-height: 1.45; }
+        .score-entry { display: flex; min-width: 0; align-items: stretch; gap: .55rem; }
+        .score-input { flex: 1 1 12rem; width: 100%; min-width: 8rem; min-height: 52px; padding: .7rem .85rem; color: #172033; border-color: #cbd3df; border-radius: 10px; background: #fff; font-size: 1rem; font-weight: 720; }
+        .score-input:focus, .score-input:focus-visible { border-color: var(--section-color); box-shadow: 0 0 0 4px color-mix(in srgb, var(--section-color) 12%, transparent); }
+        .score-input:invalid:not(:placeholder-shown) { border-color: #d92d20; box-shadow: 0 0 0 3px rgba(217,45,32,.09); }
+        .score-cap { display: inline-flex; min-height: 52px; flex: 0 0 auto; align-items: center; padding: .65rem .8rem; color: var(--section-deep); border: 1px solid color-mix(in srgb, var(--section-color) 20%, white); border-radius: 10px; background: var(--section-soft); font-size: .75rem; font-weight: 700; white-space: nowrap; }
+        .numeric-evidence-response { min-width: 0; grid-column: 1 / -1; padding-top: .15rem; }
+        .numeric-evidence-comment { display: block; width: 100%; max-width: 100%; min-height: 120px; resize: vertical; border-color: #cbd3df; border-radius: 10px; font-size: .9rem !important; line-height: 1.5; }
+        .numeric-evidence-comment:focus, .numeric-evidence-comment:focus-visible { border-color: var(--section-color); box-shadow: 0 0 0 4px color-mix(in srgb, var(--section-color) 12%, transparent); }
+        .section-notes .form-control:focus { border-color: var(--section-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--section-color) 10%, transparent); }
         .categorical-question-list { display: grid; width: 100%; max-width: 100%; min-width: 0; gap: .9rem; }
         .categorical-question-card { width: 100%; max-width: 100%; min-width: 0; overflow: hidden; border: 1px solid #e1e6ee; border-radius: 13px; background: #fff; box-shadow: 0 4px 12px rgba(20,34,66,.035); }
         .categorical-question-card.is-answered { border-color: color-mix(in srgb, var(--section-color) 38%, white); box-shadow: 0 0 0 3px color-mix(in srgb, var(--section-color) 7%, transparent); }
@@ -678,7 +707,8 @@
         .categorical-response-panel .form-control:focus { border-color: var(--section-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--section-color) 10%, transparent); }
         .evidence-comment { display: block; width: 100%; max-width: 100%; min-height: 104px; resize: vertical; font-size: .8rem !important; }
         .section-notes { display: grid; grid-template-columns: repeat(2, 1fr); gap: .75rem; margin-top: .85rem; padding: .75rem; border-radius: 10px; background: #f8fafc; }
-        .section-notes label { display: block; margin-bottom: .3rem; color: #475467; font-size: .78rem; font-weight: 700; }
+        .section-notes label { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .3rem; color: #475467; font-size: .78rem; font-weight: 700; }
+        .section-notes label small { color: #98a2b3; font-size: .65rem; font-weight: 600; }
         .section-notes .form-control { border-color: #d8dee8; border-radius: 8px; font-size: .82rem; }
         .structural-node-note { display: flex; align-items: center; gap: .65rem; min-height: 46px; padding: .55rem .65rem; color: var(--section-deep); border: 1px dashed color-mix(in srgb, var(--section-color) 35%, white); border-radius: 9px; background: var(--section-soft); }
         .structural-node-note strong, .structural-node-note span { display: block; }
@@ -757,8 +787,8 @@
         .structure-key b { display: grid; width: 20px; height: 20px; place-items: center; color: #3157d5; border-radius: 6px; background: #eef2ff; font-size: .58rem; }
 
         @supports not (background: color-mix(in srgb, red 10%, white)) {
-            .root-jump-link, .subtotal-summary, .structural-node-note { border-color: #d8dee8; }
-            .criterion-row.is-answered, .categorical-question-card.is-answered { background: #fafbfc; }
+            .root-jump-link, .subtotal-summary, .structural-node-note, .numeric-maximum, .score-cap { border-color: #d8dee8; }
+            .numeric-question-card.is-answered, .categorical-question-card.is-answered { background: #fafbfc; }
         }
 
         @media (max-width: 1199.98px) {
@@ -774,6 +804,12 @@
         @media (max-width: 767.98px) {
             .evaluation-hero { padding: 1.15rem; }
             .applicant-facts, .section-notes { grid-template-columns: 1fr; }
+            .numeric-question-header { grid-template-columns: 30px minmax(0, 1fr); }
+            .numeric-maximum { grid-column: 2; justify-self: start; justify-items: start; }
+            .numeric-response-panel { grid-template-columns: 1fr; }
+            .score-entry { flex-direction: column; }
+            .score-input { min-width: 0; font-size: 1rem; }
+            .score-cap { min-height: 44px; justify-content: center; }
             .assessment-node.depth-1, .assessment-node.depth-2, .assessment-node.depth-3 { margin-left: .65rem; }
             .assessment-node:not(.is-root)::before { display: none; }
             .assessment-node-header { flex-wrap: wrap; }
@@ -1000,12 +1036,26 @@
                 document.querySelectorAll('.form-progress-track').forEach(node => node.setAttribute('aria-valuenow', completion.toFixed(0)));
             }
 
+            function numericResponseComplete(input) {
+                const row = input?.closest('[data-criterion-row]');
+                const comment = row?.querySelector('.numeric-evidence-comment');
+
+                return Boolean(input?.value !== '' && comment?.value.trim());
+            }
+
+            function categoricalResponseComplete(input) {
+                const row = input?.closest('[data-criterion-row]');
+                const comment = row?.querySelector('.evidence-comment');
+
+                return Boolean(input?.checked && comment?.value.trim());
+            }
+
             function markRows() {
                 document.querySelectorAll('[data-criterion-row]').forEach(row => {
                     const scoreInput = row.querySelector('.score-input');
                     const answered = IS_NUMERIC
-                        ? Boolean(scoreInput && scoreInput.value !== '')
-                        : Boolean(row.querySelector('.decision-input:checked'));
+                        ? numericResponseComplete(scoreInput)
+                        : categoricalResponseComplete(row.querySelector('.decision-input:checked'));
                     row.classList.toggle('is-answered', answered);
                 });
             }
@@ -1018,19 +1068,20 @@
                 inputs.forEach(input => {
                     const maximum = Number.parseFloat(input.dataset.max || '0') || 0;
                     const hasValue = input.value !== '';
+                    const isComplete = numericResponseComplete(input);
                     let value = Number.parseFloat(input.value);
 
                     if (!Number.isFinite(value)) value = 0;
                     value = Math.max(0, Math.min(maximum, value));
                     if (hasValue && Number.parseFloat(input.value) !== value) input.value = value;
-                    if (hasValue) overallAnswered++;
+                    if (isComplete) overallAnswered++;
                     overallScore += hasValue ? value : 0;
                 });
 
                 document.querySelectorAll('[data-evaluation-section]').forEach(section => {
                     const ids = subtreeIds(section);
                     const relevant = inputs.filter(input => ids.includes(String(input.dataset.sectionId)));
-                    const answered = relevant.filter(input => input.value !== '').length;
+                    const answered = relevant.filter(input => numericResponseComplete(input)).length;
                     const score = relevant.reduce((sum, input) => sum + (Number.parseFloat(input.value) || 0), 0);
                     const maximum = relevant.reduce((sum, input) => sum + (Number.parseFloat(input.dataset.max) || 0), 0);
                     const percentage = maximum > 0 ? clampPercent((score / maximum) * 100) : 0;
@@ -1053,24 +1104,26 @@
             }
 
             function recalculateCategorical() {
-                const inputs = [...document.querySelectorAll('.decision-input:checked')];
-                const overallAnswered = inputs.length;
+                const selectedInputs = [...document.querySelectorAll('.decision-input:checked')];
+                const completeInputs = selectedInputs.filter(input => categoricalResponseComplete(input));
+                const overallAnswered = completeInputs.length;
 
                 document.querySelectorAll('[data-evaluation-section]').forEach(section => {
                     const ids = subtreeIds(section);
-                    const relevant = inputs.filter(input => ids.includes(String(input.dataset.sectionId)));
-                    const answered = relevant.length;
+                    const relevantSelected = selectedInputs.filter(input => ids.includes(String(input.dataset.sectionId)));
+                    const relevantComplete = completeInputs.filter(input => ids.includes(String(input.dataset.sectionId)));
+                    const answered = relevantComplete.length;
 
                     setCompletion(section, answered, Number(section.dataset.questionTotal || 0));
                     section.querySelectorAll('[data-decision-value]').forEach(counter => {
-                        counter.textContent = relevant.filter(input =>
+                        counter.textContent = relevantSelected.filter(input =>
                             input.value === counter.dataset.decisionValue
                         ).length;
                     });
                 });
 
                 document.querySelectorAll('[data-overall-decision-value]').forEach(counter => {
-                    counter.textContent = inputs.filter(input =>
+                    counter.textContent = selectedInputs.filter(input =>
                         input.value === counter.dataset.overallDecisionValue
                     ).length;
                 });
@@ -1163,13 +1216,13 @@
             }
 
             document.addEventListener('input', event => {
-                if (event.target.matches('.score-input, .decision-input')) recalculate();
+                if (event.target.matches('.score-input, .decision-input, .evidence-comment')) recalculate();
                 if (event.target.matches('.score-input, .decision-input, .evidence-comment, .section-notes textarea')) {
                     scheduleDraftSave();
                 }
             });
             document.addEventListener('change', event => {
-                if (event.target.matches('.score-input, .decision-input')) recalculate();
+                if (event.target.matches('.score-input, .decision-input, .evidence-comment')) recalculate();
                 if (event.target.matches('.score-input, .decision-input, .evidence-comment, .section-notes textarea')) {
                     scheduleDraftSave();
                 }
@@ -1195,6 +1248,34 @@
                     content?.classList.toggle('is-collapsed', expanded);
                 });
             });
+
+            let invalidQuestionFocusScheduled = false;
+            finalForm?.addEventListener('invalid', event => {
+                const invalidControl = event.target;
+                if (!(invalidControl instanceof HTMLElement)
+                    || !invalidControl.closest('[data-criterion-row]')) return;
+
+                const content = invalidControl.closest('.assessment-node-body');
+                const section = invalidControl.closest('[data-evaluation-section]');
+                const toggle = section?.querySelector('[data-node-toggle]');
+
+                if (content?.classList.contains('is-collapsed')) {
+                    content.classList.remove('is-collapsed');
+                    toggle?.setAttribute('aria-expanded', 'true');
+                    if (toggle) {
+                        const sectionName = section.querySelector('h2')?.textContent?.trim() || 'section';
+                        toggle.title = `Collapse ${sectionName}`;
+                    }
+                }
+
+                if (invalidQuestionFocusScheduled) return;
+                invalidQuestionFocusScheduled = true;
+                window.requestAnimationFrame(() => {
+                    invalidControl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    invalidControl.focus({ preventScroll: true });
+                    invalidQuestionFocusScheduled = false;
+                });
+            }, true);
 
             finalForm?.addEventListener('submit', event => {
                 recalculate();

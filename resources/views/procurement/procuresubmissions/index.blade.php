@@ -316,28 +316,33 @@
                 <div>
                     <div class="submission-hub-eyebrow"><i class="feather-layers" aria-hidden="true"></i> Submission workspace</div>
                     <h3 id="submission-hub-title" class="fw-bold text-white mb-2">Procurement Submissions</h3>
-                    <p class="mb-0">Choose a procurement to review its applicants, submission records and international screening progress.</p>
+                    <p class="mb-0">Choose a procurement to review its applicants, submission records and 3PAP Sanctions Screening progress.</p>
                 </div>
 
                 @if (!$selectedProcurement)
                     <div>
                         @if ($screeningConfigured)
                             <form method="POST" action="{{ route('procurement.submissions.screen-all') }}"
-                                onsubmit="return confirm('Run international screening for every accessible applicant?');">
+                                onsubmit="return confirm('Run 3PAP sanctions screening for every accessible applicant?');">
                                 @csrf
                                 <button type="submit" class="btn btn-light">
-                                    <i class="feather-shield me-1" aria-hidden="true"></i> Check all accessible applicants
+                                    <i class="feather-shield me-1" aria-hidden="true"></i> Run 3PAP checks for all applicants
                                 </button>
                             </form>
                         @else
                             <button type="button" class="btn btn-outline-light" disabled>
-                                <i class="feather-slash me-1" aria-hidden="true"></i> Screening not configured
+                                <i class="feather-slash me-1" aria-hidden="true"></i> 3PAP screening not configured
                             </button>
                         @endif
                     </div>
                 @endif
             </div>
         </section>
+
+        <div class="alert alert-light border small mb-4" role="note">
+            <i class="feather-info me-1" aria-hidden="true"></i>
+            3PAP results support human review and do not automatically determine applicant eligibility.
+        </div>
 
         <section class="submission-summary-grid mb-4" aria-label="Submission overview">
             <article class="submission-summary-card">
@@ -389,7 +394,7 @@
                             </select>
                         </div>
                         <div class="col-sm-6 col-lg-2">
-                            <label for="procurementAttentionFilter" class="form-label small fw-semibold">Screening</label>
+                            <label for="procurementAttentionFilter" class="form-label small fw-semibold">3PAP Screening</label>
                             <select id="procurementAttentionFilter" class="form-select">
                                 <option value="">All records</option>
                                 <option value="needs-attention">Needs attention</option>
@@ -454,8 +459,8 @@
                                     <div class="procurement-mini-stat"><strong>{{ number_format($failed) }}</strong><span>Check failed</span></div>
                                 </div>
 
-                                <div class="procurement-progress-label"><span>Successful screening</span><span>{{ $screened }}/{{ $total }}</span></div>
-                                <div class="procurement-progress" role="progressbar" aria-label="Successful screening progress for {{ $procurement->title }}"
+                                <div class="procurement-progress-label"><span>Successful 3PAP screening</span><span>{{ $screened }}/{{ $total }}</span></div>
+                                <div class="procurement-progress" role="progressbar" aria-label="Successful 3PAP sanctions screening progress for {{ $procurement->title }}"
                                     aria-valuenow="{{ $progress }}" aria-valuemin="0" aria-valuemax="100">
                                     <span style="width: {{ $progress }}%"></span>
                                 </div>
@@ -518,16 +523,16 @@
                         <div>
                             @if ($screeningConfigured && $selectedTotal > 0)
                                 <form method="POST" action="{{ route('procurement.submissions.screen-all') }}"
-                                    onsubmit="return confirm('Run international screening for all {{ $selectedTotal }} applicants in this procurement?');">
+                                    onsubmit="return confirm('Run 3PAP sanctions screening for all {{ $selectedTotal }} applicants in this procurement?');">
                                     @csrf
                                     <input type="hidden" name="procurement_id" value="{{ $selectedProcurement->id }}">
                                     <button type="submit" class="btn btn-light">
-                                        <i class="feather-shield me-1" aria-hidden="true"></i> Check this procurement
+                                        <i class="feather-shield me-1" aria-hidden="true"></i> Run 3PAP checks for this procurement
                                     </button>
                                 </form>
                             @elseif (!$screeningConfigured)
                                 <button type="button" class="btn btn-outline-light" disabled>
-                                    <i class="feather-slash me-1" aria-hidden="true"></i> Screening not configured
+                                    <i class="feather-slash me-1" aria-hidden="true"></i> 3PAP screening not configured
                                 </button>
                             @endif
                         </div>
@@ -565,7 +570,7 @@
                                 <th>Official Email</th>
                                 <th>Form</th>
                                 <th class="text-center">Status</th>
-                                <th class="text-center">International Screening</th>
+                                <th class="text-center">3PAP Sanctions Screening</th>
                                 <th>Submitted At</th>
                                 <th class="text-center" width="180">Action</th>
                             </tr>
@@ -635,9 +640,9 @@
                                                 <i class="feather-eye me-1" aria-hidden="true"></i> View
                                             </a>
                                             @if ($screeningConfigured)
-                                                <a href="{{ route('procurement.submissions.screening.report', ['submission' => $submission, 'run' => $screening ? null : 1]) }}"
+                                                <a href="{{ route('procurement.submissions.screening.report', $submission) }}"
                                                     class="btn btn-sm btn-outline-dark">
-                                                    <i class="feather-shield me-1" aria-hidden="true"></i> {{ $screening ? 'Report' : 'Check' }}
+                                                    <i class="feather-shield me-1" aria-hidden="true"></i> Report
                                                 </a>
                                             @endif
                                         </div>
