@@ -6,7 +6,6 @@
 
         <form method="POST" enctype="multipart/form-data" action="{{ route('submissions.store', $form) }}">
             @csrf
-            <input type="hidden" name="procurement_id" value="{{ request('procurement_id') }}">
 
             @foreach ($form->fields as $field)
                 <div class="mb-3">

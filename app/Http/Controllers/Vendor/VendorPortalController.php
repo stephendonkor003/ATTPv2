@@ -18,7 +18,7 @@ use App\Models\VendorMessage;
 use App\Models\VendorReport;
 use App\Notifications\VendorRequestCreatedNotification;
 use App\Services\EvaluationReworkGuard;
-use App\Services\ProcurementSubmissionScreeningService;
+use App\Services\ProcurementSubmissionScreeningAutomation;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -309,7 +309,7 @@ class VendorPortalController extends Controller
     public function updateApplication(
         Request $request,
         FormSubmission $submission,
-        ProcurementSubmissionScreeningService $screeningService
+        ProcurementSubmissionScreeningAutomation $screeningAutomation,
     ) {
         $user = $request->user();
         $this->assertVendor($user);
@@ -408,44 +408,57 @@ class VendorPortalController extends Controller
 
         $validated = $request->validate($rules);
 
-        foreach ($form->fields as $field) {
-            $key = $field->field_key;
-            $value = null;
+        DB::transaction(function () use (
+            $request,
+            $submission,
+            $form,
+            $existingValues,
+            $validated,
+            $screeningAutomation,
+        ): void {
+            foreach ($form->fields as $field) {
+                $key = $field->field_key;
+                $value = null;
 
-            if (in_array($field->field_type, ['file', 'image'], true)) {
-                if ($request->hasFile($key)) {
-                    $value = $request->file($key)->store('procurement_submissions');
+                if (in_array($field->field_type, ['file', 'image'], true)) {
+                    if ($request->hasFile($key)) {
+                        $value = $request->file($key)->store('procurement_submissions');
+                    } else {
+                        $value = $existingValues->get($key)?->value;
+                    }
+                } elseif (is_array($request->input($key))) {
+                    $value = json_encode(array_values($request->input($key)));
                 } else {
-                    $value = $existingValues->get($key)?->value;
+                    $value = $request->input($key);
                 }
-            } elseif (is_array($request->input($key))) {
-                $value = json_encode(array_values($request->input($key)));
-            } else {
-                $value = $request->input($key);
+
+                FormSubmissionValue::updateOrCreate(
+                    [
+                        'submission_id' => $submission->id,
+                        'field_key' => $key,
+                    ],
+                    [
+                        'value' => $value,
+                    ]
+                );
             }
 
-            FormSubmissionValue::updateOrCreate(
-                [
-                    'submission_id' => $submission->id,
-                    'field_key' => $key,
-                ],
-                [
-                    'value' => $value,
-                ]
-            );
-        }
+            $submission->update([
+                'status' => FormSubmission::STATUS_SUBMITTED,
+                'vendor_response' => trim((string) ($validated['vendor_response'] ?? '')) ?: null,
+                'publication_version' => max(1, (int) $submission->procurement?->publication_version),
+                'submitted_at' => now(),
+                'resubmitted_at' => now(),
+                'withdrawn_at' => null,
+                'withdrawal_reason' => null,
+            ]);
 
-        $submission->screening()->delete();
-        $submission->update([
-            'status' => FormSubmission::STATUS_SUBMITTED,
-            'vendor_response' => trim((string) ($validated['vendor_response'] ?? '')) ?: null,
-            'publication_version' => max(1, (int) $submission->procurement?->publication_version),
-            'submitted_at' => now(),
-            'resubmitted_at' => now(),
-            'withdrawn_at' => null,
-            'withdrawal_reason' => null,
-        ]);
-        $screeningService->deferSubmissionScreening($submission->id);
+            $screeningAutomation->queueSubmission(
+                $submission->id,
+                checkedVia: 'auto',
+                force: true,
+            );
+        });
 
         return redirect()
             ->route('vendor.submissions')

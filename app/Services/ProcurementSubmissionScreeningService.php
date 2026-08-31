@@ -9,7 +9,9 @@ use Composer\CaBundle\CaBundle;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Throwable;
 
 class ProcurementSubmissionScreeningService
@@ -26,6 +28,11 @@ class ProcurementSubmissionScreeningService
         'legal_name',
         'firm_name',
         'entity_name',
+        'consortium_name',
+        'think_tank_name',
+        'lead_think_tank_name',
+        'institution_name',
+        'applicant_organization',
         'official_name',
     ];
 
@@ -37,7 +44,10 @@ class ProcurementSubmissionScreeningService
         'contractor_country',
         'business_country',
         'registered_country',
+        'country_of_registration',
         'official_country',
+        'think_tank_country',
+        'lead_think_tank_country',
         'organization_country',
         'organisation_country',
         'nationality',
@@ -148,29 +158,12 @@ class ProcurementSubmissionScreeningService
         ];
     }
 
-    public function deferSubmissionScreening(string $submissionId): void
-    {
-        if (! $this->isConfigured()) {
-            return;
-        }
-
-        app()->terminating(function () use ($submissionId) {
-            try {
-                $submission = FormSubmission::with(['values', 'submitter'])->find($submissionId);
-                if ($submission) {
-                    $this->screenSubmission($submission, null, 'auto');
-                }
-            } catch (Throwable $exception) {
-                report($exception);
-            }
-        });
-    }
-
     public function screenSubmission(
         FormSubmission $submission,
         ?User $actor = null,
-        string $checkedVia = 'manual'
-    ): ProcurementSubmissionScreening {
+        string $checkedVia = 'manual',
+        ?string $runToken = null,
+    ): ?ProcurementSubmissionScreening {
         $this->ensureConfigured();
 
         $submission->loadMissing(['values', 'submitter']);
@@ -182,8 +175,25 @@ class ProcurementSubmissionScreeningService
                 $entity,
                 'Applicant name was not available for international screening.',
                 $actor,
-                $checkedVia
+                $checkedVia,
+                runToken: $runToken,
             );
+        }
+
+        if (filled($runToken)) {
+            $marked = ProcurementSubmissionScreening::query()
+                ->where('submission_id', $submission->id)
+                ->where('run_token', $runToken)
+                ->where('request_status', ProcurementSubmissionScreening::STATUS_PROCESSING)
+                ->where('attempt_count', '<', 5)
+                ->update([
+                    'attempt_count' => DB::raw('attempt_count + 1'),
+                    'request_started_at' => now(),
+                ]);
+
+            if ($marked !== 1) {
+                return null;
+            }
         }
 
         try {
@@ -194,30 +204,40 @@ class ProcurementSubmissionScreeningService
             ], fn ($value) => filled($value)));
         } catch (Throwable $exception) {
             report($exception);
+            $failure = $this->safeExceptionMetadata($exception);
 
             return $this->storeFailure(
                 $submission,
                 $entity,
-                'The 3PAP screening service could not be reached. Try again later.',
+                $failure['retryable']
+                    ? 'The 3PAP screening service could not be reached. The system will retry automatically.'
+                    : 'The 3PAP response was not received, so the request outcome is unknown. Verify 3PAP usage before re-running.',
                 $actor,
-                $checkedVia
+                $checkedVia,
+                raw: $failure,
+                runToken: $runToken,
             );
         }
 
         if ($response->failed()) {
+            $failure = $this->httpFailureMetadata($response);
+
             return $this->storeFailure(
                 $submission,
                 $entity,
-                $this->extractErrorMessage($response),
+                $failure['outcome_unknown']
+                    ? $this->extractErrorMessage($response).' Automatic retry was stopped because the request may already have consumed a screening credit.'
+                    : $this->extractErrorMessage($response),
                 $actor,
                 $checkedVia,
                 $response->status(),
-                $this->responsePayload($response)
+                $failure,
+                $runToken,
             );
         }
 
         $responsePayload = $this->responsePayload($response);
-        if (! ($responsePayload['success'] ?? false)) {
+        if (($responsePayload['success'] ?? null) === false) {
             return $this->storeFailure(
                 $submission,
                 $entity,
@@ -225,13 +245,49 @@ class ProcurementSubmissionScreeningService
                 $actor,
                 $checkedVia,
                 $response->status(),
-                $responsePayload
+                $responsePayload,
+                $runToken,
+            );
+        }
+
+        $validationError = $this->singleResponseValidationError($responsePayload);
+        if ($validationError !== null) {
+            return $this->storeFailure(
+                $submission,
+                $entity,
+                '3PAP returned an incomplete or invalid sanctions screening result. No clearance was recorded.',
+                $actor,
+                $checkedVia,
+                $response->status(),
+                [
+                    'code' => 'INVALID_PROVIDER_RESPONSE',
+                    'validation_error' => $validationError,
+                    'provider_response' => $responsePayload,
+                ],
+                $runToken,
             );
         }
 
         $payload = $this->normalizeSingleResponse($entity, $responsePayload);
 
-        return $this->storeSuccess($submission, $entity, $payload, $actor, $checkedVia);
+        return $this->storeSuccess($submission, $entity, $payload, $actor, $checkedVia, $runToken);
+    }
+
+    /**
+     * Hash only the normalized data sent to 3PAP. This lets the queue avoid
+     * spending another screening credit when an unchanged submission is
+     * rediscovered by the recovery task.
+     */
+    public function submissionFingerprint(FormSubmission $submission): string
+    {
+        $submission->loadMissing(['values', 'submitter']);
+        $entity = $this->buildEntityPayload($submission);
+
+        return hash('sha256', json_encode([
+            'version' => 1,
+            'name' => $this->fingerprintValue($entity['name']),
+            'country' => $this->fingerprintValue($entity['country']),
+        ], JSON_THROW_ON_ERROR));
     }
 
     public function screenSubmissions(iterable $submissions, ?User $actor = null, string $checkedVia = 'bulk'): array
@@ -383,6 +439,26 @@ class ProcurementSubmissionScreeningService
                     continue;
                 }
 
+                $validationError = $this->batchResultValidationError($result);
+                if ($validationError !== null) {
+                    $this->storeFailure(
+                        $item['submission'],
+                        $item['entity'],
+                        '3PAP returned an incomplete or invalid batch screening result. No clearance was recorded.',
+                        $actor,
+                        $checkedVia,
+                        $response->status(),
+                        [
+                            'code' => 'INVALID_PROVIDER_RESPONSE',
+                            'validation_error' => $validationError,
+                            'provider_response' => $result,
+                        ],
+                    );
+                    $summary['failed']++;
+
+                    continue;
+                }
+
                 $payload = $this->normalizeBatchResponse($item['entity'], $result);
                 $this->storeSuccess($item['submission'], $item['entity'], $payload, $actor, $checkedVia);
                 $summary['checked']++;
@@ -431,16 +507,16 @@ class ProcurementSubmissionScreeningService
                 'services.threepap_checker.api_token',
                 'THREEPAP_CHECKER_API_TOKEN'
             ),
-            'timeout' => max(1, (int) $this->resolveRuntimeConfigValue(
+            'timeout' => min(45, max(1, (int) $this->resolveRuntimeConfigValue(
                 'services.threepap_checker.timeout',
                 'THREEPAP_CHECKER_TIMEOUT',
                 20
-            )),
-            'connect_timeout' => max(1, (int) $this->resolveRuntimeConfigValue(
+            ))),
+            'connect_timeout' => min(15, max(1, (int) $this->resolveRuntimeConfigValue(
                 'services.threepap_checker.connect_timeout',
                 'THREEPAP_CHECKER_CONNECT_TIMEOUT',
                 5
-            )),
+            ))),
             'ca_bundle' => $this->resolveRuntimeConfigValue(
                 'services.threepap_checker.ca_bundle',
                 'THREEPAP_CHECKER_CA_BUNDLE'
@@ -516,7 +592,19 @@ class ProcurementSubmissionScreeningService
             ->filter(fn ($value) => filled($value));
 
         $name = $this->pickFirstValue($values, self::COMPANY_KEYS)
-            ?? $this->pickValueByKeyword($values, ['company', 'business', 'vendor', 'supplier', 'contractor', 'organization', 'organisation', 'firm'])
+            ?? $this->pickValueByKeyword($values, [
+                'company',
+                'business',
+                'vendor',
+                'supplier',
+                'contractor',
+                'organization',
+                'organisation',
+                'consortium',
+                'think_tank',
+                'institution',
+                'firm',
+            ])
             ?? $submission->submitter?->name;
 
         $country = $this->pickFirstValue($values, self::COUNTRY_KEYS)
@@ -572,40 +660,109 @@ class ProcurementSubmissionScreeningService
 
     private function normalizeSingleResponse(array $entity, array $response): array
     {
+        $riskLevel = strtolower(trim($response['risk_level']));
+
         return [
-            'success' => (bool) data_get($response, 'success', false),
+            'success' => true,
             'query' => $entity,
-            'risk_level' => strtolower((string) data_get($response, 'risk_level', 'clear')),
-            'total_matches' => (int) data_get($response, 'total_matches', 0),
+            'risk_level' => $riskLevel,
+            'total_matches' => $response['total_matches'],
             'is_flagged' => in_array(
-                strtolower((string) data_get($response, 'risk_level', 'clear')),
+                $riskLevel,
                 ['medium', 'high', 'critical'],
                 true
             ),
-            'matches' => array_values((array) data_get($response, 'results', [])),
+            'matches' => $response['results'],
             'raw' => $response,
         ];
     }
 
+    private function singleResponseValidationError(array $response): ?string
+    {
+        if (($response['success'] ?? null) !== true) {
+            return 'The success field must be the boolean value true.';
+        }
+
+        if (! array_key_exists('risk_level', $response)
+            || ! is_string($response['risk_level'])
+            || trim($response['risk_level']) === '') {
+            return 'The risk_level field must be a non-empty string.';
+        }
+
+        $riskLevel = strtolower(trim($response['risk_level']));
+        if (! in_array($riskLevel, ['clear', 'low', 'medium', 'high', 'critical'], true)) {
+            return 'The risk_level field contains an unknown classification.';
+        }
+
+        if (! array_key_exists('total_matches', $response)
+            || ! is_int($response['total_matches'])
+            || $response['total_matches'] < 0) {
+            return 'The total_matches field must be a non-negative integer.';
+        }
+
+        if (! array_key_exists('results', $response)
+            || ! is_array($response['results'])
+            || ! array_is_list($response['results'])) {
+            return 'The results field must be a JSON array.';
+        }
+
+        foreach ($response['results'] as $result) {
+            if (! is_array($result)) {
+                return 'Every results entry must be a JSON object.';
+            }
+        }
+
+        $totalMatches = $response['total_matches'];
+        $returnedMatches = count($response['results']);
+
+        if ($returnedMatches > $totalMatches) {
+            return 'The results array cannot contain more entries than total_matches.';
+        }
+
+        if ($riskLevel === 'clear' && ($totalMatches !== 0 || $returnedMatches !== 0)) {
+            return 'A clear result must report zero matches and an empty results array.';
+        }
+
+        if ($riskLevel !== 'clear' && $totalMatches === 0) {
+            return 'A non-clear result must report at least one match.';
+        }
+
+        return null;
+    }
+
     private function normalizeBatchResponse(array $entity, array $result): array
     {
+        $riskLevel = strtolower(trim($result['risk_level']));
+
         return [
-            'success' => (bool) data_get($result, 'success', false),
+            'success' => true,
             'query' => $entity,
-            'risk_level' => strtolower((string) data_get($result, 'risk_level', 'clear')),
-            'total_matches' => (int) data_get($result, 'total_matches', 0),
+            'risk_level' => $riskLevel,
+            'total_matches' => $result['total_matches'],
             'is_flagged' => (bool) data_get(
                 $result,
                 'is_flagged',
                 in_array(
-                    strtolower((string) data_get($result, 'risk_level', 'clear')),
+                    $riskLevel,
                     ['medium', 'high', 'critical'],
                     true
                 )
             ),
-            'matches' => array_values((array) data_get($result, 'matches', [])),
+            'matches' => $result['matches'],
             'raw' => $result,
         ];
+    }
+
+    private function batchResultValidationError(array $result): ?string
+    {
+        $singleShape = $result;
+        if (array_key_exists('matches', $result)) {
+            $singleShape['results'] = $result['matches'];
+        } else {
+            unset($singleShape['results']);
+        }
+
+        return $this->singleResponseValidationError($singleShape);
     }
 
     private function storeSuccess(
@@ -613,21 +770,41 @@ class ProcurementSubmissionScreeningService
         array $entity,
         array $payload,
         ?User $actor,
-        string $checkedVia
-    ): ProcurementSubmissionScreening {
-        $riskLevel = strtolower((string) ($payload['risk_level'] ?? 'clear'));
+        string $checkedVia,
+        ?string $runToken = null,
+    ): ?ProcurementSubmissionScreening {
+        $riskLevel = is_string($payload['risk_level'] ?? null)
+            ? strtolower(trim($payload['risk_level']))
+            : null;
+
         if (! in_array($riskLevel, ['clear', 'low', 'medium', 'high', 'critical'], true)) {
-            $riskLevel = 'clear';
+            return $this->storeFailure(
+                $submission,
+                $entity,
+                '3PAP returned an invalid risk classification. No clearance was recorded.',
+                $actor,
+                $checkedVia,
+                raw: [
+                    'code' => 'INVALID_PROVIDER_RESPONSE',
+                    'provider_response' => $payload,
+                ],
+                runToken: $runToken,
+            );
         }
         $totalMatches = (int) ($payload['total_matches'] ?? 0);
 
-        return ProcurementSubmissionScreening::updateOrCreate(
-            ['submission_id' => $submission->id],
+        return $this->persistResult(
+            $submission,
             [
                 'provider' => '3pap',
                 'checked_by' => $actor?->id,
                 'checked_via' => $checkedVia,
-                'request_status' => 'success',
+                'request_status' => ProcurementSubmissionScreening::STATUS_SUCCESS,
+                'submission_fingerprint' => $this->submissionFingerprint($submission),
+                'retryable' => false,
+                'processing_started_at' => null,
+                'request_started_at' => null,
+                'next_retry_at' => null,
                 'entity_name' => $entity['name'],
                 'entity_country' => $entity['country'],
                 'risk_level' => $riskLevel,
@@ -644,7 +821,8 @@ class ProcurementSubmissionScreeningService
                 'review_notes' => null,
                 'reviewed_by' => null,
                 'reviewed_at' => null,
-            ]
+            ],
+            $runToken,
         );
     }
 
@@ -655,15 +833,21 @@ class ProcurementSubmissionScreeningService
         ?User $actor,
         string $checkedVia,
         ?int $statusCode = null,
-        mixed $raw = null
-    ): ProcurementSubmissionScreening {
-        return ProcurementSubmissionScreening::updateOrCreate(
-            ['submission_id' => $submission->id],
+        mixed $raw = null,
+        ?string $runToken = null,
+    ): ?ProcurementSubmissionScreening {
+        return $this->persistResult(
+            $submission,
             [
                 'provider' => '3pap',
                 'checked_by' => $actor?->id,
                 'checked_via' => $checkedVia,
-                'request_status' => 'error',
+                'request_status' => ProcurementSubmissionScreening::STATUS_ERROR,
+                'submission_fingerprint' => $this->submissionFingerprint($submission),
+                'retryable' => $this->isSafePreRequestFailureMetadata($raw),
+                'processing_started_at' => null,
+                'request_started_at' => null,
+                'next_retry_at' => null,
                 'entity_name' => $entity['name'],
                 'entity_country' => $entity['country'],
                 'risk_level' => null,
@@ -682,8 +866,105 @@ class ProcurementSubmissionScreeningService
                     'error' => $message,
                     'raw' => $raw,
                 ],
-            ]
+            ],
+            $runToken,
         );
+    }
+
+    private function persistResult(
+        FormSubmission $submission,
+        array $attributes,
+        ?string $runToken,
+    ): ?ProcurementSubmissionScreening {
+        if (filled($runToken)) {
+            $databaseAttributes = $attributes;
+            $databaseAttributes['response_payload'] = json_encode(
+                $attributes['response_payload'] ?? null,
+                JSON_THROW_ON_ERROR,
+            );
+
+            $updated = ProcurementSubmissionScreening::query()
+                ->where('submission_id', $submission->id)
+                ->where('run_token', $runToken)
+                ->update($databaseAttributes);
+
+            if ($updated !== 1) {
+                return null;
+            }
+
+            return ProcurementSubmissionScreening::query()
+                ->where('submission_id', $submission->id)
+                ->where('run_token', $runToken)
+                ->first();
+        }
+
+        $existing = ProcurementSubmissionScreening::query()
+            ->where('submission_id', $submission->id)
+            ->first();
+
+        return ProcurementSubmissionScreening::updateOrCreate(
+            ['submission_id' => $submission->id],
+            [
+                'run_token' => $existing?->run_token ?: (string) Str::uuid(),
+                ...$attributes,
+            ],
+        );
+    }
+
+    /** @return array{code:string,curl_code:null|int,retryable:bool} */
+    private function safeExceptionMetadata(Throwable $exception): array
+    {
+        preg_match('/cURL error\s+(\d+)/i', $exception->getMessage(), $matches);
+        $curlCode = isset($matches[1]) ? (int) $matches[1] : null;
+
+        return [
+            'code' => in_array($curlCode, [5, 6, 7, 35, 60], true)
+                ? 'CONNECTION_FAILED'
+                : 'OUTCOME_UNKNOWN',
+            'curl_code' => $curlCode,
+            // Retry only failures known to happen before an HTTP request can
+            // be processed; an ambiguous timeout could otherwise spend a
+            // second sanctions-search credit.
+            'retryable' => in_array($curlCode, [5, 6, 7, 35, 60], true),
+        ];
+    }
+
+    /** @return array{provider:array<string,mixed>,code:string,retryable:bool,outcome_unknown:bool} */
+    private function httpFailureMetadata(Response $response): array
+    {
+        $payload = $this->responsePayload($response);
+        $status = $response->status();
+        $code = strtoupper(trim((string) data_get($payload, 'code')));
+
+        return [
+            'provider' => $payload,
+            'code' => $code,
+            // 3PAP does not document an idempotency key. Even a 5xx can arrive
+            // after the paid screening was accepted, so HTTP responses are
+            // never repeated automatically.
+            'retryable' => false,
+            'outcome_unknown' => in_array($status, [408, 425], true) || $status >= 500,
+        ];
+    }
+
+    private function isSafePreRequestFailureMetadata(mixed $metadata): bool
+    {
+        $code = strtoupper(trim((string) data_get($metadata, 'code')));
+        $curlCode = data_get($metadata, 'curl_code');
+
+        return $code === 'CONNECTION_FAILED'
+            && data_get($metadata, 'retryable') === true
+            && is_numeric($curlCode)
+            && in_array((int) $curlCode, [5, 6, 7, 35, 60], true);
+    }
+
+    private function fingerprintValue(mixed $value): ?string
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        return Str::lower(preg_replace('/\s+/u', ' ', trim((string) $value)) ?? trim((string) $value));
     }
 
     private function extractErrorMessage(Response $response): string

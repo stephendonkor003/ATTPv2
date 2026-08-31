@@ -70,6 +70,23 @@ Http::fake([
             ]],
         ])
         ->push([
+            'success' => 'true',
+            'total_matches' => 0,
+            'risk_level' => 'clear',
+            'results' => [],
+        ])
+        ->push([
+            'success' => true,
+            'total_matches' => 0,
+            'results' => [],
+        ])
+        ->push([
+            'success' => true,
+            'total_matches' => 0,
+            'risk_level' => 'unknown',
+            'results' => [],
+        ])
+        ->push([
             'success' => false,
             'error' => 'Token lacks the required scope.',
             'code' => 'INSUFFICIENT_SCOPE',
@@ -138,6 +155,28 @@ try {
         'reviewed_at' => now(),
     ]);
 
+    $malformedSuccess = app(ProcurementSubmissionScreeningService::class)->screenSubmission(
+        $submission->fresh(['values', 'submitter'])
+    );
+    $assert($malformedSuccess->request_status === 'error', 'A non-boolean success flag was accepted.');
+    $assert($malformedSuccess->risk_level === null, 'A non-boolean success flag produced a clear result.');
+
+    $incomplete = app(ProcurementSubmissionScreeningService::class)->screenSubmission(
+        $submission->fresh(['values', 'submitter'])
+    );
+    $assert($incomplete->request_status === 'error', 'An incomplete 3PAP response was accepted.');
+    $assert($incomplete->risk_level === null, 'A missing risk classification defaulted to clear.');
+
+    $unknownRisk = app(ProcurementSubmissionScreeningService::class)->screenSubmission(
+        $submission->fresh(['values', 'submitter'])
+    );
+    $assert($unknownRisk->request_status === 'error', 'An unknown 3PAP risk classification was accepted.');
+    $assert($unknownRisk->risk_level === null, 'An unknown risk classification defaulted to clear.');
+    $assert(
+        data_get($unknownRisk->response_payload, 'raw.code') === 'INVALID_PROVIDER_RESPONSE',
+        'An invalid provider response was not retained as an auditable error.'
+    );
+
     $failed = app(ProcurementSubmissionScreeningService::class)->screenSubmission(
         $submission->fresh(['values', 'submitter'])
     );
@@ -154,7 +193,7 @@ try {
     );
     $assert($unreachable->request_status === 'error', 'A 3PAP connection failure escaped the workflow.');
     $assert(
-        $unreachable->error_message === 'The 3PAP screening service could not be reached. Try again later.',
+        $unreachable->error_message === 'The 3PAP response was not received, so the request outcome is unknown. Verify 3PAP usage before re-running.',
         'A 3PAP connection failure did not use the safe operator message.'
     );
     $assert(

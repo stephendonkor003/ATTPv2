@@ -21,13 +21,13 @@
             </div>
 
             <div class="d-flex gap-2">
-                @if ($screeningConfigured)
+                @can('forms.manage')
                     <a href="{{ route('procurement.submissions.screening.report', $submission) }}"
                         class="btn btn-primary btn-sm">
                         <i class="feather-shield me-1"></i>
                         Open 3PAP Screening Report
                     </a>
-                @endif
+                @endcan
 
                 <a href="{{ url()->previous() }}" class="btn btn-light btn-sm">
                     <i class="feather-arrow-left me-1"></i> Back
@@ -83,6 +83,19 @@
                 'critical' => 'dark',
             ];
             $matches = $screening?->response_payload['matches'] ?? [];
+            $activeScreeningStatuses = ['queued', 'processing', 'retrying'];
+            $screeningIsActive = $screening
+                && in_array($screening->request_status, $activeScreeningStatuses, true);
+            $automationState = data_get($screening?->response_payload, 'automation.state');
+            $screeningIsWaitingForSetup = in_array($automationState, [
+                'automatic_disabled',
+                'waiting_for_configuration',
+            ], true);
+            $activeScreeningLabels = [
+                'queued' => 'Screening queued',
+                'processing' => 'Screening in progress',
+                'retrying' => 'Retry scheduled',
+            ];
         @endphp
 
         <div class="card shadow-sm mb-4">
@@ -92,12 +105,12 @@
                     @if (!$screeningConfigured)
                         <span class="badge bg-secondary-subtle text-secondary">Not Configured</span>
                     @endif
-                    @if ($screeningConfigured)
+                    @can('forms.manage')
                         <a href="{{ route('procurement.submissions.screening.report', $submission) }}"
                             class="btn btn-sm btn-outline-primary">
                             <i class="feather-external-link me-1"></i> Full Report
                         </a>
-                    @endif
+                    @endcan
                 </div>
             </div>
             <div class="card-body">
@@ -106,22 +119,55 @@
                 </div>
 
                 @if (!$screeningConfigured)
-                    <div class="alert alert-warning mb-0">
-                        3PAP Sanctions Screening is not configured in this environment.
+                    <div class="alert alert-warning mb-3">
+                        New 3PAP screenings cannot be queued because the service is not configured in this environment.
+                        Existing screening evidence remains available below.
                     </div>
-                @elseif (!$screening)
+                @endif
+
+                @if (!$screening)
                     <div class="alert alert-light border mb-0">
                         This applicant has not been screened yet.
                     </div>
-                @elseif ($screening->request_status === 'error')
-                    <div class="alert alert-danger mb-0">
-                        <div class="fw-semibold mb-1">3PAP screening failed</div>
-                        <div>{{ $screening->error_message ?: '3PAP sanctions screening did not complete successfully.' }}</div>
-                        <div class="small mt-2">
-                            Last attempted: {{ optional($screening->last_checked_at)->format('d M Y, H:i') ?? '—' }}
+                @elseif ($screeningIsActive)
+                    <div class="alert alert-info mb-0" role="status">
+                        <div class="d-flex align-items-center gap-2 fw-semibold mb-1">
+                            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                            {{ $activeScreeningLabels[$screening->request_status] ?? 'Screening in progress' }}
                         </div>
+                        <div>
+                            @if ($screening->request_status === 'queued')
+                                This applicant is waiting for background screening.
+                            @elseif ($screening->request_status === 'retrying')
+                                The system will retry automatically after a temporary service problem.
+                            @else
+                                The sanctions search is running in the background.
+                            @endif
+                        </div>
+                        @if ($screening->request_status === 'retrying' && $screening->next_retry_at)
+                            <div class="small mt-2">Next retry: {{ $screening->next_retry_at->format('d M Y, H:i') }}</div>
+                        @elseif ($screening->queued_at)
+                            <div class="small mt-2">Queued: {{ $screening->queued_at->format('d M Y, H:i') }}</div>
+                        @endif
                     </div>
-                @else
+                @elseif ($screening->request_status === 'waiting')
+                    <div class="alert alert-warning mb-0">
+                        <div class="fw-semibold mb-1">3PAP screening is waiting for setup</div>
+                        <div>{{ $screening->error_message }}</div>
+                    </div>
+                @elseif ($screening->request_status === 'error')
+                    <div class="alert alert-{{ $screeningIsWaitingForSetup ? 'warning' : 'danger' }} mb-0">
+                        <div class="fw-semibold mb-1">
+                            {{ $screeningIsWaitingForSetup ? '3PAP screening is waiting for setup' : '3PAP screening failed' }}
+                        </div>
+                        <div>{{ $screening->error_message ?: '3PAP sanctions screening did not complete successfully.' }}</div>
+                        @if (!$screeningIsWaitingForSetup)
+                            <div class="small mt-2">
+                                Last attempted: {{ optional($screening->last_checked_at)->format('d M Y, H:i') ?? '—' }}
+                            </div>
+                        @endif
+                    </div>
+                @elseif ($screening->request_status === 'success')
                     <div class="row g-3 mb-3">
                         <div class="col-lg-3 col-md-6">
                             <div class="text-muted small">Entity Screened</div>
@@ -134,7 +180,7 @@
                         <div class="col-lg-3 col-md-6">
                             <div class="text-muted small">Risk Level</div>
                             <span class="badge bg-{{ $riskColors[$screening->risk_level] ?? 'secondary' }} px-3 py-1">
-                                {{ strtoupper($screening->risk_level ?? 'clear') }}
+                                {{ strtoupper($screening->risk_level ?? 'unknown') }}
                             </span>
                         </div>
                         <div class="col-lg-3 col-md-6">
@@ -222,6 +268,10 @@
                             No sanctions matches were returned for this applicant.
                         </div>
                     @endif
+                @else
+                    <div class="alert alert-warning mb-0">
+                        This screening has not produced a reviewable result yet. Open the report to queue a new check.
+                    </div>
                 @endif
             </div>
         </div>

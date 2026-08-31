@@ -160,6 +160,7 @@ class ApiSyncDatasetService
             ->select([
                 's.id', 's.name', 's.description', 's.status', 's.currency',
                 's.portfolio_manager_name', 's.portfolio_manager_role', 's.governance_node_id',
+                's.ttl_name', 's.ttl_email',
                 's.created_at', 's.updated_at',
             ]);
     }
@@ -172,6 +173,7 @@ class ApiSyncDatasetService
                 'p.name', 'p.description', 'p.currency', 'p.start_year', 'p.end_year',
                 'p.total_years', 'p.total_budget', 'p.expected_outcome_type',
                 'p.expected_outcome_value', 'p.department_id', 'p.governance_node_id',
+                'p.ttl_name', 'p.ttl_email',
                 'p.created_at', 'p.updated_at',
             ]);
     }
@@ -308,6 +310,7 @@ class ApiSyncDatasetService
             'd.sub_activity_id', 'd.purchase_order_id', 'po.budget_commitment_id',
             'bc.allocation_level as commitment_allocation_level',
             'bc.allocation_id as commitment_allocation_id',
+            'bc.commitment_year as commitment_year',
             'd.governance_node_id', 'd.created_at', 'd.updated_at',
         ]);
     }
@@ -415,6 +418,8 @@ class ApiSyncDatasetService
                 'currency' => $row->currency,
                 'portfolio_manager_name' => $row->portfolio_manager_name,
                 'portfolio_manager_role' => $row->portfolio_manager_role,
+                'ttl_name' => $row->ttl_name,
+                'ttl_email' => $row->ttl_email,
             ], ['governance_unit' => $row->governance_node_id], $row->updated_at],
             'programmes' => [[
                 'source_code' => $row->source_code,
@@ -427,6 +432,8 @@ class ApiSyncDatasetService
                 'total_budget' => $this->decimal($row->total_budget),
                 'expected_outcome_type' => $row->expected_outcome_type,
                 'expected_outcome_value' => $this->text($row->expected_outcome_value),
+                'ttl_name' => $row->ttl_name,
+                'ttl_email' => $row->ttl_email,
             ], [
                 'portfolio' => $row->portfolio_id,
                 'department' => $row->department_id,
@@ -518,7 +525,9 @@ class ApiSyncDatasetService
                     $row->commitment_allocation_id,
                 ),
                 'purchase_order' => $row->purchase_order_id,
-                'fiscal_year' => $row->paid_at ? 'FY-'.CarbonImmutable::parse($row->paid_at)->year : null,
+                'fiscal_year' => $row->budget_commitment_id !== null
+                    ? ($row->commitment_year ? 'FY-'.$row->commitment_year : null)
+                    : ($row->paid_at ? 'FY-'.CarbonImmutable::parse($row->paid_at)->year : null),
                 'governance_unit' => $row->governance_node_id,
             ]), $row->updated_at ?: $row->paid_at],
         };

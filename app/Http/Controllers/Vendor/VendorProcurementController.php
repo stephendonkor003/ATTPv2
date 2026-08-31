@@ -9,7 +9,7 @@ use App\Models\FormSubmissionValue;
 use App\Models\Procurement;
 use App\Models\ProcurementDocument;
 use App\Models\VendorCategory;
-use App\Services\ProcurementSubmissionScreeningService;
+use App\Services\ProcurementSubmissionScreeningAutomation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -67,7 +67,7 @@ class VendorProcurementController extends Controller
             abort(404);
         }
 
-        if (!$procurement->isApplicationOpen()) {
+        if (! $procurement->isApplicationOpen()) {
             abort(404);
         }
 
@@ -133,9 +133,8 @@ class VendorProcurementController extends Controller
     public function submit(
         Request $request,
         Procurement $procurement,
-        ProcurementSubmissionScreeningService $screeningService
-    )
-    {
+        ProcurementSubmissionScreeningAutomation $screeningAutomation,
+    ) {
         $user = $request->user();
         $this->assertVendor($user);
 
@@ -145,7 +144,7 @@ class VendorProcurementController extends Controller
             abort(404);
         }
 
-        if (!$procurement->isApplicationOpen()) {
+        if (! $procurement->isApplicationOpen()) {
             abort(403, 'This procurement is closed for applications.');
         }
 
@@ -241,7 +240,7 @@ class VendorProcurementController extends Controller
         });
 
         if ($submission) {
-            $screeningService->deferSubmissionScreening($submission->id);
+            $screeningAutomation->queueSubmission($submission->id);
         }
 
         return redirect()
@@ -251,7 +250,7 @@ class VendorProcurementController extends Controller
 
     private function assertVendor($user): void
     {
-        if (!$user || $user->user_type !== 'vendor') {
+        if (! $user || $user->user_type !== 'vendor') {
             abort(403, 'Access denied. Vendor portal only.');
         }
 
@@ -272,7 +271,7 @@ class VendorProcurementController extends Controller
                 ->where('is_active', true)
                 ->exists();
 
-        if (!$hasActiveCategory || empty($categories) || !in_array($user->vendor_category, $categories, true)) {
+        if (! $hasActiveCategory || empty($categories) || ! in_array($user->vendor_category, $categories, true)) {
             abort(403, 'You are not authorized to apply for this procurement.');
         }
     }

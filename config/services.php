@@ -68,6 +68,15 @@ return [
         'timeout' => (int) env('THREEPAP_CHECKER_TIMEOUT', 20),
         'connect_timeout' => (int) env('THREEPAP_CHECKER_CONNECT_TIMEOUT', 5),
         'ca_bundle' => env('THREEPAP_CHECKER_CA_BUNDLE'),
+        'automatic' => [
+            'enabled' => filter_var(env('THREEPAP_CHECKER_AUTOMATIC_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+            'queue_connection' => env('THREEPAP_CHECKER_QUEUE_CONNECTION', 'database'),
+            'queue' => env('THREEPAP_CHECKER_QUEUE', 'threepap'),
+            'cache_store' => env('THREEPAP_CHECKER_CACHE_STORE', 'database'),
+            'recovery_limit' => max(1, (int) env('THREEPAP_CHECKER_RECOVERY_LIMIT', 25)),
+            'recovery_lookback_days' => max(1, (int) env('THREEPAP_CHECKER_RECOVERY_LOOKBACK_DAYS', 7)),
+            'stale_after_minutes' => max(2, (int) env('THREEPAP_CHECKER_STALE_AFTER_MINUTES', 10)),
+        ],
     ],
 
 ];

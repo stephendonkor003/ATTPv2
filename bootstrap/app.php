@@ -68,6 +68,17 @@ return Application::configure(basePath: dirname(__DIR__))
         // Recipient rows are a durable outbox for proposal invitations. This
         // completes any after-response delivery interrupted by PHP/FPM.
         $schedule->command('eoi:communications:deliver --limit=25')->everyMinute()->withoutOverlapping()->onOneServer();
+
+        // Catch submissions whose initial queue publication was interrupted
+        // and recover 3PAP workers that stopped before completing their run.
+        $threepapRecoveryLimit = max(1, min(
+            (int) config('services.threepap_checker.automatic.recovery_limit', 25),
+            500,
+        ));
+        $schedule->command('threepap:screen-pending --limit='.$threepapRecoveryLimit)
+            ->everyMinute()
+            ->withoutOverlapping(5)
+            ->onOneServer();
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([

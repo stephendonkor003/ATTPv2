@@ -7,6 +7,8 @@ use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
 use App\Models\FormSubmission;
 use App\Models\FormSubmissionValue;
 use App\Models\Procurement;
+use App\Models\ProcurementSubmissionScreening;
+use App\Services\ProcurementSubmissionScreeningAutomation;
 use App\Services\ProcurementSubmissionScreeningService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -35,8 +37,8 @@ class ProcurementSubmissionController extends Controller
             'needs_attention' => (int) $procurementGroups->sum(
                 fn (Procurement $procurement): int => max(
                     0,
-                    (int) $procurement->submissions_count - (int) $procurement->screening_records_count
-                ) + (int) $procurement->screening_failed_count
+                    (int) $procurement->submissions_count - (int) $procurement->screening_success_count,
+                )
             ),
         ];
 
@@ -92,8 +94,12 @@ class ProcurementSubmissionController extends Controller
         ]);
     }
 
-    public function screeningReport(FormSubmission $submission, ProcurementSubmissionScreeningService $screeningService)
-    {
+    public function screeningReport(
+        Request $request,
+        FormSubmission $submission,
+        ProcurementSubmissionScreeningService $screeningService,
+    ) {
+        $this->authorizeScreeningOperation($request);
         $this->assertSubmissionInScope($submission);
 
         $submission->load([
@@ -111,68 +117,89 @@ class ProcurementSubmissionController extends Controller
         ]);
     }
 
-    public function screen(Request $request, FormSubmission $submission, ProcurementSubmissionScreeningService $screeningService)
-    {
+    public function screen(
+        Request $request,
+        FormSubmission $submission,
+        ProcurementSubmissionScreeningAutomation $screeningAutomation,
+    ) {
+        $this->authorizeScreeningOperation($request);
         $this->assertSubmissionInScope($submission);
 
-        if (! $screeningService->isConfigured()) {
-            return $this->redirectWithMessage(
-                $request,
-                $submission,
-                'error',
-                'International screening is not configured.'
-            );
-        }
-
-        $screening = $screeningService->screenSubmission(
-            $submission->loadMissing(['values', 'submitter']),
-            $request->user(),
-            'manual'
+        $result = $screeningAutomation->queueSubmission(
+            $submission,
+            $request->user()?->id,
+            'manual',
+            true,
         );
 
-        if ($screening->request_status === 'error') {
-            return $this->redirectWithMessage(
-                $request,
-                $submission,
+        [$key, $message] = match ($result) {
+            ProcurementSubmissionScreeningAutomation::QUEUED => [
+                'success',
+                '3PAP screening was queued and will continue in the background.',
+            ],
+            ProcurementSubmissionScreeningAutomation::ALREADY_ACTIVE => [
+                'success',
+                '3PAP screening is already in progress for this applicant.',
+            ],
+            ProcurementSubmissionScreeningAutomation::NOT_CONFIGURED => [
                 'error',
-                $screening->error_message ?: 'International screening failed.'
-            );
-        }
+                'International screening is not configured.',
+            ],
+            default => [
+                'error',
+                'This submission is not currently eligible for international screening.',
+            ],
+        };
 
         return $this->redirectWithMessage(
             $request,
             $submission,
-            'success',
-            sprintf(
-                'International screening completed for %s. Risk level: %s.',
-                $screening->entity_name ?: $submission->procurement_submission_code,
-                strtoupper((string) $screening->risk_level)
-            )
+            $key,
+            $message,
         );
     }
 
     public function saveScreeningDecision(Request $request, FormSubmission $submission)
     {
+        $this->authorizeScreeningOperation($request);
         $this->assertSubmissionInScope($submission);
 
         $validated = $request->validate([
             'review_decision' => ['required', 'in:fit,not_fit'],
             'review_notes' => ['nullable', 'string', 'max:5000'],
+            'screening_run_token' => ['required', 'uuid'],
         ]);
 
         $screening = $submission->screening()->first();
-        if (! $screening) {
+        if (! $screening || $screening->request_status !== ProcurementSubmissionScreening::STATUS_SUCCESS) {
             return redirect()
                 ->route('procurement.submissions.screening.report', $submission)
-                ->with('error', 'Run international screening before recording a fit decision.');
+                ->with('error', 'Wait for a successful international screening before recording a fit decision.');
         }
 
-        $screening->update([
-            'review_decision' => $validated['review_decision'],
-            'review_notes' => $validated['review_notes'] ?: null,
-            'reviewed_by' => $request->user()?->id,
-            'reviewed_at' => now(),
-        ]);
+        if (! is_string($screening->run_token)
+            || ! hash_equals($screening->run_token, $validated['screening_run_token'])) {
+            return redirect()
+                ->route('procurement.submissions.screening.report', $submission)
+                ->with('error', 'The screening result changed while this report was open. Review the latest result before deciding.');
+        }
+
+        $updated = $submission->screening()
+            ->whereKey($screening->getKey())
+            ->where('request_status', ProcurementSubmissionScreening::STATUS_SUCCESS)
+            ->where('run_token', $validated['screening_run_token'])
+            ->update([
+                'review_decision' => $validated['review_decision'],
+                'review_notes' => $validated['review_notes'] ?: null,
+                'reviewed_by' => $request->user()?->id,
+                'reviewed_at' => now(),
+            ]);
+
+        if ($updated !== 1) {
+            return redirect()
+                ->route('procurement.submissions.screening.report', $submission)
+                ->with('error', 'The screening result changed while this decision was being saved. Please review it again.');
+        }
 
         return redirect()
             ->route('procurement.submissions.screening.report', $submission)
@@ -184,8 +211,13 @@ class ProcurementSubmissionController extends Controller
             );
     }
 
-    public function screenAll(Request $request, ProcurementSubmissionScreeningService $screeningService)
-    {
+    public function screenAll(
+        Request $request,
+        ProcurementSubmissionScreeningService $screeningService,
+        ProcurementSubmissionScreeningAutomation $screeningAutomation,
+    ) {
+        $this->authorizeScreeningOperation($request);
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
             abort(403, 'You do not have access to submissions.');
@@ -203,6 +235,8 @@ class ProcurementSubmissionController extends Controller
             FormSubmission::with(['values', 'submitter']),
             $scopedNodeIds
         )
+            ->whereNotNull('procurement_id')
+            ->whereNotNull('submitted_at')
             ->when(
                 $selectedProcurement,
                 fn ($query) => $query->where('procurement_id', $selectedProcurement->id)
@@ -219,15 +253,20 @@ class ProcurementSubmissionController extends Controller
             );
         }
 
-        $summary = $screeningService->screenSubmissions($submissions, $request->user(), 'bulk');
+        $summary = $screeningAutomation->queueMany(
+            $submissions,
+            $request->user()?->id,
+            'bulk',
+        );
 
         return back()->with(
             'success',
             sprintf(
-                'International screening%s finished. %d checked, %d failed, %d skipped.',
+                'International screening%s queued. %d newly queued, %d already in progress, %d already current, %d skipped.',
                 $selectedProcurement ? ' for '.$selectedProcurement->title : '',
-                $summary['checked'],
-                $summary['failed'],
+                $summary['queued'],
+                $summary['active'],
+                $summary['current'],
                 $summary['skipped']
             )
         );
@@ -319,6 +358,15 @@ class ProcurementSubmissionController extends Controller
         ]), $scopedNodeIds);
     }
 
+    private function authorizeScreeningOperation(Request $request): void
+    {
+        abort_unless(
+            $request->user()?->can('forms.manage') === true,
+            403,
+            'You do not have permission to access 3PAP screening.',
+        );
+    }
+
     private function procurementGroupsQuery(?array $scopedNodeIds)
     {
         return $this->applyProcurementNodeScope(Procurement::query(), $scopedNodeIds)
@@ -333,6 +381,20 @@ class ProcurementSubmissionController extends Controller
                 'submissions as screening_failed_count' => fn ($query) => $query->whereHas(
                     'screening',
                     fn ($screening) => $screening->where('request_status', 'error')
+                ),
+                'submissions as screening_active_count' => fn ($query) => $query->whereHas(
+                    'screening',
+                    fn ($screening) => $screening->whereIn(
+                        'request_status',
+                        ProcurementSubmissionScreening::ACTIVE_STATUSES,
+                    )
+                ),
+                'submissions as screening_waiting_count' => fn ($query) => $query->whereHas(
+                    'screening',
+                    fn ($screening) => $screening->where(
+                        'request_status',
+                        ProcurementSubmissionScreening::STATUS_WAITING,
+                    )
                 ),
                 'submissions as fit_count' => fn ($query) => $query->whereHas(
                     'screening',

@@ -31,6 +31,47 @@ it('normalizes allocation levels into collision-safe external identifiers', func
         ->and(ApiSyncAllocationIdentity::externalId('activity', ''))->toBeNull();
 });
 
+it('binds execution fiscal years to commitments and uses payment year only without one', function () {
+    $service = new ApiSyncDatasetService;
+    $record = new ReflectionMethod($service, 'record');
+    $execution = [
+        'id' => 'execution-1',
+        'reference_no' => 'DISB-001',
+        'amount' => '125.00',
+        'currency' => 'USD',
+        'status' => 'paid',
+        'paid_at' => '2026-02-15 10:30:00+00',
+        'sub_activity_id' => 'sub-activity-1',
+        'purchase_order_id' => 'purchase-order-1',
+        'budget_commitment_id' => 'commitment-1',
+        'commitment_allocation_level' => 'sub_activity',
+        'commitment_allocation_id' => 'sub-activity-1',
+        'commitment_year' => 2025,
+        'governance_node_id' => null,
+        'created_at' => '2026-02-15 10:30:00+00',
+        'updated_at' => '2026-02-15 10:30:00+00',
+    ];
+
+    $linked = $record->invoke($service, 'executions', (object) $execution);
+    $unlinked = $record->invoke($service, 'executions', (object) [
+        ...$execution,
+        'id' => 'execution-2',
+        'budget_commitment_id' => null,
+        'commitment_allocation_level' => null,
+        'commitment_allocation_id' => null,
+        'commitment_year' => null,
+    ]);
+    $linkedWithoutYear = $record->invoke($service, 'executions', (object) [
+        ...$execution,
+        'id' => 'execution-3',
+        'commitment_year' => null,
+    ]);
+
+    expect($linked['relationships']['fiscal_year'])->toBe('FY-2025')
+        ->and($unlinked['relationships']['fiscal_year'])->toBe('FY-2026')
+        ->and($linkedWithoutYear['relationships'])->not->toHaveKey('fiscal_year');
+});
+
 it('cryptographically binds opaque cursors to a dataset snapshot and consumer', function () {
     $service = new ApiSyncCursor('unit-test-api-sync-pepper-that-is-not-production');
     $snapshot = 'ee5f2213-f50c-44ee-8bb7-4caf76aec8cb';

@@ -17,6 +17,9 @@ function procurementSubmissionRegisterSources(): array
         'screening_report_view' => file_get_contents(
             $root.'/resources/views/procurement/procuresubmissions/screening-report.blade.php'
         ),
+        'automation' => file_get_contents(
+            $root.'/app/Services/ProcurementSubmissionScreeningAutomation.php'
+        ),
         'routes' => file_get_contents($root.'/routes/web.php'),
     ];
 }
@@ -61,13 +64,31 @@ it('limits bulk screening to the selected scoped procurement while retaining acc
         ->toContain('$selectedProcurement,')
         ->toContain("fn (\$query) => \$query->where('procurement_id', \$selectedProcurement->id)")
         ->toContain("'No submissions were available for this procurement.'")
-        ->toContain("\$screeningService->screenSubmissions(\$submissions, \$request->user(), 'bulk')")
+        ->toContain('ProcurementSubmissionScreeningAutomation')
+        ->toContain('$screeningAutomation->queueMany(')
+        ->toContain('$request->user()?->id,')
+        ->not->toContain('$screeningService->screenSubmissions(')
         ->and($view)
         ->toContain('@if (!$selectedProcurement)')
-        ->toContain('Run 3PAP checks for all applicants')
+        ->toContain('Queue 3PAP checks for applicants')
         ->toContain('<input type="hidden" name="procurement_id" value="{{ $selectedProcurement->id }}">')
-        ->toContain('Run 3PAP checks for this procurement')
+        ->toContain('Queue 3PAP checks for this procurement')
         ->and(substr_count($view, "route('procurement.submissions.screen-all')"))->toBe(2);
+});
+
+it('queues manual and bulk screening without synchronously calling the provider service', function () {
+    $sources = procurementSubmissionRegisterSources();
+
+    expect($sources['controller'])
+        ->toContain('ProcurementSubmissionScreeningAutomation')
+        ->toContain('$screeningAutomation->queueSubmission(')
+        ->toContain('$screeningAutomation->queueMany(')
+        ->not->toContain('$screeningService->screenSubmission(')
+        ->not->toContain('$screeningService->screenSubmissions(')
+        ->and($sources['automation'])
+        ->toContain('function queueSubmission(')
+        ->toContain('function queueMany(')
+        ->toContain('function recoverPending(');
 });
 
 it('renders filterable procurement cards and preserves applicant row actions', function () {
@@ -124,11 +145,39 @@ it('presents 3PAP sanctions screening as human-reviewed and keeps report navigat
         ->and($report)
         ->toContain('3PAP Sanctions Screening Report')
         ->toContain('<form method="POST" action="{{ route(\'procurement.submissions.screen\', $submission) }}">')
-        ->toContain("{{ \$screening ? 'Re-run 3PAP Screening' : 'Run 3PAP Screening' }}")
+        ->toContain('Queue 3PAP Re-screening')
+        ->toContain('Queue 3PAP Screening')
         ->and($screeningViews)
         ->not->toContain("'run' =>")
         ->not->toContain('run=1')
         ->and(substr_count($screeningViews, '3PAP results support human review and do not automatically determine applicant eligibility.'))->toBe(3);
+});
+
+it('renders active queue states and only accepts a decision for the current successful run', function () {
+    $sources = procurementSubmissionRegisterSources();
+    $controller = $sources['controller'];
+    $screeningViews = strtolower(
+        $sources['view']."\n".$sources['show_view']."\n".$sources['screening_report_view']
+    );
+
+    expect($screeningViews)
+        ->toContain('queued')
+        ->toContain('processing')
+        ->toContain('retrying')
+        ->toContain('waiting for setup')
+        ->and($controller)
+        ->toContain('request_status')
+        ->toContain('STATUS_SUCCESS')
+        ->toContain('run_token');
+
+    expect(preg_match(
+        '/name="(?:screening_)?run_token"[^>]+value="\{\{\s*\$screening->run_token\s*\}\}"/',
+        $sources['screening_report_view']
+    ))->toBe(1)
+        ->and(preg_match(
+            '/[\'\"](?:screening_)?run_token[\'\"]\s*=>/',
+            $controller
+        ))->toBe(1);
 });
 
 it('only makes validated http and https screening sources clickable', function () {

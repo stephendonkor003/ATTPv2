@@ -3,14 +3,14 @@
 namespace App\Http\Controllers\Procurement;
 
 use App\Http\Controllers\Controller;
-use App\Models\Procurement;
-use App\Models\ProcurementDocument;
+use App\Mail\VendorApplicationReceived;
 use App\Models\DynamicForm;
 use App\Models\FormSubmission;
 use App\Models\FormSubmissionValue;
+use App\Models\Procurement;
+use App\Models\ProcurementDocument;
 use App\Models\User;
-use App\Mail\VendorApplicationReceived;
-use App\Services\ProcurementSubmissionScreeningService;
+use App\Services\ProcurementSubmissionScreeningAutomation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -70,7 +70,7 @@ class PublicProcurementController extends Controller
         }
 
         $procurement->autoCloseIfExpired();
-        abort_if(!$procurement->isApplicationOpen(), 404);
+        abort_if(! $procurement->isApplicationOpen(), 404);
         $procurement->load([
             'documents',
             'thinkTankMember:id,name,logo_path',
@@ -110,15 +110,14 @@ class PublicProcurementController extends Controller
     public function submit(
         Request $request,
         Procurement $procurement,
-        ProcurementSubmissionScreeningService $screeningService
-    )
-    {
+        ProcurementSubmissionScreeningAutomation $screeningAutomation,
+    ) {
         if ($procurement->visibility_type && $procurement->visibility_type !== 'public') {
             abort(404);
         }
 
         $procurement->autoCloseIfExpired();
-        abort_if(!$procurement->isApplicationOpen(), 404);
+        abort_if(! $procurement->isApplicationOpen(), 404);
 
         $form = DynamicForm::approved()
             ->where('procurement_id', $procurement->id)
@@ -289,10 +288,10 @@ class PublicProcurementController extends Controller
 
             $submission = FormSubmission::create([
                 'procurement_id' => $procurement->id,
-                'form_id'        => $form->id,
-                'submitted_by'   => $vendorUser?->id,
-                'status'         => FormSubmission::STATUS_SUBMITTED,
-                'submitted_at'   => now(),
+                'form_id' => $form->id,
+                'submitted_by' => $vendorUser?->id,
+                'status' => FormSubmission::STATUS_SUBMITTED,
+                'submitted_at' => now(),
                 'publication_version' => max(1, (int) $procurement->publication_version),
             ]);
 
@@ -320,19 +319,19 @@ class PublicProcurementController extends Controller
 
                 FormSubmissionValue::create([
                     'submission_id' => $submission->id,
-                    'field_key'     => $key,
-                    'value'         => $value,
+                    'field_key' => $key,
+                    'value' => $value,
                 ]);
             }
         });
 
+        if ($submission) {
+            $screeningAutomation->queueSubmission($submission->id);
+        }
+
         if ($vendorUser && $submission) {
             Mail::to($vendorUser->email)
                 ->queue(new VendorApplicationReceived($procurement, $submission, $vendorUser, $temporaryPassword));
-        }
-
-        if ($submission) {
-            $screeningService->deferSubmissionScreening($submission->id);
         }
 
         return back()->with('success', 'Application submitted successfully. Your login credentials have been emailed to the official email address provided.');

@@ -10,6 +10,7 @@ it('persists normalized snapshots with stable ordering and exact payload integri
     $root = dirname(__DIR__, 2);
     $migration = file_get_contents($root.'/database/migrations/2026_08_25_000004_create_api_sync_materialized_snapshots.php');
     $service = file_get_contents($root.'/app/Services/ApiSync/ApiSyncSnapshotService.php');
+    $datasets = file_get_contents($root.'/app/Services/ApiSync/ApiSyncDatasetService.php');
 
     expect($migration)
         ->toContain("Schema::create('api_sync_snapshot_datasets'")
@@ -26,6 +27,11 @@ it('persists normalized snapshots with stable ordering and exact payload integri
         ->toContain('strlen($encoded) !== (int) $row->payload_bytes')
         ->toContain('hash_equals((string) $row->source_id, $payloadId)')
         ->toContain('hash_equals($recomputedChecksum, $payloadChecksum)');
+    expect($datasets)
+        ->toContain("'bc.commitment_year as commitment_year'")
+        ->toContain("'fiscal_year' => \$row->budget_commitment_id !== null")
+        ->toContain("? (\$row->commitment_year ? 'FY-'.\$row->commitment_year : null)")
+        ->toContain(": (\$row->paid_at ? 'FY-'.CarbonImmutable::parse(\$row->paid_at)->year : null)");
 });
 
 it('never serves live domain queries after an immutable snapshot becomes available', function () {

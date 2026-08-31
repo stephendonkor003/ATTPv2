@@ -2438,12 +2438,19 @@ Route::middleware(['auth', 'not.funding.partner'])
         Route::get(
             '/form/{form}/create',
             [FormSubmissionController::class, 'create']
-        )->name('submissions.create');
+        )
+            ->middleware('permission:forms.submit')
+            ->name('submissions.create');
 
         Route::post(
             '/form/{form}',
             [FormSubmissionController::class, 'store']
-        )->name('submissions.store');
+        )
+            ->middleware([
+                'permission:forms.submit',
+                'throttle:10,1,procurement-form-submission',
+            ])
+            ->name('submissions.store');
 
         Route::get(
             '/{submission}',
@@ -2479,15 +2486,19 @@ Route::prefix('procurement/submissions')
             ->name('procurement.submissions.index');
 
         Route::post('/screen-all', [ProcurementSubmissionController::class, 'screenAll'])
+            ->middleware('permission:forms.manage')
             ->name('procurement.submissions.screen-all');
 
         Route::get('/{submission}/screening', [ProcurementSubmissionController::class, 'screeningReport'])
+            ->middleware('permission:forms.manage')
             ->name('procurement.submissions.screening.report');
 
         Route::post('/{submission}/screen', [ProcurementSubmissionController::class, 'screen'])
+            ->middleware('permission:forms.manage')
             ->name('procurement.submissions.screen');
 
         Route::post('/{submission}/screening/decision', [ProcurementSubmissionController::class, 'saveScreeningDecision'])
+            ->middleware('permission:forms.manage')
             ->name('procurement.submissions.screening.decision');
 
         // View submission details

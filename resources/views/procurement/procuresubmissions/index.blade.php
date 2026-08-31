@@ -183,7 +183,7 @@
 
         .procurement-card-stats {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
             gap: .55rem;
             margin: 1rem 0;
         }
@@ -320,21 +320,23 @@
                 </div>
 
                 @if (!$selectedProcurement)
-                    <div>
-                        @if ($screeningConfigured)
-                            <form method="POST" action="{{ route('procurement.submissions.screen-all') }}"
-                                onsubmit="return confirm('Run 3PAP sanctions screening for every accessible applicant?');">
-                                @csrf
-                                <button type="submit" class="btn btn-light">
-                                    <i class="feather-shield me-1" aria-hidden="true"></i> Run 3PAP checks for all applicants
+                    @can('forms.manage')
+                        <div>
+                            @if ($screeningConfigured)
+                                <form method="POST" action="{{ route('procurement.submissions.screen-all') }}"
+                                    onsubmit="return confirm('Queue background 3PAP sanctions screening for accessible applicants that need a check?');">
+                                    @csrf
+                                    <button type="submit" class="btn btn-light">
+                                        <i class="feather-shield me-1" aria-hidden="true"></i> Queue 3PAP checks for applicants
+                                    </button>
+                                </form>
+                            @else
+                                <button type="button" class="btn btn-outline-light" disabled>
+                                    <i class="feather-slash me-1" aria-hidden="true"></i> 3PAP screening not configured
                                 </button>
-                            </form>
-                        @else
-                            <button type="button" class="btn btn-outline-light" disabled>
-                                <i class="feather-slash me-1" aria-hidden="true"></i> 3PAP screening not configured
-                            </button>
-                        @endif
-                    </div>
+                            @endif
+                        </div>
+                    @endcan
                 @endif
             </div>
         </section>
@@ -359,7 +361,7 @@
             </article>
             <article class="submission-summary-card">
                 <span class="submission-summary-icon is-warning"><i class="feather-alert-circle" aria-hidden="true"></i></span>
-                <div class="min-w-0"><div class="submission-summary-label">Needs attention</div><div class="submission-summary-value">{{ number_format($overview['needs_attention']) }}</div></div>
+                <div class="min-w-0"><div class="submission-summary-label">Pending or failed</div><div class="submission-summary-value">{{ number_format($overview['needs_attention']) }}</div></div>
             </article>
         </section>
 
@@ -423,8 +425,10 @@
                             $total = (int) $procurement->submissions_count;
                             $screened = (int) $procurement->screening_success_count;
                             $failed = (int) $procurement->screening_failed_count;
+                            $active = (int) ($procurement->screening_active_count ?? 0);
+                            $waiting = (int) ($procurement->screening_waiting_count ?? 0);
                             $unchecked = max(0, $total - (int) $procurement->screening_records_count);
-                            $needsAttention = $unchecked + $failed;
+                            $needsAttention = max(0, $total - $screened);
                             $progress = $total > 0 ? min(100, (int) round(($screened / $total) * 100)) : 0;
                             $latestTimestamp = $procurement->latest_submission_at
                                 ? \Illuminate\Support\Carbon::parse($procurement->latest_submission_at)->timestamp
@@ -456,6 +460,8 @@
                                 <div class="procurement-card-stats">
                                     <div class="procurement-mini-stat"><strong>{{ number_format($total) }}</strong><span>Applications</span></div>
                                     <div class="procurement-mini-stat"><strong>{{ number_format($unchecked) }}</strong><span>Not checked</span></div>
+                                    <div class="procurement-mini-stat"><strong>{{ number_format($active) }}</strong><span>In progress</span></div>
+                                    @if ($waiting > 0)<div class="procurement-mini-stat"><strong>{{ number_format($waiting) }}</strong><span>Waiting setup</span></div>@endif
                                     <div class="procurement-mini-stat"><strong>{{ number_format($failed) }}</strong><span>Check failed</span></div>
                                 </div>
 
@@ -501,6 +507,8 @@
                 $selectedTotal = (int) $selectedProcurement->submissions_count;
                 $selectedScreened = (int) $selectedProcurement->screening_success_count;
                 $selectedFailed = (int) $selectedProcurement->screening_failed_count;
+                $selectedActive = (int) ($selectedProcurement->screening_active_count ?? 0);
+                $selectedWaiting = (int) ($selectedProcurement->screening_waiting_count ?? 0);
                 $selectedUnchecked = max(0, $selectedTotal - (int) $selectedProcurement->screening_records_count);
             @endphp
             <section id="submission-directory" class="submission-directory-card mt-4" aria-labelledby="selected-procurement-title">
@@ -516,26 +524,30 @@
                                 <span>{{ number_format($selectedTotal) }} {{ \Illuminate\Support\Str::plural('submission', $selectedTotal) }}</span>
                                 <span>{{ number_format($selectedScreened) }} screened</span>
                                 <span>{{ number_format($selectedUnchecked) }} not checked</span>
+                                @if ($selectedActive > 0)<span>{{ number_format($selectedActive) }} in progress</span>@endif
+                                @if ($selectedWaiting > 0)<span>{{ number_format($selectedWaiting) }} waiting for setup</span>@endif
                                 @if ($selectedFailed > 0)<span>{{ number_format($selectedFailed) }} failed checks</span>@endif
                             </div>
                         </div>
 
-                        <div>
-                            @if ($screeningConfigured && $selectedTotal > 0)
-                                <form method="POST" action="{{ route('procurement.submissions.screen-all') }}"
-                                    onsubmit="return confirm('Run 3PAP sanctions screening for all {{ $selectedTotal }} applicants in this procurement?');">
-                                    @csrf
-                                    <input type="hidden" name="procurement_id" value="{{ $selectedProcurement->id }}">
-                                    <button type="submit" class="btn btn-light">
-                                        <i class="feather-shield me-1" aria-hidden="true"></i> Run 3PAP checks for this procurement
+                        @can('forms.manage')
+                            <div>
+                                @if ($screeningConfigured && $selectedTotal > 0)
+                                    <form method="POST" action="{{ route('procurement.submissions.screen-all') }}"
+                                        onsubmit="return confirm('Queue background 3PAP sanctions screening for applicants in this procurement that need a check?');">
+                                        @csrf
+                                        <input type="hidden" name="procurement_id" value="{{ $selectedProcurement->id }}">
+                                        <button type="submit" class="btn btn-light">
+                                            <i class="feather-shield me-1" aria-hidden="true"></i> Queue 3PAP checks for this procurement
+                                        </button>
+                                    </form>
+                                @elseif (!$screeningConfigured)
+                                    <button type="button" class="btn btn-outline-light" disabled>
+                                        <i class="feather-slash me-1" aria-hidden="true"></i> 3PAP screening not configured
                                     </button>
-                                </form>
-                            @elseif (!$screeningConfigured)
-                                <button type="button" class="btn btn-outline-light" disabled>
-                                    <i class="feather-slash me-1" aria-hidden="true"></i> 3PAP screening not configured
-                                </button>
-                            @endif
-                        </div>
+                                @endif
+                            </div>
+                        @endcan
                     </div>
                 </header>
 
@@ -581,6 +593,22 @@
                                     $officialName = $submission->values->firstWhere('field_key', 'official_name')?->value;
                                     $officialEmail = $submission->values->firstWhere('field_key', 'official_email')?->value;
                                     $screening = $submission->screening;
+                                    $screeningAutomationState = data_get($screening?->response_payload, 'automation.state');
+                                    $screeningIsWaitingForSetup = in_array($screeningAutomationState, [
+                                        'automatic_disabled',
+                                        'waiting_for_configuration',
+                                    ], true);
+                                    $activeScreeningStatuses = ['queued', 'processing', 'retrying'];
+                                    $activeScreeningLabels = [
+                                        'queued' => 'Queued',
+                                        'processing' => 'Screening',
+                                        'retrying' => 'Retry scheduled',
+                                    ];
+                                    $activeScreeningColors = [
+                                        'queued' => 'primary',
+                                        'processing' => 'warning',
+                                        'retrying' => 'info',
+                                    ];
                                     $riskColors = [
                                         'clear' => 'success',
                                         'low' => 'info',
@@ -607,12 +635,29 @@
                                     </td>
                                     <td class="text-center">
                                         @if ($screening)
-                                            @if ($screening->request_status === 'error')
-                                                <span class="badge bg-danger-subtle text-danger px-3 py-1">Check failed</span>
+                                            @if (in_array($screening->request_status, $activeScreeningStatuses, true))
+                                                @php
+                                                    $activeColor = $activeScreeningColors[$screening->request_status] ?? 'primary';
+                                                @endphp
+                                                <span class="badge bg-{{ $activeColor }}-subtle text-{{ $activeColor }} px-3 py-1">
+                                                    {{ $activeScreeningLabels[$screening->request_status] ?? 'In progress' }}
+                                                </span>
+                                                @if ($screening->request_status === 'retrying' && $screening->next_retry_at)
+                                                    <div class="small text-muted mt-1">Retry {{ $screening->next_retry_at->format('d M Y, H:i') }}</div>
+                                                @elseif ($screening->queued_at)
+                                                    <div class="small text-muted mt-1">Queued {{ $screening->queued_at->format('d M Y, H:i') }}</div>
+                                                @endif
+                                            @elseif ($screening->request_status === 'waiting')
+                                                <span class="badge bg-warning-subtle text-warning px-3 py-1">Waiting for setup</span>
                                                 <div class="small text-muted mt-1">{{ \Illuminate\Support\Str::limit($screening->error_message, 40) }}</div>
-                                            @else
+                                            @elseif ($screening->request_status === 'error')
+                                                <span class="badge bg-{{ $screeningIsWaitingForSetup ? 'warning' : 'danger' }}-subtle text-{{ $screeningIsWaitingForSetup ? 'warning' : 'danger' }} px-3 py-1">
+                                                    {{ $screeningIsWaitingForSetup ? 'Waiting for setup' : 'Check failed' }}
+                                                </span>
+                                                <div class="small text-muted mt-1">{{ \Illuminate\Support\Str::limit($screening->error_message, 40) }}</div>
+                                            @elseif ($screening->request_status === 'success')
                                                 <span class="badge bg-{{ $riskColors[$screening->risk_level] ?? 'secondary' }} px-3 py-1">
-                                                    {{ strtoupper($screening->risk_level ?? 'clear') }}
+                                                    {{ strtoupper($screening->risk_level ?? 'unknown') }}
                                                 </span>
                                                 <div class="small text-muted mt-1">
                                                     {{ number_format((int) $screening->total_matches) }}
@@ -626,6 +671,8 @@
                                                     </div>
                                                 @endif
                                                 <div class="small text-muted">{{ $screening->last_checked_at?->format('d M Y, H:i') ?: 'Not recorded' }}</div>
+                                            @else
+                                                <span class="badge bg-warning-subtle text-warning px-3 py-1">Result unavailable</span>
                                             @endif
                                         @else
                                             <span class="badge bg-secondary-subtle text-secondary px-3 py-1">Not checked</span>
@@ -639,12 +686,12 @@
                                             <a href="{{ route('procurement.submissions.show', $submission) }}" class="btn btn-sm btn-outline-primary">
                                                 <i class="feather-eye me-1" aria-hidden="true"></i> View
                                             </a>
-                                            @if ($screeningConfigured)
+                                            @can('forms.manage')
                                                 <a href="{{ route('procurement.submissions.screening.report', $submission) }}"
                                                     class="btn btn-sm btn-outline-dark">
                                                     <i class="feather-shield me-1" aria-hidden="true"></i> Report
                                                 </a>
-                                            @endif
+                                            @endcan
                                         </div>
                                     </td>
                                 </tr>
