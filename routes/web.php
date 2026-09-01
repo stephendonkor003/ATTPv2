@@ -12,6 +12,7 @@ use App\Http\Controllers\VideoStreamController;
 use App\Http\Controllers\{
     DashboardController,
     AdministrativeAssistantEvidenceController,
+    AdministrativeAssistantPurchaseRequestController,
     LandingPageController,
     PublicDiscussionController,
     LanguageController,
@@ -1138,6 +1139,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
 	        Route::post('purchase-requests', [BudgetCommitmentController::class, 'store'])
 	            ->middleware('permission:finance.commitments.create')
 	            ->name('purchase-requests.store');
+
+	        Route::get('purchase-request-intakes/{intake}/documents/{document}', [PurchaseRequestController::class, 'downloadIntakeDocument'])
+	            ->middleware('permission:finance.purchase_requests.view|finance.commitments.create')
+	            ->name('purchase-request-intakes.documents.download');
 
 	        Route::get('purchase-requests/{purchaseRequest}', [PurchaseRequestController::class, 'show'])
 	            ->middleware('permission:finance.purchase_requests.view')
@@ -3180,6 +3185,14 @@ Route::middleware(['auth', 'administrative.assistant'])
     ->group(function (): void {
         Route::get('/', [AdministrativeAssistantEvidenceController::class, 'index'])
             ->name('dashboard');
+        Route::get('/purchase-requests/create', [AdministrativeAssistantPurchaseRequestController::class, 'create'])
+            ->name('purchase-requests.create');
+        Route::post('/purchase-requests', [AdministrativeAssistantPurchaseRequestController::class, 'store'])
+            ->name('purchase-requests.store');
+        Route::get('/purchase-requests/{intake}', [AdministrativeAssistantPurchaseRequestController::class, 'show'])
+            ->name('purchase-requests.show');
+        Route::get('/purchase-requests/{intake}/documents/{document}', [AdministrativeAssistantPurchaseRequestController::class, 'download'])
+            ->name('purchase-requests.documents.download');
         Route::get('/purchase-orders/{purchaseOrder}/items/{item}', [AdministrativeAssistantEvidenceController::class, 'show'])
             ->name('evidence.show');
         Route::post('/purchase-orders/{purchaseOrder}/items/{item}', [AdministrativeAssistantEvidenceController::class, 'store'])

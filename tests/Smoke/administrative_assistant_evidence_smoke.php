@@ -102,9 +102,13 @@ try {
             'notes' => 'Administrative Assistant evidence smoke test.',
         ],
         [
-            'invoice_document' => UploadedFile::fake()->create('monthly-invoice.pdf', 20, 'application/pdf'),
+            'invoice_documents' => [
+                UploadedFile::fake()->create('monthly-invoice.pdf', 20, 'application/pdf'),
+                UploadedFile::fake()->create('monthly-invoice-annex.pdf', 20, 'application/pdf'),
+            ],
             'supporting_documents' => [
                 UploadedFile::fake()->create('monthly-report.docx', 20, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+                UploadedFile::fake()->create('monthly-receipt.jpg', 20, 'image/jpeg'),
             ],
         ]
     );
@@ -115,13 +119,65 @@ try {
     assistantEvidenceAssert((bool) $invoice, 'Invoice record was not created from the upload.');
     assistantEvidenceAssert($invoice->reference_no === $reference, 'Uploaded invoice reference was not recorded.');
     assistantEvidenceAssert((string) $invoice->vendor_id === (string) $purchaseOrder->vendor_id, 'Invoice was not linked to the PO vendor.');
+    $newDocuments = collect($evidence->documents)->slice($originalDocumentCount)->values();
     assistantEvidenceAssert(
-        collect($evidence->documents)->count() === $originalDocumentCount + 2,
-        'Evidence did not retain both uploaded documents.'
+        $newDocuments->count() === 4,
+        'Evidence did not retain all four uploaded documents.'
     );
     assistantEvidenceAssert(
-        collect($evidence->documents)->take(-2)->every(fn ($document) => ($document['source'] ?? null) === 'administrative_assistant'),
+        $newDocuments->where('document_type', 'invoice')->count() === 2
+            && $newDocuments->where('document_type', 'supporting')->count() === 2,
+        'Uploaded documents were not assigned to the expected invoice and supporting groups.'
+    );
+    assistantEvidenceAssert(
+        $newDocuments->every(fn ($document) => ($document['source'] ?? null) === 'administrative_assistant'),
         'Uploaded evidence source was not recorded.'
+    );
+    assistantEvidenceAssert(
+        $newDocuments->every(fn ($document) => Storage::disk('local')->exists($document['path'] ?? '')),
+        'One or more uploaded evidence files are missing from private storage.'
+    );
+
+    $assistantEvidencePage = assistantEvidenceRequest(
+        $http,
+        $session,
+        "/administrative-assistant/purchase-orders/{$purchaseOrder->id}/items/{$item->id}"
+    );
+    assistantEvidenceAssert(
+        collect(['monthly-invoice.pdf', 'monthly-invoice-annex.pdf', 'monthly-report.docx', 'monthly-receipt.jpg'])
+            ->every(fn ($name) => str_contains((string) $assistantEvidencePage->getContent(), $name)),
+        'The assistant page does not list every uploaded document.'
+    );
+
+    $documentCountBeforeRejectedUpload = collect($evidence->documents)->count();
+    $tooManyDocuments = assistantEvidenceRequest(
+        $http,
+        $session,
+        "/administrative-assistant/purchase-orders/{$purchaseOrder->id}/items/{$item->id}",
+        'POST',
+        [
+            '_token' => $token,
+            'deliverable_date' => ($item->milestone_date ?: now())->format('Y-m-d'),
+        ],
+        [
+            'invoice_documents' => array_map(
+                fn ($index) => UploadedFile::fake()->create("invoice-limit-{$index}.pdf", 1, 'application/pdf'),
+                range(1, 10)
+            ),
+            'supporting_documents' => array_map(
+                fn ($index) => UploadedFile::fake()->create("support-limit-{$index}.pdf", 1, 'application/pdf'),
+                range(1, 11)
+            ),
+        ]
+    );
+    assistantEvidenceAssert(
+        in_array($tooManyDocuments->getStatusCode(), [302, 303], true),
+        'The over-limit document request was not rejected.'
+    );
+    $evidence->refresh();
+    assistantEvidenceAssert(
+        collect($evidence->documents)->count() === $documentCountBeforeRejectedUpload,
+        'An over-limit upload changed the evidence documents.'
     );
 
     $admin = User::query()->where('user_type', 'admin')->firstOrFail();
@@ -133,7 +189,9 @@ try {
     assistantEvidenceAssert($financeInvoice->getStatusCode() === 200, 'Finance invoice page did not load.');
     assistantEvidenceAssert(
         str_contains((string) $financeInvoice->getContent(), 'monthly-invoice.pdf')
-            && str_contains((string) $financeInvoice->getContent(), 'monthly-report.docx'),
+            && str_contains((string) $financeInvoice->getContent(), 'monthly-invoice-annex.pdf')
+            && str_contains((string) $financeInvoice->getContent(), 'monthly-report.docx')
+            && str_contains((string) $financeInvoice->getContent(), 'monthly-receipt.jpg'),
         'Uploaded files were not reflected on the finance invoice.'
     );
 
@@ -159,7 +217,9 @@ try {
     );
     assistantEvidenceAssert(
         str_contains((string) $vendorInvoice->getContent(), 'monthly-invoice.pdf')
-            && str_contains((string) $vendorInvoice->getContent(), 'monthly-report.docx'),
+            && str_contains((string) $vendorInvoice->getContent(), 'monthly-invoice-annex.pdf')
+            && str_contains((string) $vendorInvoice->getContent(), 'monthly-report.docx')
+            && str_contains((string) $vendorInvoice->getContent(), 'monthly-receipt.jpg'),
         'Uploaded files were not reflected on the vendor invoice.'
     );
 

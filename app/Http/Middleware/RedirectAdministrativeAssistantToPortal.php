@@ -34,11 +34,11 @@ class RedirectAdministrativeAssistantToPortal
         }
 
         if (! $request->isMethodSafe()) {
-            abort(403, 'Administrative Assistant accounts can only use the document upload workspace.');
+            abort(403, 'Administrative Assistant accounts can only use their focused workspace.');
         }
 
         return redirect()
             ->route('administrative-assistant.dashboard')
-            ->with('info', 'Your account has a focused workspace for invoices and evidence documents.');
+            ->with('info', 'Your account has a focused workspace for purchase requests, invoices, and evidence documents.');
     }
 }

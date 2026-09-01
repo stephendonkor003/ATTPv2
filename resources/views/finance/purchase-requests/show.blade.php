@@ -375,6 +375,7 @@
         $confirmedLineItemsCount = $lineItemEvidenceByItem->filter(fn ($evidence) => (bool) $evidence->is_met)->count();
         $pendingLineItemsCount = max($lineItemsCount - $confirmedLineItemsCount, 0);
         $attachmentCount = $purchaseRequest->attachments->count();
+        $sourceIntake = $purchaseRequest->sourceIntake;
     @endphp
 
     <div class="nxl-container pr-show-page">
@@ -688,6 +689,38 @@
                         @endif
                     </div>
                 </div>
+
+                @if ($sourceIntake)
+                    <div class="card shadow-sm pr-side-card pr-card-hover mt-4 border-primary-subtle">
+                        <div class="card-body">
+                            <div class="pr-section-kicker text-primary mb-1">Administrative Assistant intake</div>
+                            <h6 class="fw-bold mb-1">{{ $sourceIntake->reference_no }}</h6>
+                            <div class="small text-muted mb-3">
+                                Submitted by {{ $sourceIntake->creator?->name ?? 'Former user' }}
+                                @if ($sourceIntake->created_at)
+                                    on {{ $sourceIntake->created_at->format('Y-m-d H:i') }}
+                                @endif
+                            </div>
+
+                            <div class="fw-semibold">{{ $sourceIntake->title }}</div>
+                            <div class="small text-muted mt-1">{{ $sourceIntake->description }}</div>
+
+                            @if ($sourceIntake->documents->isNotEmpty())
+                                <div class="border-top mt-3 pt-3">
+                                    <div class="small fw-semibold mb-2">Original supporting documents</div>
+                                    @foreach ($sourceIntake->documents as $document)
+                                        <a class="d-block small text-truncate mb-1"
+                                            href="{{ route('finance.purchase-request-intakes.documents.download', [$sourceIntake, $document]) }}"
+                                            title="{{ $document->file_name }}">
+                                            <i class="feather-paperclip me-1"></i>{{ $document->file_name }}
+                                            <span class="text-muted">({{ $formatBytes($document->file_size_bytes) }})</span>
+                                        </a>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                @endif
 
                 <div class="card shadow-sm pr-side-card pr-card-hover mt-4">
                     <div class="card-body">

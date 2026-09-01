@@ -291,6 +291,9 @@ class AppServiceProvider extends ServiceProvider
             'FinanceResource' => 'finance',
             'FinanceResourceCategory' => 'finance',
             'FinanceResourceItem' => 'finance',
+            'PurchaseRequestIntake' => 'finance',
+            'PurchaseRequestIntakeItem' => 'finance',
+            'PurchaseRequestIntakeDocument' => 'finance',
 
             // Monitoring, Evaluation and Learning
             'Indicator' => 'me',

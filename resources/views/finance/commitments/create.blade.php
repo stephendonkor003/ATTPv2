@@ -7,10 +7,11 @@
     $defaults = $defaults ?? [];
     $existingAttachments = $purchaseRequest?->attachments ?? collect();
     $isPurchaseRequestCreate = ($creationMode ?? null) === 'purchase_request';
+    $assistantIntake = $purchaseRequestIntake ?? null;
     $showDeliverableColumn = false;
     $submitButtonText = $isEdit
         ? 'Update Purchase Request'
-        : ($isPurchaseRequestCreate ? 'Create Purchase Request' : 'Save Commitment');
+        : ($assistantIntake ? 'Create PR from Intake' : ($isPurchaseRequestCreate ? 'Create Purchase Request' : 'Save Commitment'));
 @endphp
 
 @push('styles')
@@ -62,9 +63,9 @@
 
         {{-- ===================== PAGE HEADER ===================== --}}
         <div class="page-header">
-            <h4 class="fw-bold">{{ $isEdit ? 'Edit Purchase Request' : ($isPurchaseRequestCreate ? 'Create Purchase Request' : 'Create Budget Commitment') }}</h4>
+            <h4 class="fw-bold">{{ $isEdit ? 'Edit Purchase Request' : ($assistantIntake ? 'Complete Assistant PR Intake' : ($isPurchaseRequestCreate ? 'Create Purchase Request' : 'Create Budget Commitment')) }}</h4>
             <p class="text-muted mb-0">
-                {{ $isEdit ? 'Update draft purchase request details and yearly budget split' : ($isPurchaseRequestCreate ? 'Create a purchase request using approved funding, allocation, line items, and required documents' : 'Commit approved allocations to specific resources') }}
+                {{ $isEdit ? 'Update draft purchase request details and yearly budget split' : ($assistantIntake ? 'Review the Assistant request, then complete its funding, allocation, resource coding, and required documents' : ($isPurchaseRequestCreate ? 'Create a purchase request using approved funding, allocation, line items, and required documents' : 'Commit approved allocations to specific resources')) }}
             </p>
         </div>
 
@@ -83,6 +84,70 @@
             </div>
         @endif
 
+        @if ($assistantIntake)
+            <div class="card border-primary shadow-sm mb-4">
+                <div class="card-header bg-primary-subtle border-0 d-flex flex-column flex-md-row justify-content-between gap-2">
+                    <div>
+                        <div class="text-primary text-uppercase small fw-bold">Administrative Assistant intake</div>
+                        <h5 class="fw-bold mb-0">{{ $assistantIntake->reference_no }} · {{ $assistantIntake->title }}</h5>
+                    </div>
+                    <span class="badge bg-primary align-self-md-center">Awaiting back office</span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="small text-muted">Requested by</div>
+                            <div class="fw-semibold">{{ $assistantIntake->creator?->name ?? 'Former user' }}</div>
+                            <div class="small text-muted">{{ $assistantIntake->governanceNode?->name ?? 'Governance node not assigned' }}</div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="small text-muted">Needed by / Priority</div>
+                            <div class="fw-semibold">{{ $assistantIntake->needed_by?->format('d M Y') ?? 'Flexible date' }}</div>
+                            <div class="small">{{ \Illuminate\Support\Str::headline($assistantIntake->priority) }} priority</div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="small text-muted">Assistant estimate</div>
+                            <div class="fw-semibold">
+                                {{ $assistantIntake->estimated_amount !== null ? $assistantIntake->currency . ' ' . number_format((float) $assistantIntake->estimated_amount, 2) : 'Not supplied' }}
+                            </div>
+                            <div class="small text-muted">Finance will set the authoritative amount below.</div>
+                        </div>
+                        <div class="col-12">
+                            <div class="small text-muted">Purpose</div>
+                            <div>{{ $assistantIntake->description }}</div>
+                        </div>
+                        <div class="col-lg-7">
+                            <div class="small text-muted mb-1">Requested items</div>
+                            <ul class="mb-0 ps-3">
+                                @foreach ($assistantIntake->items as $intakeItem)
+                                    <li>
+                                        <strong>{{ rtrim(rtrim(number_format((float) $intakeItem->quantity, 2), '0'), '.') }} × {{ $intakeItem->name }}</strong>
+                                        @if ($intakeItem->notes)
+                                            <span class="text-muted">— {{ $intakeItem->notes }}</span>
+                                        @endif
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                        <div class="col-lg-5">
+                            <div class="small text-muted mb-1">Assistant supporting documents</div>
+                            @forelse ($assistantIntake->documents as $document)
+                                <a class="d-block" href="{{ route('finance.purchase-request-intakes.documents.download', [$assistantIntake, $document]) }}">
+                                    <i class="feather-paperclip me-1"></i>{{ $document->file_name }}
+                                </a>
+                            @empty
+                                <span class="text-muted">None supplied</span>
+                            @endforelse
+                        </div>
+                    </div>
+                    <div class="alert alert-info border mt-3 mb-0">
+                        <i class="feather-info me-1"></i>
+                        Assistant documents are supporting context. Finance must still upload Fund Availability and TORs and complete all coded fields below.
+                    </div>
+                </div>
+            </div>
+        @endif
+
         <form method="POST"
             action="{{ $isEdit ? route('finance.commitments.update', $commitment) : ($isPurchaseRequestCreate ? route('finance.purchase-requests.store') : route('finance.commitments.store')) }}"
             id="commitmentForm"
@@ -90,6 +155,9 @@
             @csrf
             @if ($isEdit)
                 @method('PUT')
+            @endif
+            @if ($assistantIntake)
+                <input type="hidden" name="purchase_request_intake_id" value="{{ old('purchase_request_intake_id', $assistantIntake->id) }}">
             @endif
 
             {{-- ===================== PROGRAM FUNDING ===================== --}}
@@ -258,7 +326,7 @@
                                 id="description"
                                 rows="3"
                                 class="form-control @error('description') is-invalid @enderror"
-                                placeholder="Brief description of this purchase request...">{{ old('description', $isEdit ? ($commitment->description ?? $purchaseRequest->description ?? '') : '') }}</textarea>
+                                placeholder="Brief description of this purchase request...">{{ old('description', $isEdit ? ($commitment->description ?? $purchaseRequest->description ?? '') : ($assistantIntake?->description ?? '')) }}</textarea>
                             @error('description')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -269,7 +337,7 @@
                             <input type="date"
                                 name="delivery_date"
                                 id="delivery_date"
-                                value="{{ old('delivery_date', optional($purchaseRequest?->delivery_date)->format('Y-m-d')) }}"
+                                value="{{ old('delivery_date', optional($purchaseRequest?->delivery_date)->format('Y-m-d') ?: optional($assistantIntake?->needed_by)->format('Y-m-d')) }}"
                                 class="form-control @error('delivery_date') is-invalid @enderror"
                                 required>
                             @error('delivery_date')

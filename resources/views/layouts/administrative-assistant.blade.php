@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Document Uploads') | ATTP</title>
+    <title>@yield('title', 'Administrative Assistant Workspace') | ATTP</title>
     <link rel="shortcut icon" type="image/jpeg" href="{{ asset('assets/images/attp-logo.jpeg') }}">
     <link rel="stylesheet" href="{{ asset('admin/assets/css/bootstrap.min.css') }}">
     <link rel="stylesheet" href="{{ asset('admin/assets/vendors/css/vendors.min.css') }}">
@@ -58,14 +58,17 @@
         <div class="aa-brand">
             <img src="{{ asset('assets/images/au.png') }}" alt="ATTP">
             <div>
-                <div class="aa-brand-title">ATTP Documents</div>
+                <div class="aa-brand-title">ATTP Workspace</div>
                 <div class="aa-brand-subtitle">Administrative Assistant</div>
             </div>
         </div>
 
         <div class="aa-nav-label">My workspace</div>
-        <a href="{{ route('administrative-assistant.dashboard') }}" class="aa-nav-link {{ request()->routeIs('administrative-assistant.*') ? 'active' : '' }}">
+        <a href="{{ route('administrative-assistant.dashboard') }}" class="aa-nav-link {{ request()->routeIs('administrative-assistant.dashboard', 'administrative-assistant.evidence.*') ? 'active' : '' }}">
             <i class="feather-upload-cloud"></i> Upload centre
+        </a>
+        <a href="{{ route('administrative-assistant.purchase-requests.create') }}" class="aa-nav-link {{ request()->routeIs('administrative-assistant.purchase-requests.*') ? 'active' : '' }}">
+            <i class="feather-file-plus"></i> Create PR
         </a>
 
         <div class="aa-user">
@@ -81,8 +84,8 @@
     <main class="aa-main">
         <header class="aa-topbar">
             <div>
-                <div class="aa-topbar-kicker">Simple document workspace</div>
-                <div class="fw-bold">Invoices & deliverable evidence</div>
+                <div class="aa-topbar-kicker">@yield('workspace-kicker', 'Administrative Assistant workspace')</div>
+                <div class="fw-bold">@yield('workspace-heading', 'Invoices & deliverable evidence')</div>
             </div>
             <div class="text-end d-none d-sm-block">
                 <div class="small text-muted">Today</div>
@@ -110,7 +113,8 @@
 </div>
 
 <div class="aa-mobile-menu">
-    <a href="{{ route('administrative-assistant.dashboard') }}"><i class="feather-home me-1"></i> Home</a>
+    <a href="{{ route('administrative-assistant.dashboard') }}"><i class="feather-upload-cloud me-1"></i> Uploads</a>
+    <a href="{{ route('administrative-assistant.purchase-requests.create') }}"><i class="feather-file-plus me-1"></i> Create PR</a>
     <button type="button" onclick="document.getElementById('aaLogoutForm').submit();"><i class="feather-log-out me-1"></i> Sign out</button>
 </div>
 <form id="aaLogoutForm" method="POST" action="{{ route('logout') }}" class="d-none">@csrf</form>

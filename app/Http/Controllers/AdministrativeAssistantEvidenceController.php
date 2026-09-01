@@ -226,6 +226,13 @@ class AdministrativeAssistantEvidenceController extends Controller
                 'mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,jpg,jpeg,png',
                 'max:20480',
             ],
+            'invoice_documents' => ['nullable', 'array', 'max:20'],
+            'invoice_documents.*' => [
+                'required',
+                'file',
+                'mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,jpg,jpeg,png',
+                'max:20480',
+            ],
             'supporting_documents' => ['nullable', 'array', 'max:20'],
             'supporting_documents.*' => [
                 'required',
@@ -238,16 +245,40 @@ class AdministrativeAssistantEvidenceController extends Controller
             'deliverable_date.required' => 'Please confirm the deliverable date.',
             'invoice_document.mimes' => 'The invoice must be a PDF, Office file, or image.',
             'invoice_document.max' => 'The invoice must not be larger than 20MB.',
+            'invoice_documents.max' => 'You may upload up to 20 invoice documents at a time.',
+            'invoice_documents.*.mimes' => 'Invoice documents must be PDFs, Office files, or images.',
+            'invoice_documents.*.max' => 'Each invoice document must not be larger than 20MB.',
+            'supporting_documents.max' => 'You may upload up to 20 supporting documents at a time.',
             'supporting_documents.*.mimes' => 'Supporting documents must be PDFs, Office files, images, text files, or ZIP files.',
             'supporting_documents.*.max' => 'Each supporting document must not be larger than 20MB.',
         ]);
 
-        $invoiceFile = $request->file('invoice_document');
+        $invoiceFiles = collect($request->file('invoice_documents', []))
+            ->filter(fn ($file) => $file?->isValid())
+            ->values();
+        $legacyInvoiceFile = $request->file('invoice_document');
+        if ($invoiceFiles->isEmpty() && $legacyInvoiceFile?->isValid()) {
+            $invoiceFiles->push($legacyInvoiceFile);
+        }
+
         $supportingFiles = collect($request->file('supporting_documents', []))
             ->filter(fn ($file) => $file?->isValid())
             ->values();
 
-        if (! $invoiceFile && $supportingFiles->isEmpty()) {
+        $uploadFiles = $invoiceFiles->concat($supportingFiles);
+        if ($uploadFiles->count() > 20) {
+            throw ValidationException::withMessages([
+                'documents' => 'Choose no more than 20 documents in one upload.',
+            ]);
+        }
+
+        if ($uploadFiles->sum(fn ($file) => (int) $file->getSize()) > 60 * 1024 * 1024) {
+            throw ValidationException::withMessages([
+                'documents' => 'The combined size of all documents must not be larger than 60MB.',
+            ]);
+        }
+
+        if ($invoiceFiles->isEmpty() && $supportingFiles->isEmpty()) {
             throw ValidationException::withMessages([
                 'documents' => 'Choose an invoice or at least one supporting document to upload.',
             ]);
@@ -259,9 +290,9 @@ class AdministrativeAssistantEvidenceController extends Controller
         $directory = "procurement_purchase_orders/{$purchaseOrder->id}/line-item-evidence/{$item->id}";
 
         try {
-            if ($invoiceFile?->isValid()) {
+            foreach ($invoiceFiles as $file) {
                 $storedDocuments[] = $this->storeDocument(
-                    $invoiceFile,
+                    $file,
                     $directory,
                     'invoice',
                     $deliverableDate
@@ -283,7 +314,7 @@ class AdministrativeAssistantEvidenceController extends Controller
                 $data,
                 $deliverableDate,
                 $existingEvidence,
-                $invoiceFile,
+                $invoiceFiles,
                 $item,
                 $purchaseOrder,
                 $purchaseRequest,
@@ -296,7 +327,7 @@ class AdministrativeAssistantEvidenceController extends Controller
                 ]);
 
                 $invoice = $evidence->invoice;
-                if ($invoiceFile) {
+                if ($invoiceFiles->isNotEmpty()) {
                     $invoice = $this->resolveOrCreateInvoice(
                         $evidence,
                         $purchaseOrder,
@@ -375,7 +406,7 @@ class AdministrativeAssistantEvidenceController extends Controller
             throw $exception;
         }
 
-        $message = $invoiceFile
+        $message = $invoiceFiles->isNotEmpty()
             ? 'Invoice and evidence documents uploaded. The vendor account and invoice register have been updated automatically.'
             : 'Evidence documents uploaded and added to the vendor account.';
 

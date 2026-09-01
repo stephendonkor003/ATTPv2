@@ -9,6 +9,8 @@ use App\Models\ProcurementPurchaseOrder;
 use App\Models\ProcurementPurchaseOrderItemEvidence;
 use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestAttachment;
+use App\Models\PurchaseRequestIntake;
+use App\Models\PurchaseRequestIntakeDocument;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -16,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class PurchaseRequestController extends Controller
@@ -48,9 +51,31 @@ class PurchaseRequestController extends Controller
             'subActivity',
             'commitments',
             'creator',
+            'sourceIntake.creator',
         ])
             ->when($isPortfolioLeader, function ($query) use ($currentUser) {
                 $this->applyAssignedPortfolioScopeToPurchaseRequests($query, $currentUser);
+            })
+            ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                $query->whereIn('governance_node_id', $scopedNodeIds)
+                    ->whereNotNull('governance_node_id');
+            })
+            ->orderByDesc('created_at')
+            ->get();
+
+        $pendingPurchaseRequestIntakes = PurchaseRequestIntake::query()
+            ->with(['creator', 'governanceNode', 'items', 'documents'])
+            ->where('status', PurchaseRequestIntake::STATUS_SUBMITTED)
+            ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                $nodeIds = $this->assignedPortfolioNodeIds($currentUser);
+
+                if ($nodeIds === []) {
+                    $query->whereRaw('1 = 0');
+                    return;
+                }
+
+                $query->whereIn('governance_node_id', $nodeIds)
+                    ->whereNotNull('governance_node_id');
             })
             ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
@@ -83,8 +108,41 @@ class PurchaseRequestController extends Controller
             'canViewAll',
             'canApprovePurchaseRequests',
             'canEditPurchaseRequests',
-            'canDeletePurchaseRequests'
+            'canDeletePurchaseRequests',
+            'pendingPurchaseRequestIntakes'
         ));
+    }
+
+    public function downloadIntakeDocument(
+        PurchaseRequestIntake $intake,
+        PurchaseRequestIntakeDocument $document
+    ) {
+        abort_unless(
+            (string) $document->intake_id === (string) $intake->id,
+            404
+        );
+
+        $this->assertPurchaseRequestIntakeInScope($intake);
+
+        $expectedDirectory = "administrative-assistant/purchase-request-intakes/{$intake->id}/";
+        abort_unless(
+            Str::startsWith(str_replace('\\', '/', $document->file_path), $expectedDirectory),
+            404
+        );
+
+        $disk = Storage::disk('local');
+        abort_unless($disk->exists($document->file_path), 404);
+
+        return $disk->download(
+            $document->file_path,
+            $document->file_name,
+            [
+                'Content-Type' => $document->mime_type ?: 'application/octet-stream',
+                'Cache-Control' => 'private, no-store, max-age=0',
+                'Pragma' => 'no-cache',
+                'X-Content-Type-Options' => 'nosniff',
+            ]
+        );
     }
 
     public function show(PurchaseRequest $purchaseRequest)
@@ -103,6 +161,8 @@ class PurchaseRequestController extends Controller
             'creator',
             'approver',
             'rejector',
+            'sourceIntake.creator',
+            'sourceIntake.documents',
         ]);
 
         $yearSplits = $purchaseRequest->commitments
@@ -644,16 +704,17 @@ class PurchaseRequestController extends Controller
     {
         return $purchaseRequests->map(function (PurchaseRequest $purchaseRequest) {
             $status = $purchaseRequest->status ?: 'draft';
+            $sourceIntake = $purchaseRequest->sourceIntake;
 
             return (object) [
                 'key' => 'finance-' . $purchaseRequest->id,
                 'source' => 'finance',
-                'source_label' => 'Finance',
+                'source_label' => $sourceIntake ? 'Administrative Assistant' : 'Finance',
                 'record' => $purchaseRequest,
                 'reference_no' => $purchaseRequest->reference_no,
-                'requestor_name' => $purchaseRequest->creator?->name ?: 'Internal',
-                'requestor_email' => $purchaseRequest->creator?->email,
-                'title' => $purchaseRequest->description ?: 'Finance purchase request',
+                'requestor_name' => $sourceIntake?->creator?->name ?: ($purchaseRequest->creator?->name ?: 'Internal'),
+                'requestor_email' => $sourceIntake?->creator?->email ?: $purchaseRequest->creator?->email,
+                'title' => $sourceIntake?->title ?: ($purchaseRequest->description ?: 'Finance purchase request'),
                 'program' => $purchaseRequest->programFunding?->program?->name
                     ?: $purchaseRequest->programFunding?->program_name
                     ?: 'N/A',
@@ -664,7 +725,7 @@ class PurchaseRequestController extends Controller
                 'delivery_date' => $purchaseRequest->delivery_date,
                 'currency' => $purchaseRequest->resolved_currency,
                 'total_amount' => $purchaseRequest->total_amount,
-                'priority' => null,
+                'priority' => $sourceIntake?->priority,
                 'status' => $status,
                 'tab_status' => $this->purchaseRequestTabStatus($status),
                 'created_at' => $purchaseRequest->created_at,
@@ -818,6 +879,38 @@ class PurchaseRequestController extends Controller
         }
 
         return [$currentUser->governance_node_id];
+    }
+
+    private function assertPurchaseRequestIntakeInScope(PurchaseRequestIntake $intake): void
+    {
+        $currentUser = Auth::user();
+
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            abort_unless(
+                $intake->governance_node_id
+                    && in_array((string) $intake->governance_node_id, $this->assignedPortfolioNodeIds($currentUser), true),
+                403,
+                'You do not have access to this purchase request intake.'
+            );
+
+            return;
+        }
+
+        if ($currentUser?->can('finance.purchase_requests.view_all') === true) {
+            return;
+        }
+
+        $scopedNodeIds = $this->scopedNodeIds();
+        if ($scopedNodeIds === null) {
+            return;
+        }
+
+        abort_unless(
+            $intake->governance_node_id
+                && in_array((string) $intake->governance_node_id, $scopedNodeIds, true),
+            403,
+            'You do not have access to this purchase request intake.'
+        );
     }
 
     private function assertPurchaseRequestInScope(PurchaseRequest $purchaseRequest): void

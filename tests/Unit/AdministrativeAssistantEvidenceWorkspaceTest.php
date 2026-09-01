@@ -30,7 +30,26 @@ it('shows assistant evidence on finance and vendor invoice pages', function () {
     expect($vendorInvoice)->toContain('Invoice & Evidence Documents');
     expect($assistantView)
         ->toContain('Upload and link everything')
-        ->toContain('automatically connected to the purchase request, vendor account, and invoice register');
+        ->toContain('automatically connected to the purchase request, vendor account, and invoice register')
+        ->toContain('name="invoice_documents[]"')
+        ->toContain('name="supporting_documents[]"')
+        ->toContain('multiple data-file-input')
+        ->toContain('data-file-preview-modal')
+        ->toContain('new DataTransfer()')
+        ->toContain('URL.createObjectURL(file)')
+        ->toContain('data-file-list');
+});
+
+it('validates and stores a bounded multi-document upload', function () {
+    $controller = file_get_contents(dirname(__DIR__, 2).'/app/Http/Controllers/AdministrativeAssistantEvidenceController.php');
+
+    expect($controller)
+        ->toContain("'invoice_documents' => ['nullable', 'array', 'max:20']")
+        ->toContain("'supporting_documents' => ['nullable', 'array', 'max:20']")
+        ->toContain('foreach ($invoiceFiles as $file)')
+        ->toContain('foreach ($supportingFiles as $file)')
+        ->toContain('Choose no more than 20 documents in one upload.')
+        ->toContain('combined size of all documents must not be larger than 60MB');
 });
 
 it('organizes assistant work into year month and vendor cards', function () {

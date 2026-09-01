@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class PurchaseRequest extends BaseModel
 {
@@ -82,6 +82,11 @@ class PurchaseRequest extends BaseModel
     public function attachments(): HasMany
     {
         return $this->hasMany(PurchaseRequestAttachment::class, 'purchase_request_id');
+    }
+
+    public function sourceIntake(): HasOne
+    {
+        return $this->hasOne(PurchaseRequestIntake::class, 'converted_purchase_request_id');
     }
 
     public function creator(): BelongsTo

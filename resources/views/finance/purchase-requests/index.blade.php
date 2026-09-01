@@ -51,6 +51,100 @@
             </div>
         @endif
 
+        <div class="card border-primary-subtle shadow-sm mt-4">
+            <div class="card-header bg-primary-subtle border-0 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                <div>
+                    <h5 class="fw-bold mb-1">
+                        <i class="feather-inbox me-1"></i> Assistant PR intakes
+                    </h5>
+                    <div class="text-muted small">Simple requests submitted by Administrative Assistants for Finance to classify, fund, and complete.</div>
+                </div>
+                <span class="badge bg-primary rounded-pill">{{ number_format($pendingPurchaseRequestIntakes->count()) }} awaiting completion</span>
+            </div>
+            <div class="card-body">
+                @if ($pendingPurchaseRequestIntakes->isEmpty())
+                    <div class="text-center text-muted py-3">
+                        <i class="feather-check-circle d-block fs-4 mb-2"></i>
+                        No Assistant PR intakes are waiting for back-office completion.
+                    </div>
+                @else
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Reference / Requestor</th>
+                                    @if ($canViewAll)
+                                        <th>Governance Node</th>
+                                    @endif
+                                    <th>Request</th>
+                                    <th>Needed By</th>
+                                    <th>Estimate</th>
+                                    <th>Documents</th>
+                                    <th class="text-end">Back Office</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($pendingPurchaseRequestIntakes as $intake)
+                                    <tr>
+                                        <td>
+                                            <div class="fw-bold text-primary">{{ $intake->reference_no }}</div>
+                                            <div class="small">{{ $intake->creator?->name ?? 'Former user' }}</div>
+                                            <span class="badge {{ $intake->priority === 'urgent' ? 'bg-danger' : ($intake->priority === 'high' ? 'bg-warning text-dark' : 'bg-light text-dark') }} mt-1">
+                                                {{ \Illuminate\Support\Str::headline($intake->priority) }} priority
+                                            </span>
+                                        </td>
+                                        @if ($canViewAll)
+                                            <td>{{ $intake->governanceNode?->name ?? 'Unassigned' }}</td>
+                                        @endif
+                                        <td style="min-width: 250px;">
+                                            <div class="fw-semibold">{{ $intake->title }}</div>
+                                            <div class="text-muted small">{{ \Illuminate\Support\Str::limit($intake->description, 100) }}</div>
+                                            @if ($intake->items->isNotEmpty())
+                                                <div class="small mt-1">
+                                                    {{ $intake->items->take(2)->map(fn ($item) => rtrim(rtrim(number_format((float) $item->quantity, 2), '0'), '.') . ' x ' . $item->name)->join(' · ') }}
+                                                    @if ($intake->items->count() > 2)
+                                                        · +{{ $intake->items->count() - 2 }} more
+                                                    @endif
+                                                </div>
+                                            @endif
+                                        </td>
+                                        <td>{{ $intake->needed_by?->format('d M Y') ?? 'Flexible' }}</td>
+                                        <td>
+                                            @if ($intake->estimated_amount !== null)
+                                                <span class="text-muted me-1">{{ $intake->currency }}</span>{{ number_format((float) $intake->estimated_amount, 2) }}
+                                            @else
+                                                <span class="text-muted">Not supplied</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @forelse ($intake->documents as $document)
+                                                <a class="d-block small text-truncate" style="max-width: 190px;"
+                                                    href="{{ route('finance.purchase-request-intakes.documents.download', [$intake, $document]) }}"
+                                                    title="{{ $document->file_name }}">
+                                                    <i class="feather-paperclip me-1"></i>{{ $document->file_name }}
+                                                </a>
+                                            @empty
+                                                <span class="text-muted small">None</span>
+                                            @endforelse
+                                        </td>
+                                        <td class="text-end">
+                                            @can('finance.commitments.create')
+                                                <a href="{{ route('finance.purchase-requests.create', ['intake' => $intake->id]) }}" class="btn btn-sm btn-primary text-nowrap">
+                                                    <i class="feather-arrow-right me-1"></i> Complete PR
+                                                </a>
+                                            @else
+                                                <span class="text-muted small">View only</span>
+                                            @endcan
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
+            </div>
+        </div>
+
         <div class="card shadow-sm mt-4">
             <div class="card-body">
                 <ul class="nav nav-pills gap-2 flex-nowrap overflow-auto pb-2" id="purchaseRequestStatusTabs" role="tablist">
@@ -138,6 +232,9 @@
                                                     <div class="fw-semibold">{{ $row->requestor_name }}</div>
                                                     @if ($row->requestor_email)
                                                         <div class="text-muted small">{{ $row->requestor_email }}</div>
+                                                    @endif
+                                                    @if ($row->source_label !== 'Finance')
+                                                        <span class="badge bg-primary-subtle text-primary mt-1">{{ $row->source_label }}</span>
                                                     @endif
                                                     @if ($row->priority)
                                                         <span class="badge bg-light text-dark mt-1">{{ ucfirst($row->priority) }} priority</span>

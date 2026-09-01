@@ -12,6 +12,7 @@ use App\Models\Activity;
 use App\Models\SubActivity;
 use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestAttachment;
+use App\Models\PurchaseRequestIntake;
 use App\Models\PurchaseRequestItem;
 use App\Models\ProcurementDeliverable;
 use App\Models\ProcurementPurchaseOrder;
@@ -108,14 +109,42 @@ public function index()
         ]);
     }
 
-    public function createPurchaseRequest()
+    public function createPurchaseRequest(Request $request)
     {
         $currentUser = Auth::user();
         $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
         $scopedNodeIds = $this->scopedNodeIds();
+        $purchaseRequestIntake = null;
+
+        if ($request->filled('intake')) {
+            $intakeId = (string) $request->query('intake');
+            abort_unless(Str::isUuid($intakeId), 404);
+
+            $purchaseRequestIntake = PurchaseRequestIntake::query()
+                ->with(['creator', 'governanceNode', 'items', 'documents'])
+                ->findOrFail($intakeId);
+
+            $this->assertPurchaseRequestIntakeInScope($purchaseRequestIntake);
+
+            if (
+                $purchaseRequestIntake->status === PurchaseRequestIntake::STATUS_CONVERTED
+                && $purchaseRequestIntake->converted_purchase_request_id
+            ) {
+                return redirect()
+                    ->route('finance.purchase-requests.show', $purchaseRequestIntake->converted_purchase_request_id)
+                    ->with('info', 'This Assistant intake has already been converted to a Purchase Request.');
+            }
+
+            abort_unless(
+                $purchaseRequestIntake->status === PurchaseRequestIntake::STATUS_SUBMITTED,
+                409,
+                'This Assistant intake is no longer awaiting back-office completion.'
+            );
+        }
 
         return view('finance.commitments.create', [
             'creationMode' => 'purchase_request',
+            'purchaseRequestIntake' => $purchaseRequestIntake,
             'fundings' => ProgramFunding::where('status', 'approved')
                 ->when($isPortfolioLeader, function ($query) use ($currentUser) {
                     $this->applyAssignedPortfolioScopeToProgramFundings($query, $currentUser);
@@ -170,8 +199,22 @@ public function index()
         'pr_attachment_titles'         => 'nullable|array|max:25',
         'pr_attachment_titles.*'       => 'nullable|string|max:255',
         'pr_attachments'               => 'nullable|array|max:25',
-        'pr_attachments.*'             => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,csv,txt,jpg,jpeg,png,zip|max:20480',
+            'pr_attachments.*'             => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,csv,txt,jpg,jpeg,png,zip|max:20480',
+            'purchase_request_intake_id'    => 'nullable|uuid|exists:purchase_request_intakes,id',
     ]);
+
+        $purchaseRequestIntake = null;
+        if (! empty($validated['purchase_request_intake_id'])) {
+            $purchaseRequestIntake = PurchaseRequestIntake::query()
+                ->findOrFail($validated['purchase_request_intake_id']);
+            $this->assertPurchaseRequestIntakeInScope($purchaseRequestIntake);
+
+            if ($purchaseRequestIntake->status !== PurchaseRequestIntake::STATUS_SUBMITTED) {
+                return back()
+                    ->withErrors(['purchase_request_intake_id' => 'This Assistant intake has already been completed or is no longer available.'])
+                    ->withInput();
+            }
+        }
 
         $missingAttachments = $this->missingRequiredPurchaseRequestAttachments($request);
         if ($missingAttachments !== []) {
@@ -402,7 +445,21 @@ public function index()
 		        DB::beginTransaction();
 		        $transactionStarted = true;
 
-			        $purchaseRequest = PurchaseRequest::create([
+		        if ($purchaseRequestIntake) {
+		            $purchaseRequestIntake = PurchaseRequestIntake::query()
+		                ->whereKey($purchaseRequestIntake->id)
+		                ->lockForUpdate()
+		                ->firstOrFail();
+		            $this->assertPurchaseRequestIntakeInScope($purchaseRequestIntake);
+
+		            if ($purchaseRequestIntake->status !== PurchaseRequestIntake::STATUS_SUBMITTED) {
+		                throw \Illuminate\Validation\ValidationException::withMessages([
+		                    'purchase_request_intake_id' => 'This Assistant intake was completed by another back-office user.',
+		                ]);
+		            }
+		        }
+
+		        $purchaseRequest = PurchaseRequest::create([
 			            'reference_no' => $this->generatePurchaseRequestReference(),
 			            'program_funding_id' => $validated['program_funding_id'],
 			            'governance_node_id' => $funding->governance_node_id,
@@ -451,6 +508,15 @@ public function index()
 		            ]);
 		        }
 
+		        if ($purchaseRequestIntake) {
+		            $purchaseRequestIntake->forceFill([
+		                'status' => PurchaseRequestIntake::STATUS_CONVERTED,
+		                'converted_purchase_request_id' => $purchaseRequest->id,
+		                'converted_by' => Auth::id(),
+		                'converted_at' => now(),
+		            ])->save();
+		        }
+
 		        DB::commit();
 		        $transactionStarted = false;
 
@@ -459,6 +525,7 @@ public function index()
 		            ->with(
 		                'success',
 		                'Purchase Request ' . $purchaseRequest->reference_no . ' created successfully (Draft).'
+		                    . ($purchaseRequestIntake ? ' Assistant intake ' . $purchaseRequestIntake->reference_no . ' is now complete.' : '')
 		            );
 
 	    } catch (\Throwable $e) {
@@ -466,6 +533,10 @@ public function index()
 	        if ($transactionStarted) {
 	            DB::rollBack();
 	        }
+
+        if ($e instanceof \Illuminate\Validation\ValidationException) {
+            return back()->withErrors($e->errors())->withInput();
+        }
 
         /* =====================================================
          * 7. LOG + SURFACE ERROR
@@ -1972,6 +2043,38 @@ protected function aiSummary(array $allocated, array $committed)
         }
 
         return [$currentUser->governance_node_id];
+    }
+
+    private function assertPurchaseRequestIntakeInScope(PurchaseRequestIntake $intake): void
+    {
+        $currentUser = Auth::user();
+
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            abort_unless(
+                $intake->governance_node_id
+                    && in_array((string) $intake->governance_node_id, $this->assignedPortfolioNodeIds($currentUser), true),
+                403,
+                'You do not have access to this purchase request intake.'
+            );
+
+            return;
+        }
+
+        if ($currentUser?->can('finance.purchase_requests.view_all') === true) {
+            return;
+        }
+
+        $scopedNodeIds = $this->scopedNodeIds();
+        if ($scopedNodeIds === null) {
+            return;
+        }
+
+        abort_unless(
+            $intake->governance_node_id
+                && in_array((string) $intake->governance_node_id, $scopedNodeIds, true),
+            403,
+            'You do not have access to this purchase request intake.'
+        );
     }
 
     private function assertFundingInScope(ProgramFunding $funding): void
