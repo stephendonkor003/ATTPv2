@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\ConsortiumThinkTank;
 use App\Models\MeFocalUnitContact;
 use App\Models\User;
+use App\Services\ThinkTank\ThinkTankApiAuditService;
+use App\Services\ThinkTank\ThinkTankUserManagementService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -27,11 +29,15 @@ class MeFocalUnitController extends Controller
         'archived' => ['label' => 'Archived contact', 'tone' => 'neutral', 'color' => '#73838a'],
     ];
 
-    public function __construct()
+    public function __construct(
+        private readonly ThinkTankUserManagementService $userManagement,
+        private readonly ThinkTankApiAuditService $audit,
+    )
     {
         $this->middleware(['auth', 'not.funding.partner']);
         $this->middleware('permission:me.configuration.view|me.configuration.manage|world.indicators.manage')->only(['index', 'pdf']);
         $this->middleware('permission:me.configuration.manage')->except(['index', 'pdf']);
+        $this->middleware('permission:users.manage|think_tank.users.manage')->only(['linkAccount', 'unlinkAccount']);
     }
 
     public function index(Request $request)
@@ -158,48 +164,74 @@ class MeFocalUnitController extends Controller
     public function linkAccount(Request $request, MeFocalUnitContact $contact)
     {
         $validated = $request->validate(['user_id' => 'required|uuid|exists:users,id']);
-        if (! $contact->is_active) {
-            throw ValidationException::withMessages(['contact' => 'Restore this focal contact before linking an account.']);
-        }
-        if (! $contact->think_tank_member_id) {
-            throw ValidationException::withMessages(['contact' => 'Map the focal contact to an active think tank before linking an account.']);
-        }
-        $user = User::query()->with('role:id,name')->findOrFail($validated['user_id']);
-        if (strtolower((string) $user->email) !== strtolower((string) $contact->email)) {
-            throw ValidationException::withMessages(['user_id' => 'The selected account email must match the focal register email.']);
-        }
-        if ($user->is_blacklisted) {
-            throw ValidationException::withMessages(['user_id' => 'A blacklisted account cannot be linked as an M&E focal officer.']);
-        }
-        if ($user->isAdmin() || $user->isSuperAdmin()
-            || (filled($user->user_type) && $user->user_type !== 'think_tank')) {
-            throw ValidationException::withMessages(['user_id' => 'Internal, vendor and funding-partner accounts cannot be converted into think tank focal accounts.']);
-        }
-        if ($user->user_type === 'think_tank'
-            && $user->think_tank_member_id
-            && (string) $user->think_tank_member_id !== (string) $contact->think_tank_member_id) {
-            throw ValidationException::withMessages(['user_id' => 'This account is assigned to another think tank. Reassign it through Think Tank Users before linking it here.']);
-        }
-        if (MeFocalUnitContact::query()->where('user_id', $user->id)->whereKeyNot($contact->id)->exists()) {
-            throw ValidationException::withMessages(['user_id' => 'This account is already linked to another focal contact.']);
-        }
+        $user = DB::transaction(function () use ($contact, $request, $validated): User {
+            $lockedContact = MeFocalUnitContact::query()->whereKey($contact->getKey())->lockForUpdate()->firstOrFail();
 
-        DB::transaction(function () use ($user, $contact): void {
-            $user->update([
-                'user_type' => 'think_tank',
-                'think_tank_member_id' => $contact->think_tank_member_id,
-                'think_tank_access_level' => User::THINK_TANK_ACCESS_ME,
-            ]);
-            $contact->update(['user_id' => $user->id]);
+            if (! $lockedContact->is_active) {
+                throw ValidationException::withMessages(['contact' => 'Restore this focal contact before linking an account.']);
+            }
+
+            $membership = ConsortiumThinkTank::query()
+                ->whereKey($lockedContact->think_tank_member_id)
+                ->where('status', 'active')
+                ->lockForUpdate()
+                ->first();
+
+            if (! $membership) {
+                throw ValidationException::withMessages(['contact' => 'Map the focal contact to an active think tank before linking an account.']);
+            }
+
+            $lockedUser = User::query()->with('role:id,name')->whereKey($validated['user_id'])->lockForUpdate()->firstOrFail();
+
+            if (mb_strtolower((string) $lockedUser->email) !== mb_strtolower((string) $lockedContact->email)) {
+                throw ValidationException::withMessages(['user_id' => 'The selected account email must match the focal register email.']);
+            }
+
+            if ($lockedUser->is_blacklisted
+                || $lockedUser->user_type !== 'think_tank'
+                || (string) $lockedUser->think_tank_member_id !== (string) $membership->getKey()
+                || $lockedUser->think_tank_access_level !== User::THINK_TANK_ACCESS_ME) {
+                throw ValidationException::withMessages([
+                    'user_id' => 'Provision this account as the same Think Tank\'s M&E Officer through Think Tank Users before linking it here.',
+                ]);
+            }
+
+            $this->userManagement->assertCanBeAssignedToMembership($lockedUser, $membership, 'user_id');
+
+            if (MeFocalUnitContact::query()
+                ->where('user_id', $lockedUser->getKey())
+                ->whereKeyNot($lockedContact->getKey())
+                ->lockForUpdate()
+                ->first(['id'])) {
+                throw ValidationException::withMessages(['user_id' => 'This account is already linked to another focal contact.']);
+            }
+
+            $lockedContact->update(['user_id' => $lockedUser->getKey()]);
+            $this->audit->required($request, 'think_tank.me_focal_account.linked', 'Think tank M&E focal contact linked to a pre-provisioned portal user.', [
+                'tenant_id' => (string) $membership->getKey(),
+                'target_user_id' => (string) $lockedUser->getKey(),
+                'focal_contact_id' => (string) $lockedContact->getKey(),
+            ], $request->user());
+
+            return $lockedUser;
         });
 
         return redirect()->route('budget.me.focal-units.index', ['contact_id' => $contact->id])
             ->with('success', $contact->focal_person_name." is linked as the organization's M&E Officer.");
     }
 
-    public function unlinkAccount(MeFocalUnitContact $contact)
+    public function unlinkAccount(Request $request, MeFocalUnitContact $contact)
     {
-        $contact->update(['user_id' => null]);
+        DB::transaction(function () use ($contact, $request): void {
+            $lockedContact = MeFocalUnitContact::query()->whereKey($contact->getKey())->lockForUpdate()->firstOrFail();
+            $formerUserId = $lockedContact->user_id;
+            $lockedContact->update(['user_id' => null]);
+            $this->audit->required($request, 'think_tank.me_focal_account.unlinked', 'Think tank M&E focal contact unlinked from a portal user.', [
+                'tenant_id' => (string) $lockedContact->think_tank_member_id,
+                'target_user_id' => (string) $formerUserId,
+                'focal_contact_id' => (string) $lockedContact->getKey(),
+            ], $request->user());
+        });
 
         return redirect()->route('budget.me.focal-units.index', ['contact_id' => $contact->id])
             ->with('success', 'The formal focal-register link was removed. The user account and its access were not deleted.');

@@ -7,6 +7,8 @@ use App\Http\Controllers\Api\DiscussionForumController;
 use App\Http\Controllers\Api\DiscussionParticipantPasswordController;
 use Illuminate\Support\Facades\Route;
 
+require __DIR__.'/api/think-tank.php';
+
 if ((bool) config('api_sync.legacy_v1_enabled', false)) {
     Route::prefix('sync/v1')
         ->name('api.sync.v1.')

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Mail\ThinkTankPortalWelcome;
+use App\Models\AuMemberState;
 use App\Models\Consortium;
 use App\Models\ConsortiumActivityReport;
 use App\Models\ConsortiumDisbursementRequest;
@@ -11,19 +12,18 @@ use App\Models\ConsortiumFundAllocation;
 use App\Models\ConsortiumRiskFlag;
 use App\Models\ConsortiumThinkTank;
 use App\Models\ConsortiumWorkplan;
-use App\Models\AuMemberState;
 use App\Models\Funder;
-use App\Models\ProgramFunding;
 use App\Models\Procurement;
 use App\Models\ProcurementDisbursement;
 use App\Models\ProcurementPurchaseOrder;
-use App\Models\Role;
+use App\Models\ProgramFunding;
 use App\Models\ThinkTankProcurementPlan;
 use App\Models\ThinkTankResearchOutput;
 use App\Models\User;
+use App\Services\ThinkTank\ThinkTankInvitationService;
+use App\Services\ThinkTank\ThinkTankUserManagementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -32,6 +32,11 @@ use Throwable;
 
 class ConsortiumOperationsController extends Controller
 {
+    public function __construct(
+        private readonly ThinkTankUserManagementService $userManagement,
+        private readonly ThinkTankInvitationService $invitations,
+    ) {}
+
     public function index(Request $request)
     {
         $query = Consortium::query()
@@ -83,7 +88,7 @@ class ConsortiumOperationsController extends Controller
         }
 
         if ($request->filled('q')) {
-            $search = '%' . trim((string) $request->input('q')) . '%';
+            $search = '%'.trim((string) $request->input('q')).'%';
             $query->where(function ($builder) use ($search) {
                 $builder->where('name', 'like', $search)
                     ->orWhere('code', 'like', $search)
@@ -184,57 +189,38 @@ class ConsortiumOperationsController extends Controller
         $initialDisbursedAmount = (float) ($data['initial_disbursed_amount'] ?? 0);
         unset($data['initial_disbursed_amount']);
 
-        $temporaryPassword = null;
         $portalUser = null;
+        $portalUserCreated = false;
 
         if (empty($data['portal_user_id']) && ! empty($data['email'])) {
-            $roleId = Role::where('name', 'Think Tank User')->value('id');
-            $generatedPassword = Str::password(14);
-            $user = User::firstOrCreate(
-                ['email' => Str::lower($data['email'])],
-                [
-                    'name' => $data['name'],
-                    'password' => Hash::make($generatedPassword),
-                    'user_type' => 'think_tank',
-                    'role_id' => $roleId,
-                    'must_change_password' => true,
-                ]
+            $resolved = $this->userManagement->resolveOrCreateUnassignedAdministrator(
+                $data['name'],
+                $data['email'],
             );
-
-            if ($user->wasRecentlyCreated) {
-                $temporaryPassword = $generatedPassword;
-            }
-
-            if ($user->user_type !== 'think_tank') {
-                return back()->withErrors(['email' => 'This email cannot be used for a think tank portal account.']);
-            }
-
-            $user->update([
-                'role_id' => $user->role_id ?: $roleId,
-                'think_tank_access_level' => User::THINK_TANK_ACCESS_ADMIN,
-            ]);
-            $data['portal_user_id'] = $user->id;
-            $portalUser = $user;
+            $portalUser = $resolved['user'];
+            $portalUserCreated = $resolved['created'];
+            $data['portal_user_id'] = $portalUser->id;
         } elseif (! empty($data['portal_user_id'])) {
-            $portalUser = User::find($data['portal_user_id']);
-
-            if ($portalUser && $portalUser->user_type !== 'think_tank') {
-                return back()->withErrors(['portal_user_id' => 'This account cannot be used for the think tank portal.']);
-            }
+            $portalUser = User::query()->findOrFail($data['portal_user_id']);
+            $this->userManagement->assertCanBeAssignedToMembership($portalUser);
         }
 
-        $member = ConsortiumThinkTank::create($data);
+        $assignment = DB::transaction(function () use ($data, $portalUser): array {
+            $member = ConsortiumThinkTank::query()->create($data);
+            $assignedUser = $portalUser
+                ? $this->userManagement->assignAdministrator($portalUser, $member)
+                : null;
 
-        $portalUser?->update([
-            'think_tank_member_id' => $member->id,
-            'think_tank_access_level' => User::THINK_TANK_ACCESS_ADMIN,
-        ]);
+            return ['member' => $member, 'user' => $assignedUser];
+        });
+        $member = $assignment['member'];
+        $portalUser = $assignment['user'];
 
         if ($initialDisbursedAmount > 0) {
             ConsortiumFundAllocation::create([
                 'consortium_id' => $consortium->id,
                 'think_tank_member_id' => $member->id,
-                'budget_line' => 'Initial disbursement to ' . $member->name,
+                'budget_line' => 'Initial disbursement to '.$member->name,
                 'currency' => 'USD',
                 'amount_allocated' => $initialDisbursedAmount,
                 'amount_disbursed' => $initialDisbursedAmount,
@@ -244,17 +230,17 @@ class ConsortiumOperationsController extends Controller
         }
 
         $message = 'Think tank added to consortium.';
-        if ($temporaryPassword) {
-            $message .= ' Temporary portal password: ' . $temporaryPassword;
-        }
 
         if ($portalUser?->email) {
-            $mailSent = $this->sendThinkTankWelcomeSafely($portalUser, $member, $consortium, $temporaryPassword);
-            if (! $mailSent) {
-                $message .= $temporaryPassword
-                    ? ' Email delivery failed, so share the temporary password manually.'
-                    : ' Email delivery failed.';
-            }
+            $mailSent = $portalUserCreated
+                ? $this->invitations->send($portalUser, true)
+                : $this->sendThinkTankWelcomeSafely($portalUser, $member, $consortium);
+            $message .= match (true) {
+                $portalUserCreated && $mailSent => ' A secure, single-use password setup link was sent.',
+                $portalUserCreated => ' The account was created, but its secure invitation could not be delivered. Ask the user to use Forgot password.',
+                $mailSent => ' The existing account was notified; its password was not changed.',
+                default => ' The existing account password was not changed, but the access notification could not be delivered.',
+            };
         }
 
         return back()->with('success', $message);
@@ -630,13 +616,13 @@ class ConsortiumOperationsController extends Controller
 
     private function nextCode(string $prefix): string
     {
-        return $prefix . '-' . now()->format('Ymd') . '-' . Str::upper(Str::random(5));
+        return $prefix.'-'.now()->format('Ymd').'-'.Str::upper(Str::random(5));
     }
 
-    private function sendThinkTankWelcomeSafely(User $user, ConsortiumThinkTank $member, Consortium $consortium, ?string $temporaryPassword): bool
+    private function sendThinkTankWelcomeSafely(User $user, ConsortiumThinkTank $member, Consortium $consortium): bool
     {
         try {
-            Mail::to($user->email)->send(new ThinkTankPortalWelcome($member, $consortium, $user, $temporaryPassword));
+            Mail::to($user->email)->send(new ThinkTankPortalWelcome($member, $consortium, $user));
 
             return true;
         } catch (Throwable $exception) {
@@ -646,15 +632,6 @@ class ConsortiumOperationsController extends Controller
                 'consortium_id' => $consortium->id,
                 'error' => $exception->getMessage(),
             ]);
-
-            if (app()->environment(['local', 'testing']) && $temporaryPassword) {
-                Log::info('Local development think tank temporary password fallback.', [
-                    'email' => $user->email,
-                    'temporary_password' => $temporaryPassword,
-                    'think_tank' => $member->name,
-                    'consortium' => $consortium->name,
-                ]);
-            }
 
             return false;
         }

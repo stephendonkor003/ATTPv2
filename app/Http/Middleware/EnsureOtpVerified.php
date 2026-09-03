@@ -49,7 +49,7 @@ class EnsureOtpVerified
         }
 
         // Skip if user doesn't require OTP verification
-        if (! $user->requiresOtpVerification()) {
+        if (! $user->isThinkTankUser() && ! $user->requiresOtpVerification()) {
             return $next($request);
         }
 

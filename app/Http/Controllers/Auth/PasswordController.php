@@ -15,6 +15,12 @@ class PasswordController extends Controller
      */
     public function update(Request $request): RedirectResponse
     {
+        // During coexistence, Think Tank credentials must use the same locked,
+        // revoking and audited transition flow as the dedicated security form.
+        if ($request->user()->isThinkTankUser()) {
+            return app(SecurityController::class)->submitPasswordChange($request);
+        }
+
         $validated = $request->validateWithBag('updatePassword', [
             'current_password' => ['required', 'current_password'],
             'password' => ['required', Password::defaults(), 'confirmed'],

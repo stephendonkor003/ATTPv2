@@ -8,6 +8,7 @@ use App\Mail\FundingPartnerWelcome;
 use App\Models\PartnerActivityLog;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\ThinkTank\ThinkTankUserManagementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -199,6 +200,9 @@ class FunderController extends Controller
         }
 
         if ($funder->portalUser) {
+            app(ThinkTankUserManagementService::class)
+                ->assertNotManagedPortalIdentity($funder->portalUser, 'contact_email');
+
             $funder->portalUser->update([
                 'name' => $validated['contact_person'] ?: $funder->name,
                 'email' => $validated['contact_email'],
@@ -284,6 +288,11 @@ class FunderController extends Controller
 
             $user = User::whereRaw('LOWER(email) = ?', [$email])->first();
             $plainPassword = null;
+
+            if ($user) {
+                app(ThinkTankUserManagementService::class)
+                    ->assertNotManagedPortalIdentity($user, 'portal_users');
+            }
 
             if ($user && $user->user_type !== 'funding_partner') {
                 \Log::warning('Skipped partner portal user because email belongs to a non-partner user.', [

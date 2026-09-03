@@ -2540,10 +2540,13 @@ class EvaluationReportController extends Controller
             ->map(function ($group) {
                 $evaluation = $group->first()->evaluation;
                 $evaluation->loadMissing('sections.criteria');
+                $criteria = $evaluation->sections->flatMap(fn ($section) => $section->criteria);
+                $evaluatorCriterionComparison = $evaluation->usesNumericScoring()
+                    ? $this->buildEvaluatorCriterionComparisons($criteria, $group)
+                    : [];
 
-                $criteriaStats = $evaluation->sections
-                    ->flatMap(fn ($section) => $section->criteria)
-                    ->map(function ($criterion) use ($group, $evaluation) {
+                $criteriaStats = $criteria
+                    ->map(function ($criterion) use ($group, $evaluation, $evaluatorCriterionComparison) {
                         $scores = $group->flatMap(function ($submission) use ($criterion) {
                             return $submission->criteriaScores
                                 ->where('evaluation_criteria_id', $criterion->id);
@@ -2566,15 +2569,16 @@ class EvaluationReportController extends Controller
                                 $no = (int) data_get($decisions->firstWhere('value', 0), 'count', 0);
                                 $rate = $total > 0 ? round(($yes / $total) * 100, 1) : 0;
 
-                                return [
-                                    'name' => $criterion->name,
-                                    'total' => $total,
-                                    'decisions' => $decisions->all(),
-                                    'yes' => $yes,
-                                    'no' => $no,
-                                    'rate' => $rate,
-                                ];
-                            }
+                            return [
+                                'name' => $criterion->name,
+                                'total' => $total,
+                                'decisions' => $decisions->all(),
+                                'yes' => $yes,
+                                'no' => $no,
+                                'rate' => $rate,
+                                'evaluator_scores' => [],
+                            ];
+                        }
 
                             return [
                                 'name' => $criterion->name,
@@ -2583,6 +2587,7 @@ class EvaluationReportController extends Controller
                                 'qualified' => (int) data_get($decisions->firstWhere('value', 2), 'count', 0),
                                 'average_qualified' => (int) data_get($decisions->firstWhere('value', 1), 'count', 0),
                                 'not_qualified' => (int) data_get($decisions->firstWhere('value', 0), 'count', 0),
+                                'evaluator_scores' => [],
                             ];
                         }
 
@@ -2593,6 +2598,7 @@ class EvaluationReportController extends Controller
                             'max' => $criterion->max_score,
                             'avg' => $avg,
                             'total' => $scores->count(),
+                            'evaluator_scores' => $evaluatorCriterionComparison[(string) $criterion->id] ?? [],
                         ];
                     });
 
@@ -2609,6 +2615,71 @@ class EvaluationReportController extends Controller
                 ];
             })
             ->values();
+    }
+
+    private function buildEvaluatorCriterionComparisons($criteria, $submissions): array
+    {
+        $latestSubmissions = $submissions
+            ->filter(fn (EvaluationSubmission $submission): bool => filled($submission->evaluator_id) && filled($submission->form_submission_id))
+            ->groupBy(fn (EvaluationSubmission $submission): string => (string) $submission->evaluator_id)
+            ->map(function ($evaluatorSubmissions) {
+                return $evaluatorSubmissions
+                    ->groupBy(fn (EvaluationSubmission $submission): string => (string) $submission->form_submission_id)
+                    ->map(fn ($applicantSubmissions) => $applicantSubmissions
+                        ->sortByDesc(fn (EvaluationSubmission $submission): int => $submission->submitted_at?->getTimestamp() ?? 0)
+                        ->first()
+                    )
+                    ->filter()
+                    ->values();
+            })
+            ->values()
+            ->flatten(1)
+            ->values();
+
+        return collect($criteria)
+            ->mapWithKeys(function ($criterion) use ($latestSubmissions) {
+                $evaluatorRows = $latestSubmissions
+                    ->groupBy(fn (EvaluationSubmission $submission): string => (string) $submission->evaluator_id)
+                    ->map(function ($evaluatorSubmissions) use ($criterion) {
+                        $evaluatorSubmissions = $evaluatorSubmissions->values();
+                        $criterionScores = $evaluatorSubmissions->flatMap(function ($submission) use ($criterion) {
+                            return $submission->criteriaScores->filter(function ($score) use ($criterion) {
+                                return (string) $score->evaluation_criteria_id === (string) $criterion->id
+                                    && $score->score !== null;
+                            });
+                        });
+
+                        $applicantCount = $evaluatorSubmissions
+                            ->pluck('form_submission_id')
+                            ->filter()
+                            ->unique()
+                            ->count();
+
+                        if ($criterionScores->isEmpty() || $applicantCount === 0) {
+                            return null;
+                        }
+
+                        if ((float) $criterion->max_score <= 0) {
+                            return null;
+                        }
+
+                        $evaluator = $evaluatorSubmissions->first()?->evaluator;
+
+                        return [
+                            'evaluator' => $evaluator?->name ?: 'Unassigned',
+                            'evaluator_email' => $evaluator?->email,
+                            'applicants' => $applicantCount,
+                            'percentage' => round(($criterionScores->avg('score') / (float) $criterion->max_score) * 100, 1),
+                        ];
+                    })
+                    ->filter()
+                    ->sortByDesc('percentage')
+                    ->values()
+                    ->all();
+
+                return [(string) $criterion->id => $evaluatorRows];
+            })
+            ->all();
     }
 
     private function numericOverallScores($submissions)

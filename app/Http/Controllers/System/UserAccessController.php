@@ -3,22 +3,23 @@
 namespace App\Http\Controllers\System;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
-use App\Models\Role;
-use App\Models\Permission;
+use App\Mail\UserAccountCreated;
+use App\Mail\UserPasswordReset;
+use App\Mail\VendorAccountCreated;
+use App\Models\AuMemberState;
 use App\Models\GovernanceNode;
 use App\Models\GovernanceReportingLine;
-use App\Models\AuMemberState;
+use App\Models\Permission;
+use App\Models\Role;
+use App\Models\User;
 use App\Models\VendorCategory;
+use App\Services\ThinkTank\ThinkTankUserManagementService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
-use App\Mail\UserAccountCreated;
-use App\Mail\VendorAccountCreated;
-use App\Mail\UserPasswordReset;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Throwable;
 
@@ -33,6 +34,11 @@ class UserAccessController extends Controller
 
         return view('system.users.index', [
             'users' => User::with(['role.permissions', 'governanceNode', 'memberState'])
+                ->where(fn ($query) => $query
+                    ->whereNull('user_type')
+                    ->orWhere('user_type', '!=', 'think_tank'))
+                ->whereNull('think_tank_member_id')
+                ->whereDoesntHave('thinkTankMembership')
                 ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                     $query->whereIn('governance_node_id', $scopedNodeIds);
                 })
@@ -63,8 +69,8 @@ class UserAccessController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name'    => 'required|string|max:255',
-            'email'   => 'required|email',
+            'name' => 'required|string|max:255',
+            'email' => 'required|email',
             'role_id' => [
                 Rule::requiredIf(fn () => $request->input('user_type') !== 'vendor'),
                 'nullable',
@@ -153,14 +159,14 @@ class UserAccessController extends Controller
         $plainPassword = str()->random(10);
 
         $user = User::create([
-            'name'                 => $request->name,
-            'email'                => $request->email,
-            'password'             => Hash::make($plainPassword),
-            'role_id'              => $isVendor ? null : $request->role_id,
-            'governance_node_id'   => $isVendor ? null : $request->input('governance_node_id'),
-            'member_state_id'      => $validated['user_type'] === 'member_state' ? $request->input('member_state_id') : null,
-            'user_type'            => $validated['user_type'],
-            'vendor_category'      => $isVendor ? ($validated['vendor_category'] ?? null) : null,
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($plainPassword),
+            'role_id' => $isVendor ? null : $request->role_id,
+            'governance_node_id' => $isVendor ? null : $request->input('governance_node_id'),
+            'member_state_id' => $validated['user_type'] === 'member_state' ? $request->input('member_state_id') : null,
+            'user_type' => $validated['user_type'],
+            'vendor_category' => $isVendor ? ($validated['vendor_category'] ?? null) : null,
             'must_change_password' => true,
         ]);
 
@@ -183,7 +189,7 @@ class UserAccessController extends Controller
             ->route($redirectRoute)
             ->with('success', $mailSent
                 ? ($isVendor ? 'Vendor account created successfully.' : 'User account created successfully.')
-                : (($isVendor ? 'Vendor account created successfully' : 'User account created successfully') . ", but email delivery failed. Temporary password: {$plainPassword}"));
+                : (($isVendor ? 'Vendor account created successfully' : 'User account created successfully').", but email delivery failed. Temporary password: {$plainPassword}"));
     }
 
     /* ======================================================
@@ -211,8 +217,8 @@ class UserAccessController extends Controller
         $this->assertUserInScope($user);
 
         $validated = $request->validate([
-            'name'    => 'required|string|max:255',
-            'email'   => 'required|email|unique:users,email,' . $user->id,
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email,'.$user->id,
             'role_id' => [
                 Rule::requiredIf(fn () => $request->input('user_type') !== 'vendor'),
                 'nullable',
@@ -263,8 +269,8 @@ class UserAccessController extends Controller
         }
 
         $user->update([
-            'name'    => $request->name,
-            'email'   => $request->email,
+            'name' => $request->name,
+            'email' => $request->email,
             'role_id' => $isVendor ? null : $request->role_id,
             'user_type' => $validated['user_type'],
             'governance_node_id' => $isVendor ? null : $request->input('governance_node_id'),
@@ -375,7 +381,7 @@ class UserAccessController extends Controller
         ]);
 
         $statusMessage = $disabledUntil
-            ? 'User login blocked temporarily until ' . $disabledUntil->format('d M Y H:i') . '.'
+            ? 'User login blocked temporarily until '.$disabledUntil->format('d M Y H:i').'.'
             : 'User login blocked permanently.';
 
         return back()->with('success', $statusMessage);
@@ -417,6 +423,7 @@ class UserAccessController extends Controller
 
             if ($user->id === auth()->id() || $user->isAdmin() || $user->isSuperAdmin()) {
                 $skipped++;
+
                 continue;
             }
 
@@ -487,7 +494,7 @@ class UserAccessController extends Controller
         $this->assertUserInScope($user);
 
         return view('system.users.permissions', [
-            'user'        => $user,
+            'user' => $user,
             'permissions' => Permission::orderBy('module')->get()->groupBy('module'),
         ]);
     }
@@ -507,11 +514,11 @@ class UserAccessController extends Controller
     {
         $currentUser = Auth::user();
 
-        if (!$currentUser || $currentUser->isAdmin() || $currentUser->isSuperAdmin()) {
+        if (! $currentUser || $currentUser->isAdmin() || $currentUser->isSuperAdmin()) {
             return null;
         }
 
-        if (!$currentUser->governance_node_id) {
+        if (! $currentUser->governance_node_id) {
             return [];
         }
 
@@ -520,7 +527,9 @@ class UserAccessController extends Controller
 
     private function allowedUserTypes(): array
     {
-        return ['admin', 'staff', 'member_state', 'vendor', 'funding_partner', 'think_tank', 'evaluator', 'ttl'];
+        // Think Tank identities are tenant-bound and may only be created or
+        // changed through the dedicated, audited portal-user service.
+        return ['admin', 'staff', 'member_state', 'vendor', 'funding_partner', 'evaluator', 'ttl'];
     }
 
     private function availableNodes()
@@ -536,12 +545,15 @@ class UserAccessController extends Controller
 
     private function assertUserInScope(User $user): void
     {
+        app(ThinkTankUserManagementService::class)
+            ->assertNotManagedPortalIdentity($user);
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
         }
 
-        if (!$user->governance_node_id || !in_array($user->governance_node_id, $scopedNodeIds, true)) {
+        if (! $user->governance_node_id || ! in_array($user->governance_node_id, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to manage this user.');
         }
     }
@@ -553,7 +565,7 @@ class UserAccessController extends Controller
             return;
         }
 
-        if (!in_array($nodeId, $scopedNodeIds, true)) {
+        if (! in_array($nodeId, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to assign this governance node.');
         }
     }
@@ -612,7 +624,7 @@ class UserAccessController extends Controller
             $seen[$current] = true;
 
             foreach ($children[(string) $current] ?? [] as $childId) {
-                if (!isset($seen[$childId])) {
+                if (! isset($seen[$childId])) {
                     $stack[] = $childId;
                 }
             }

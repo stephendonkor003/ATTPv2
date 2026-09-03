@@ -65,21 +65,10 @@
         @if($errors->any())
             <div class="ttu-alert error" role="alert"><i class="feather-alert-circle"></i><div><strong>Please check the information provided</strong><p>{{ $errors->first() }}</p></div></div>
         @endif
-        @if(session('temporary_password'))
-            <div class="ttu-alert password" role="status">
-                <i class="feather-key"></i>
-                <div>
-                    <strong>Temporary password for {{ session('temporary_password_user') ?: 'the user' }} — copy it now</strong>
-                    <p>This password is shown once. The user must change it after signing in.</p>
-                    <div class="ttu-password-line"><code data-temporary-password>{{ session('temporary_password') }}</code><button class="ttu-btn" type="button" data-copy-password><i class="feather-copy"></i> Copy password</button></div>
-                </div>
-            </div>
-        @endif
-
         <section class="ttu-workspace">
             <aside id="create-think-tank-user" class="ttu-panel ttu-create">
                 <header class="ttu-panel-head">
-                    <div><div class="ttu-kicker">New portal account</div><h2>Create a Think Tank user</h2><p>Credentials are emailed and the temporary password must be changed.</p></div>
+                    <div><div class="ttu-kicker">New portal account</div><h2>Create a Think Tank user</h2><p>A secure, single-use password setup link is sent to the user. No password is displayed or emailed.</p></div>
                     <span class="ttu-panel-icon"><i class="feather-user-plus"></i></span>
                 </header>
                 <form class="ttu-form" method="POST" action="{{ route('system.think-tank-users.store') }}">
@@ -124,7 +113,7 @@
 
             <section class="ttu-panel ttu-directory">
                 <header class="ttu-panel-head">
-                    <div><div class="ttu-kicker">User directory</div><h2>Manage Think Tank access</h2><p>Find an account, change its organization or officer role, disable access, or issue a new password.</p></div>
+                    <div><div class="ttu-kicker">User directory</div><h2>Manage Think Tank access</h2><p>Find an account, change its organization or officer role, disable access, or open its secure reset controls.</p></div>
                     <span class="ttu-panel-icon"><i class="feather-users"></i></span>
                 </header>
                 <div class="ttu-filter-shell">
@@ -162,18 +151,7 @@
             </section>
         </section>
 
-        <div class="ttu-audit-note"><i class="feather-shield"></i><span>Account creation, role changes, organization reassignment, login disabling and password resets are recorded in the audit trail.</span></div>
+        <div class="ttu-audit-note"><i class="feather-shield"></i><span>Account creation, role changes, organization reassignment, login disabling, administrator password revocations and reset-link delivery are recorded in the audit trail.</span></div>
     </main>
 </div>
 @endsection
-
-@push('scripts')
-<script>
-document.querySelector('[data-copy-password]')?.addEventListener('click', async event => {
-    const password = document.querySelector('[data-temporary-password]')?.textContent?.trim();
-    if (!password) return;
-    await navigator.clipboard.writeText(password);
-    event.currentTarget.innerHTML = '<i class="feather-check"></i> Copied';
-});
-</script>
-@endpush

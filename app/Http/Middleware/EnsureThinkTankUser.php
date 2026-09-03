@@ -2,12 +2,23 @@
 
 namespace App\Http\Middleware;
 
+use App\Exceptions\ThinkTankApiException;
+use App\Services\ThinkTank\ThinkTankAccountAccessService;
+use App\Services\ThinkTank\ThinkTankProductionSecurityService;
+use App\Services\ThinkTank\ThinkTankSessionService;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureThinkTankUser
 {
+    public function __construct(
+        private readonly ThinkTankAccountAccessService $accounts,
+        private readonly ThinkTankSessionService $sessions,
+        private readonly ThinkTankProductionSecurityService $productionSecurity,
+    ) {}
+
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
@@ -20,23 +31,24 @@ class EnsureThinkTankUser
             abort(403, 'Access denied. This area is restricted to think tank portal users only.');
         }
 
-        if ($user->is_blacklisted || $user->hasActiveLoginBlock()) {
-            abort(403, 'This portal account is not currently available.');
+        try {
+            $this->sessions->assertProductionSecurityStores();
+            $this->productionSecurity->assertRuntimeConfiguration();
+            $membership = $this->accounts->membership($user);
+
+            if (! $this->sessions->hasValidCurrentSession($user, $request)) {
+                throw $this->accounts->unavailable();
+            }
+        } catch (ThinkTankApiException) {
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('login')
+                ->withErrors(['email' => 'This Think Tank portal session is no longer available. Please sign in again.']);
         }
 
-        $membership = $user->resolvedThinkTankMembership();
-
-        if (! $membership) {
-            abort(403, 'Your think tank account is not linked to a consortium membership yet.');
-        }
-
-        if ($membership->status !== 'active') {
-            abort(403, 'Your think tank membership is not currently active.');
-        }
-
-        if (! $user->resolvedThinkTankAccessLevel()) {
-            abort(403, 'Your think tank portal access level has not been assigned.');
-        }
+        $request->attributes->set('think_tank.membership', $membership);
 
         return $next($request);
     }

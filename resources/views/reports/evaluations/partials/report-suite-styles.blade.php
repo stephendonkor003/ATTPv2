@@ -206,6 +206,14 @@
     .evr-table { border-collapse: collapse; min-width: 760px; width: 100%; }
     .evr-table th { background: #f5f8fa; color: #4d6275; font-size: 10px; font-weight: 800; letter-spacing: .05em; padding: 9px 11px; text-align: left; text-transform: uppercase; }
     .evr-table td { border-top: 1px solid #e6ebf0; color: #41586b; font-size: 11px; padding: 10px 11px; vertical-align: middle; }
+    .evr-criteria-charts { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-top: 14px; }
+    .evr-chart-card { background: #fbfdff; border-top: 1px solid var(--evr-line); padding: 12px; }
+    .evr-chart-card__head { align-items: center; display: flex; justify-content: space-between; margin-bottom: 10px; }
+    .evr-chart-card__head h4 { color: var(--evr-ink); font-size: 11px; margin: 0; }
+    .evr-chart-card__head span { color: #5a6f81; display: inline-flex; font-size: 10px; font-weight: 800; }
+    .evr-chart-wrap { height: 220px; position: relative; }
+    .evr-chart-wrap canvas { width: 100% !important; height: 100% !important; }
+    .evr-chart-empty { align-items: center; background: #f7fbfc; border: 1px dashed #dbe5ec; border-radius: 10px; color: #5e6f80; display: flex; font-size: 11px; justify-content: center; min-height: 165px; padding: 16px; text-align: center; }
     .evr-table tbody tr:hover { background: #fbfdfd; }
     .evr-table td strong { color: var(--evr-ink); display: block; font-size: 11px; }
     .evr-table td small { color: #596d7f; display: block; font-size: 10px; margin-top: 2px; }
@@ -251,6 +259,7 @@
         .evr-toolbar { grid-template-columns: 1fr 1fr; }
         .evr-field--search { grid-column: 1 / -1; }
         .evr-procurement-card__action { grid-column: auto; justify-content: flex-start; }
+        .evr-criteria-charts { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 680px) {
@@ -286,6 +295,7 @@
         .evr-panel { overflow: visible; }
         .evr-table-wrap { overflow: visible; }
         .evr-table { font-size: 8px; min-width: 0; }
+        .evr-criteria-charts { display: none; }
         .evr-section { margin-top: 12px; }
     }
 

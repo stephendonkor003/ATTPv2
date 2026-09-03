@@ -2,15 +2,16 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Exceptions\ThinkTankApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
-use App\Mail\Security\LoginOtpMail;
-use App\Models\UserLoginOtp;
+use App\Services\ThinkTank\ThinkTankAccountAccessService;
+use App\Services\ThinkTank\ThinkTankMfaService;
+use App\Services\ThinkTank\ThinkTankProductionSecurityService;
+use App\Services\ThinkTank\ThinkTankSessionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
 use Throwable;
 
@@ -73,10 +74,28 @@ class AuthenticatedSessionController extends Controller
 
                 $until = optional($user->disabled_until)->format('d M Y H:i');
                 $message = $until
-                    ? 'Your account is temporarily blocked until ' . $until . '. Please contact the administrator.'
+                    ? 'Your account is temporarily blocked until '.$until.'. Please contact the administrator.'
                     : 'Your account has been blocked. Please contact the administrator.';
+
                 return redirect()->route('login')
                     ->withErrors(['email' => $message]);
+            }
+        }
+
+        if ($user->user_type === 'think_tank') {
+            try {
+                $sessions = app(ThinkTankSessionService::class);
+                $sessions->assertProductionSecurityStores();
+                app(ThinkTankProductionSecurityService::class)->assertRuntimeConfiguration();
+                app(ThinkTankAccountAccessService::class)->membership($user);
+                $sessions->bindCurrentSession($user, $request);
+            } catch (ThinkTankApiException) {
+                Auth::guard('web')->logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                return redirect()->route('login')
+                    ->withErrors(['email' => 'This Think Tank portal account is not currently available.']);
             }
         }
 
@@ -86,6 +105,7 @@ class AuthenticatedSessionController extends Controller
             if ($user->user_type === 'funding_partner' || $user->isFundingPartner()) {
                 return redirect()->intended(route('partner.dashboard', absolute: false));
             }
+
             return redirect()->intended(route('dashboard', absolute: false));
         }
 
@@ -95,13 +115,13 @@ class AuthenticatedSessionController extends Controller
         }
 
         // Generate and send OTP for non-admin users
-        if ($user->requiresOtpVerification()) {
+        if ($user->isThinkTankUser() || $user->requiresOtpVerification()) {
             $otpSent = $this->sendLoginOtp($user, $request->session()->getId());
             $redirect = redirect()->route('security.otp.show')
                 ->with('otpSent', $otpSent);
 
             if (! $otpSent) {
-                $redirect->with('warning', 'The email service is currently unavailable. In local development, use the verification code shown below or in the Laravel log.');
+                $redirect->with('warning', 'The email service is currently unavailable. In local development, use the verification code shown below.');
             }
 
             return $redirect;
@@ -139,31 +159,12 @@ class AuthenticatedSessionController extends Controller
      */
     protected function sendLoginOtp($user, ?string $sessionId = null): bool
     {
-        // Generate new OTP
-        $otp = UserLoginOtp::generateFor($user, $sessionId);
-
         try {
-            Mail::to($user->email)->send(
-                new LoginOtpMail($user, $otp->otp_code)
-            );
+            app(ThinkTankMfaService::class)->send(request(), $user, true);
 
             return true;
         } catch (Throwable $exception) {
-            Log::warning('Login OTP email could not be sent.', [
-                'user_id' => $user->id,
-                'email' => $user->email,
-                'mailer' => config('mail.default'),
-                'error' => $exception->getMessage(),
-            ]);
-
-            if (app()->environment(['local', 'testing'])) {
-                session()->flash('devOtpCode', $otp->otp_code);
-                Log::info('Local development OTP fallback code.', [
-                    'user_id' => $user->id,
-                    'email' => $user->email,
-                    'otp_code' => $otp->otp_code,
-                ]);
-            }
+            report($exception);
 
             return false;
         }

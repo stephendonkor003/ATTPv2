@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use Closure;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
@@ -29,8 +30,8 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email'    => ['required', 'string', 'email', 'max:255'],
-            'password' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255'],
+            'password' => ['bail', 'required', 'string', 'max:4096', $this->passwordByteRule()],
         ];
     }
 
@@ -60,6 +61,10 @@ class LoginRequest extends FormRequest
 
         if (! $authenticated) {
             RateLimiter::hit($this->throttleKey());
+            RateLimiter::hit(
+                $this->accountThrottleKey(),
+                (int) config('think_tank_portal.login_email_decay_seconds', 900),
+            );
 
             throw ValidationException::withMessages([
                 'email' => trans('auth.failed'),
@@ -67,6 +72,12 @@ class LoginRequest extends FormRequest
         }
 
         RateLimiter::clear($this->throttleKey());
+
+        // Think Tank failures remain account-limited until the complete MFA
+        // ceremony succeeds. Other legacy account types retain prior behavior.
+        if (! Auth::user()?->isThinkTankUser()) {
+            RateLimiter::clear($this->accountThrottleKey());
+        }
     }
 
     /**
@@ -76,13 +87,19 @@ class LoginRequest extends FormRequest
      */
     public function ensureIsNotRateLimited(): void
     {
-        if (! RateLimiter::tooManyAttempts($this->throttleKey(), 5)) {
+        $accountMaximum = (int) config('think_tank_portal.login_email_max_attempts', 20);
+
+        if (! RateLimiter::tooManyAttempts($this->throttleKey(), 5)
+            && ! RateLimiter::tooManyAttempts($this->accountThrottleKey(), $accountMaximum)) {
             return;
         }
 
         event(new Lockout($this));
 
-        $seconds = RateLimiter::availableIn($this->throttleKey());
+        $seconds = max(
+            RateLimiter::availableIn($this->throttleKey()),
+            RateLimiter::availableIn($this->accountThrottleKey()),
+        );
 
         throw ValidationException::withMessages([
             'email' => trans('auth.throttle', [
@@ -98,5 +115,22 @@ class LoginRequest extends FormRequest
     public function throttleKey(): string
     {
         return Str::transliterate(Str::lower($this->string('email')).'|'.$this->ip());
+    }
+
+    public function accountThrottleKey(): string
+    {
+        $email = mb_strtolower(trim($this->string('email')->toString()));
+
+        return 'think-tank-login-account:'.hash('sha256', $email);
+    }
+
+    private function passwordByteRule(): Closure
+    {
+        return static function (string $attribute, mixed $value, Closure $fail): void {
+            if (is_string($value)
+                && strlen($value) > (int) config('think_tank_portal.password_max_bytes', 72)) {
+                $fail('The :attribute must not exceed 72 bytes.');
+            }
+        };
     }
 }

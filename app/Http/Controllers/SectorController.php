@@ -8,6 +8,7 @@ use App\Models\GovernanceReportingLine;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\PortfolioLeaderAssignmentNotificationService;
+use App\Services\ThinkTank\ThinkTankUserManagementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -349,6 +350,9 @@ class SectorController extends Controller
             return null;
         }
 
+        app(ThinkTankUserManagementService::class)
+            ->assertNotManagedPortalIdentity($existingUser, 'portfolio_manager_email');
+
         $targetRoleName = $validated['portfolio_manager_role'];
         $isCurrentLeader = $sector
             && (string) $sector->portfolio_manager_user_id === (string) $existingUser->id;
@@ -392,14 +396,21 @@ class SectorController extends Controller
         $existingUser = $this->findUserByEmail($validated['portfolio_manager_email']);
 
         if ($existingUser) {
-            $existingUser->update([
-                'name' => $validated['portfolio_manager_name'],
-                'role_id' => $targetRole->id,
-                'governance_node_id' => $validated['governance_node_id'],
-                'member_state_id' => null,
-                'user_type' => 'staff',
-                'vendor_category' => null,
-            ]);
+            $existingUser = DB::transaction(function () use ($existingUser, $targetRole, $validated): User {
+                $lockedUser = User::query()->whereKey($existingUser->getKey())->lockForUpdate()->firstOrFail();
+                app(ThinkTankUserManagementService::class)
+                    ->assertNotManagedPortalIdentity($lockedUser, 'portfolio_manager_email');
+                $lockedUser->update([
+                    'name' => $validated['portfolio_manager_name'],
+                    'role_id' => $targetRole->id,
+                    'governance_node_id' => $validated['governance_node_id'],
+                    'member_state_id' => null,
+                    'user_type' => 'staff',
+                    'vendor_category' => null,
+                ]);
+
+                return $lockedUser;
+            });
 
             return [
                 'user' => $existingUser->fresh(['role']),

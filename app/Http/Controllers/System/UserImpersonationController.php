@@ -7,6 +7,7 @@ use App\Models\Program;
 use App\Models\SystemAuditLog;
 use App\Models\User;
 use App\Support\UserImpersonation;
+use App\Services\ThinkTank\ThinkTankUserManagementService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -33,6 +34,9 @@ class UserImpersonationController extends Controller
         if ((string) $administrator->id === (string) $user->id) {
             return back()->with('error', 'You cannot log in as your own account.');
         }
+
+        app(ThinkTankUserManagementService::class)
+            ->assertNotManagedPortalIdentity($user);
 
         if ($user->isAdmin() || $user->isSuperAdmin()) {
             return back()->with('error', 'Administrator accounts cannot be impersonated.');

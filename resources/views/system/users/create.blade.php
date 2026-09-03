@@ -222,7 +222,6 @@
                                             'member_state' => 'Member State',
                                             'vendor' => 'Vendor',
                                             'funding_partner' => 'Funding Partner',
-                                            'think_tank' => 'Think Tank',
                                             'evaluator' => 'Evaluator',
                                             'ttl' => 'Task Team Leader',
                                             'admin' => 'Admin',

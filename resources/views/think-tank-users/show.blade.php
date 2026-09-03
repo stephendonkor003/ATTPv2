@@ -24,6 +24,8 @@
         'think_tank_user_created' => 'feather-user-plus',
         'think_tank_user_updated' => 'feather-edit-3',
         'think_tank_user_password_reset' => 'feather-key',
+        'think_tank_user_password_reset_requested' => 'feather-mail',
+        'think_tank_user_password_reset_initiated' => 'feather-shield',
     ];
 @endphp
 
@@ -52,10 +54,6 @@
 
         @if(session('success'))<div class="ttud-alert" role="status"><i class="feather-check-circle"></i><div><strong>Action completed</strong><p>{{ session('success') }}</p></div></div>@endif
         @if($errors->any())<div class="ttud-alert error" role="alert"><i class="feather-alert-circle"></i><div><strong>Please review the highlighted information</strong><p>{{ $errors->first() }}</p></div></div>@endif
-        @if(session('temporary_password'))
-            <div class="ttud-alert password" role="status"><i class="feather-key"></i><div><strong>New temporary password — copy it now</strong><p>The user must change this password after signing in.</p><div class="ttud-password"><code data-temporary-password>{{ session('temporary_password') }}</code><button class="ttud-btn" type="button" data-copy-password><i class="feather-copy"></i> Copy password</button></div></div></div>
-        @endif
-
         <section class="ttud-grid">
             <div id="edit-account" class="ttud-panel">
                 <header class="ttud-panel-head"><div><div class="ttud-kicker">Account details</div><h2>View and edit user information</h2><p>Update the user’s identity, email address, organization, portal role and login status.</p></div><span class="ttud-panel-icon"><i class="feather-edit"></i></span></header>
@@ -74,11 +72,11 @@
 
             <aside class="ttud-side">
                 <section class="ttud-panel">
-                    <header class="ttud-panel-head"><div><div class="ttud-kicker">Security</div><h2>Password access</h2><p>Passwords cannot be viewed. Generate a secure temporary password when access must be recovered.</p></div><span class="ttud-panel-icon"><i class="feather-lock"></i></span></header>
+                    <header class="ttud-panel-head"><div><div class="ttud-kicker">Security</div><h2>Password access</h2><p>Passwords cannot be viewed or sent. Issue a secure, single-use reset link when access must be recovered.</p></div><span class="ttud-panel-icon"><i class="feather-lock"></i></span></header>
                     <div class="ttud-security-body">
                         <div class="ttud-security-item"><span><i class="feather-key"></i></span><div><strong>{{ $user->must_change_password ? 'Password change required' : 'Password established' }}</strong><small>{{ $user->password_changed_at ? 'Last changed '.$user->password_changed_at->diffForHumans() : 'No password-change date is recorded.' }}</small></div></div>
-                        <div class="ttud-security-item"><span><i class="feather-mail"></i></span><div><strong>Credentials sent by email</strong><small>A reset generates a new password and invalidates the previous password immediately.</small></div></div>
-                        <form class="ttud-reset" method="POST" action="{{ route('system.think-tank-users.reset-password', $user) }}" onsubmit="return confirm('Generate and email a new temporary password for this user?')">@csrf<button class="ttud-btn warn" type="submit"><i class="feather-refresh-cw"></i> Reset and email password</button></form>
+                        <div class="ttud-security-item"><span><i class="feather-mail"></i></span><div><strong>Secure reset link</strong><small>An administrator reset immediately revokes the current password, MFA challenge and active sessions, then sends a single-use setup link.</small></div></div>
+                        <form class="ttud-reset" method="POST" action="{{ route('system.think-tank-users.reset-password', $user) }}" onsubmit="return confirm('Revoke this user’s current password and sessions, then send a secure reset link?')">@csrf<button class="ttud-btn warn" type="submit"><i class="feather-refresh-cw"></i> Revoke access and send reset link</button></form>
                     </div>
                 </section>
                 <section class="ttud-panel">
@@ -101,14 +99,3 @@
     </main>
 </div>
 @endsection
-
-@push('scripts')
-<script>
-document.querySelector('[data-copy-password]')?.addEventListener('click', async event => {
-    const password = document.querySelector('[data-temporary-password]')?.textContent?.trim();
-    if (!password) return;
-    await navigator.clipboard.writeText(password);
-    event.currentTarget.innerHTML = '<i class="feather-check"></i> Copied';
-});
-</script>
-@endpush

@@ -76,7 +76,7 @@
                 </header>
 
                 <div class="evr-panel__body">
-                    <div class="evr-evaluation-stack">
+                                    <div class="evr-evaluation-stack">
                         @forelse ($serviceRankingGroups as $rankingGroup)
                             @php
                                 $groupRankings = $rankingGroup['rankings'];
@@ -179,11 +179,11 @@
                 </header>
                 <div class="evr-panel__body">
                     <div class="evr-evaluation-stack">
-                        @forelse ($evaluationStats as $stat)
-                            <article class="evr-evaluation-card">
-                                <header class="evr-evaluation-card__head">
-                                    <div><h3>{{ $stat['evaluation']->name }}</h3><p>{{ number_format($stat['total']) }} submitted evaluation(s)</p></div>
-                                    <span class="evr-evaluation-card__badge">{{ $stat['evaluation']->typeLabel() }}</span>
+                                        @forelse ($evaluationStats as $stat)
+                                            <article class="evr-evaluation-card">
+                                                <header class="evr-evaluation-card__head">
+                                                    <div><h3>{{ $stat['evaluation']->name }}</h3><p>{{ number_format($stat['total']) }} submitted evaluation(s)</p></div>
+                                                    <span class="evr-evaluation-card__badge">{{ $stat['evaluation']->typeLabel() }}</span>
                                 </header>
                                 <div class="evr-table-wrap">
                                     <table class="evr-table">
@@ -211,10 +211,33 @@
                                                 </tr>
                                             @empty
                                                 <tr><td colspan="{{ $isServices ? 4 : 5 }}" class="text-center py-3">No criterion results are available.</td></tr>
-                                            @endforelse
-                                        </tbody>
-                                    </table>
+                                                    @endforelse
+                                                </tbody>
+                                            </table>
                                 </div>
+                                @if ($isServices)
+                                    <div class="evr-criteria-charts">
+                                        @foreach ($stat['criteria_stats'] as $criterion)
+                                            @php
+                                                $evaluatorScores = $criterion['evaluator_scores'] ?? [];
+                                                $evaluatorCount = count($evaluatorScores);
+                                            @endphp
+                                            <article class="evr-chart-card">
+                                                <header class="evr-chart-card__head">
+                                                    <h4>{{ $criterion['name'] }}</h4>
+                                                    <span>{{ $evaluatorCount }} evaluator{{ $evaluatorCount === 1 ? '' : 's' }}</span>
+                                                </header>
+                                                @if ($evaluatorCount > 0)
+                                                    <div class="evr-chart-wrap">
+                                                        <canvas class="evr-evaluator-score-chart" data-chart='{{ e(json_encode($evaluatorScores)) }}'></canvas>
+                                                    </div>
+                                                @else
+                                                    <div class="evr-chart-empty">No evaluator score data is available yet.</div>
+                                                @endif
+                                            </article>
+                                        @endforeach
+                                    </div>
+                                @endif
                             </article>
                         @empty
                             <div class="evr-empty"><span class="evr-empty__icon"><i class="feather-bar-chart-2"></i></span><h3>No evaluation data yet</h3><p>Criterion analysis appears after evaluators submit.</p></div>
@@ -273,4 +296,99 @@
 
 @push('styles')
     @include('reports.evaluations.partials.report-suite-styles')
+@endpush
+
+@push('scripts')
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (typeof Chart === 'undefined') return;
+
+            const percentageFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
+            document.querySelectorAll('.evr-evaluator-score-chart').forEach((canvas) => {
+                const rawRows = canvas.dataset.chart || '[]';
+                let rows = [];
+
+                try {
+                    rows = JSON.parse(rawRows);
+                } catch {
+                    return;
+                }
+
+                if (!Array.isArray(rows) || rows.length === 0) {
+                    return;
+                }
+
+                const labels = rows.map((row) => row.evaluator || 'Unassigned');
+                const percentages = rows.map((row) => Number(row.percentage ?? 0));
+                const applicants = rows.map((row) => Number(row.applicants ?? 0));
+                const emails = rows.map((row) => row.evaluator_email || '');
+
+                new Chart(canvas, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [{
+                            data: percentages,
+                            backgroundColor: 'rgba(15, 118, 110, 0.22)',
+                            borderColor: 'rgba(15, 118, 110, 0.92)',
+                            borderWidth: 1,
+                            borderRadius: 7,
+                        }],
+                    },
+                    options: {
+                        indexAxis: 'x',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        layout: {
+                            padding: {
+                                top: 8,
+                                right: 6,
+                                bottom: 6,
+                                left: 6,
+                            },
+                        },
+                        scales: {
+                            x: {
+                                ticks: {
+                                    autoSkip: false,
+                                    maxRotation: 35,
+                                    minRotation: 0,
+                                    color: '#4d6275',
+                                    font: { size: 10 },
+                                },
+                                grid: { display: false },
+                            },
+                            y: {
+                                beginAtZero: true,
+                                max: 100,
+                                ticks: {
+                                    callback: (value) => `${value}%`,
+                                    color: '#4d6275',
+                                    font: { size: 11 },
+                                },
+                                grid: { color: '#ebf1f5' },
+                            },
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: (context) => {
+                                        const applicantCount = applicants[context.dataIndex] || 0;
+                                        const safeApplicantCount = Number(applicantCount);
+                                        return `${percentageFormatter.format(context.parsed.y)}% (${safeApplicantCount} applicant${safeApplicantCount === 1 ? '' : 's'})`;
+                                    },
+                                    afterLabel: (context) => {
+                                        const email = emails[context.dataIndex] || '';
+                                        return email ? `email: ${email}` : '';
+                                    },
+                                },
+                            },
+                        },
+                    },
+                });
+            });
+        });
+    </script>
 @endpush

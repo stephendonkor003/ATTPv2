@@ -1,15 +1,15 @@
 <?php
 
-use App\Mail\ThinkTankPortalWelcome;
 use App\Models\ConsortiumThinkTank;
 use App\Models\SystemAuditLog;
 use App\Models\User;
+use App\Notifications\ThinkTankPortalPasswordResetNotification;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Testing\Concerns\InteractsWithAuthentication;
 use Illuminate\Foundation\Testing\Concerns\InteractsWithSession;
 use Illuminate\Foundation\Testing\Concerns\MakesHttpRequests;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 
 require __DIR__.'/../../vendor/autoload.php';
@@ -75,12 +75,19 @@ $ensure = static function (bool $condition, string $message): void {
     }
 };
 
-Mail::fake();
+Notification::fake();
 DB::beginTransaction();
 
 try {
-    $admin = User::query()->whereHas('role', fn ($role) => $role->where('name', 'System Admin'))->firstOrFail();
-    $member = ConsortiumThinkTank::query()->whereNotNull('consortium_id')->firstOrFail();
+    $admin = User::query()
+        ->whereHas('role', fn ($role) => $role->where('name', 'System Admin'))
+        ->where('is_disabled', false)
+        ->where('is_blacklisted', false)
+        ->firstOrFail();
+    $member = ConsortiumThinkTank::query()
+        ->whereNotNull('consortium_id')
+        ->where('status', 'active')
+        ->firstOrFail();
     $browser = new ThinkTankUsersAdminBrowser($app);
     $email = 'think-tank-user-admin-smoke-'.Str::lower(Str::random(10)).'@example.test';
 
@@ -99,19 +106,19 @@ try {
         'access_level' => User::THINK_TANK_ACCESS_PROCUREMENT,
     ]);
     $createResponse->assertRedirect(route('system.think-tank-users.index'))->assertSessionHasNoErrors();
-    $ensure((bool) session('temporary_password'), 'The one-time temporary password was not flashed after user creation.');
+    $createResponse->assertSessionMissing('temporary_password');
 
     $createdUser = User::query()->where('email', $email)->firstOrFail();
     $ensure($createdUser->user_type === 'think_tank', 'The created account is not a Think Tank user.');
     $ensure((string) $createdUser->think_tank_member_id === (string) $member->id, 'The created account was assigned to the wrong Think Tank.');
     $ensure($createdUser->think_tank_access_level === User::THINK_TANK_ACCESS_PROCUREMENT, 'The procurement role was not assigned.');
-    $ensure((bool) $createdUser->must_change_password, 'The new account was not forced to change its temporary password.');
-    Mail::assertQueued(ThinkTankPortalWelcome::class, fn ($mail) => $mail->hasTo($email));
+    $ensure((bool) $createdUser->must_change_password, 'The new account was not marked for secure password setup.');
+    Notification::assertSentTo($createdUser, ThinkTankPortalPasswordResetNotification::class);
     $browser->getAs($admin, route('system.think-tank-users.show', $createdUser))
         ->assertOk()
         ->assertSee('View and edit user information')
         ->assertSee($email)
-        ->assertSee('Reset and email password');
+        ->assertSee('Revoke access and send reset link');
     $createdUser->forceFill([
         'must_change_password' => false,
         'password_changed_at' => now(),
@@ -171,9 +178,8 @@ try {
     $oldPasswordHash = $createdUser->password;
     $browser->postAs($admin, route('system.think-tank-users.reset-password', $createdUser), []);
     $createdUser->refresh();
-    $ensure($createdUser->password !== $oldPasswordHash, 'The temporary password reset did not change the password hash.');
-    Mail::assertQueued(ThinkTankPortalWelcome::class, 2);
-    Mail::assertQueued(ThinkTankPortalWelcome::class, fn ($mail) => $mail->hasTo($updatedEmail));
+    $ensure($createdUser->password !== $oldPasswordHash, 'The administrator reset did not revoke the previous password.');
+    Notification::assertSentToTimes($createdUser, ThinkTankPortalPasswordResetNotification::class, 2);
 
     $browser->getAs($admin, route('system.think-tank-users.index', [
         'q' => $updatedEmail,
@@ -181,7 +187,7 @@ try {
         'account_status' => 'disabled',
     ]))->assertOk()->assertSee($updatedEmail);
 
-    foreach (['think_tank_user_created', 'think_tank_user_updated', 'think_tank_user_password_reset'] as $action) {
+    foreach (['think_tank_user_created', 'think_tank_user_updated', 'think_tank_user_password_reset_initiated'] as $action) {
         $ensure(
             SystemAuditLog::query()->where('action', $action)->where('payload->staff_user_id', $createdUser->id)->exists(),
             "The {$action} audit event was not recorded."

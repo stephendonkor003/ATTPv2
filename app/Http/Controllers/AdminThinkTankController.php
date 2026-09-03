@@ -14,17 +14,17 @@ use App\Models\ProcurementPurchaseOrder;
 use App\Models\Program;
 use App\Models\ProgramFunding;
 use App\Models\PurchaseRequest;
-use App\Models\Role;
 use App\Models\SubActivity;
 use App\Models\SystemAuditLog;
 use App\Models\ThinkDataset;
 use App\Models\User;
+use App\Services\ThinkTank\ThinkTankInvitationService;
+use App\Services\ThinkTank\ThinkTankUserManagementService;
 use App\Services\ThinkTankLogoService;
 use App\Support\IpGeo;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -33,6 +33,11 @@ use Throwable;
 
 class AdminThinkTankController extends Controller
 {
+    public function __construct(
+        private readonly ThinkTankUserManagementService $userManagement,
+        private readonly ThinkTankInvitationService $invitations,
+    ) {}
+
     public function dashboard(Request $request)
     {
         return $this->analysisDashboard($request, 'consortium');
@@ -73,9 +78,9 @@ class AdminThinkTankController extends Controller
             ? Carbon::parse($request->input('end_date'))->endOfDay()
             : null;
         $dateRangeLabel = match (true) {
-            $startDate && $endDate => $startDate->format('M d, Y') . ' to ' . $endDate->format('M d, Y'),
-            (bool) $startDate => 'From ' . $startDate->format('M d, Y'),
-            (bool) $endDate => 'Up to ' . $endDate->format('M d, Y'),
+            $startDate && $endDate => $startDate->format('M d, Y').' to '.$endDate->format('M d, Y'),
+            (bool) $startDate => 'From '.$startDate->format('M d, Y'),
+            (bool) $endDate => 'Up to '.$endDate->format('M d, Y'),
             default => 'All dates',
         };
 
@@ -85,7 +90,7 @@ class AdminThinkTankController extends Controller
                 'vendorUser',
             ])
             ->when($request->filled('q'), function ($query) use ($request) {
-                $search = '%' . trim((string) $request->input('q')) . '%';
+                $search = '%'.trim((string) $request->input('q')).'%';
                 $query->where(function ($builder) use ($search) {
                     $builder->where('name', 'like', $search)
                         ->orWhere('country', 'like', $search)
@@ -141,8 +146,8 @@ class AdminThinkTankController extends Controller
                     'consortium_id' => $thinkTank->consortium_id,
                     'consortium' => $consortiumName,
                     'consortium_code' => $consortiumCode,
-                    'primary_meta' => $consortiumName . ($consortiumCode ? ' | ' . $consortiumCode : ''),
-                    'secondary_meta' => ($thinkTank->country ?: 'N/A') . ' | ' . ($thinkTank->vendorUser?->name ?: 'Vendor identity not linked'),
+                    'primary_meta' => $consortiumName.($consortiumCode ? ' | '.$consortiumCode : ''),
+                    'secondary_meta' => ($thinkTank->country ?: 'N/A').' | '.($thinkTank->vendorUser?->name ?: 'Vendor identity not linked'),
                     'currency' => $purchaseOrders->first()?->resolved_currency ?: $thinkTank->consortium?->currency ?: 'USD',
                     'vendor_name' => $thinkTank->vendorUser?->name,
                     'think_tanks' => 1,
@@ -306,9 +311,9 @@ class AdminThinkTankController extends Controller
             ? Carbon::parse($request->input('end_date'))->endOfDay()
             : null;
         $dateRangeLabel = match (true) {
-            $startDate && $endDate => $startDate->format('M d, Y') . ' to ' . $endDate->format('M d, Y'),
-            (bool) $startDate => 'From ' . $startDate->format('M d, Y'),
-            (bool) $endDate => 'Up to ' . $endDate->format('M d, Y'),
+            $startDate && $endDate => $startDate->format('M d, Y').' to '.$endDate->format('M d, Y'),
+            (bool) $startDate => 'From '.$startDate->format('M d, Y'),
+            (bool) $endDate => 'Up to '.$endDate->format('M d, Y'),
             default => 'All dates',
         };
 
@@ -316,7 +321,7 @@ class AdminThinkTankController extends Controller
             ->with(['consortium.programFunding.program', 'member.consortium'])
             ->withCount('evidence')
             ->when($request->filled('q'), function ($query) use ($request) {
-                $search = '%' . trim((string) $request->input('q')) . '%';
+                $search = '%'.trim((string) $request->input('q')).'%';
                 $query->where(function ($builder) use ($search) {
                     $builder->where('title', 'like', $search)
                         ->orWhere('summary', 'like', $search)
@@ -449,7 +454,7 @@ class AdminThinkTankController extends Controller
                     'consortium' => $first['consortium'],
                     'consortium_code' => $first['consortium_code'],
                     'primary_meta' => $first['consortium_code'] ?: 'No consortium code',
-                    'secondary_meta' => ($countrySummary ?: 'Multiple countries') . ' | ' . ucfirst((string) ($first['status'] ?? 'active')),
+                    'secondary_meta' => ($countrySummary ?: 'Multiple countries').' | '.ucfirst((string) ($first['status'] ?? 'active')),
                     'currency' => $first['currency'],
                     'vendor_name' => null,
                     'think_tanks' => $rows->count(),
@@ -565,7 +570,7 @@ class AdminThinkTankController extends Controller
                 'procurements',
             ])
             ->when($request->filled('q'), function ($query) use ($request) {
-                $search = '%' . trim((string) $request->input('q')) . '%';
+                $search = '%'.trim((string) $request->input('q')).'%';
                 $query->where(function ($builder) use ($search) {
                     $builder->where('name', 'like', $search)
                         ->orWhere('country', 'like', $search)
@@ -625,15 +630,25 @@ class AdminThinkTankController extends Controller
         $data = $request->validate($this->memberRules());
         $data['joined_at'] = $data['joined_at'] ?? now()->toDateString();
 
-        [$portalUser, $temporaryPassword] = $this->resolvePortalUser($data);
+        [$portalUser, $portalUserCreated] = $this->resolvePortalUser($data);
         $data['portal_user_id'] = $portalUser?->id;
 
-        $member = ConsortiumThinkTank::create($data);
-        $this->linkPrimaryPortalUser($portalUser, $member);
+        $assignment = DB::transaction(function () use ($data, $portalUser): array {
+            $member = ConsortiumThinkTank::query()->create($data);
+            $assignedUser = $portalUser
+                ? $this->userManagement->assignAdministrator($portalUser, $member)
+                : null;
 
-        if ($portalUser?->email) {
-            $this->sendWelcomeSafely($portalUser, $member, $temporaryPassword);
-        }
+            return ['member' => $member, 'user' => $assignedUser];
+        });
+        $member = $assignment['member'];
+        $portalUser = $assignment['user'];
+
+        $deliverySucceeded = $portalUser?->email
+            ? ($portalUserCreated
+                ? $this->invitations->send($portalUser, true)
+                : $this->sendWelcomeSafely($portalUser, $member))
+            : null;
 
         $this->auditAction('think_tank.created', 'Think tank profile created', [
             'think_tank_member_id' => $member->id,
@@ -643,7 +658,13 @@ class AdminThinkTankController extends Controller
 
         return redirect()
             ->route('think-tanks-admin.show', $member)
-            ->with('success', 'Think tank profile created' . ($temporaryPassword ? '. Temporary password: ' . $temporaryPassword : '.'));
+            ->with('success', match (true) {
+                $portalUserCreated && $deliverySucceeded => 'Think tank profile created. A secure, single-use password setup link was sent.',
+                $portalUserCreated => 'Think tank profile created, but the secure invitation could not be delivered. Ask the user to use Forgot password.',
+                $deliverySucceeded === true => 'Think tank profile created. The existing portal account was notified; its password was not changed.',
+                $deliverySucceeded === false => 'Think tank profile created. The existing account password was not changed, but the access notification could not be delivered.',
+                default => 'Think tank profile created.',
+            });
     }
 
     public function show(ConsortiumThinkTank $thinkTank)
@@ -691,11 +712,16 @@ class AdminThinkTankController extends Controller
     {
         $this->hydrateDatasetFields($request);
         $data = $request->validate($this->memberRules($thinkTank));
-        [$portalUser] = $this->resolvePortalUser($data, false);
+        [$portalUser] = $this->resolvePortalUser($data, false, $thinkTank);
         $data['portal_user_id'] = $portalUser?->id ?? $data['portal_user_id'] ?? null;
 
-        $thinkTank->update($data);
-        $this->linkPrimaryPortalUser($portalUser, $thinkTank);
+        DB::transaction(function () use ($data, $portalUser, $thinkTank): void {
+            $thinkTank->update($data);
+
+            if ($portalUser) {
+                $this->userManagement->assignAdministrator($portalUser, $thinkTank);
+            }
+        });
 
         $this->auditAction('think_tank.updated', 'Think tank profile updated', [
             'think_tank_member_id' => $thinkTank->id,
@@ -749,7 +775,7 @@ class AdminThinkTankController extends Controller
             'had_previous_logo' => filled($result['previous_path']),
         ]);
 
-        return back()->with('success', $message . '.');
+        return back()->with('success', $message.'.');
     }
 
     public function funding(Request $request)
@@ -860,7 +886,7 @@ class AdminThinkTankController extends Controller
         $summary = $this->budgetSummary($source);
         if ((float) $data['amount'] > (float) $summary['remaining']) {
             return back()
-                ->withErrors(['amount' => 'Transfer exceeds remaining Funding to Think Tanks budget. Available: ' . number_format($summary['remaining'], 2)])
+                ->withErrors(['amount' => 'Transfer exceeds remaining Funding to Think Tanks budget. Available: '.number_format($summary['remaining'], 2)])
                 ->withInput();
         }
 
@@ -880,7 +906,7 @@ class AdminThinkTankController extends Controller
                 'delivery_date' => $paidAt->toDateString(),
                 'currency' => $currency,
                 'total_amount' => $data['amount'],
-                'description' => 'Funding transfer to think tank: ' . $member->name,
+                'description' => 'Funding transfer to think tank: '.$member->name,
                 'status' => 'approved',
                 'created_by' => $request->user()?->id,
             ]);
@@ -894,7 +920,7 @@ class AdminThinkTankController extends Controller
                 'commitment_amount' => $data['amount'],
                 'commitment_year' => (int) $paidAt->format('Y'),
                 'status' => BudgetCommitment::STATUS_APPROVED,
-                'description' => 'Funding to Think Tanks transfer for ' . $member->name,
+                'description' => 'Funding to Think Tanks transfer for '.$member->name,
                 'created_by' => $request->user()?->id,
                 'approved_by' => $request->user()?->id,
                 'approved_at' => now(),
@@ -925,7 +951,7 @@ class AdminThinkTankController extends Controller
                 'created_by' => $request->user()?->id,
                 'approved_by' => $request->user()?->id,
                 'approved_at' => now(),
-                'notes' => 'Paid Funding to Think Tanks transfer for ' . $member->name . (! empty($data['notes']) ? ': ' . $data['notes'] : ''),
+                'notes' => 'Paid Funding to Think Tanks transfer for '.$member->name.(! empty($data['notes']) ? ': '.$data['notes'] : ''),
             ]);
 
             $purchaseOrder = ProcurementPurchaseOrder::create([
@@ -1029,7 +1055,7 @@ class AdminThinkTankController extends Controller
 
         if ($newAmount > $availableIncludingThisTransfer) {
             return back()
-                ->withErrors(['amount' => 'Updated transfer exceeds remaining Funding to Think Tanks budget. Available including this transfer: ' . number_format($availableIncludingThisTransfer, 2)])
+                ->withErrors(['amount' => 'Updated transfer exceeds remaining Funding to Think Tanks budget. Available including this transfer: '.number_format($availableIncludingThisTransfer, 2)])
                 ->withInput();
         }
 
@@ -1060,7 +1086,7 @@ class AdminThinkTankController extends Controller
                         'status' => 'paid',
                         'approved_by' => $request->user()?->id,
                         'approved_at' => $invoice->approved_at ?: now(),
-                        'notes' => 'Paid Funding to Think Tanks transfer for ' . ($transfer->thinkTankMember?->name ?? 'think tank') . (! empty($data['notes']) ? ': ' . $data['notes'] : ''),
+                        'notes' => 'Paid Funding to Think Tanks transfer for '.($transfer->thinkTankMember?->name ?? 'think tank').(! empty($data['notes']) ? ': '.$data['notes'] : ''),
                     ]);
                 } else {
                     $invoice = ProcurementInvoice::create([
@@ -1075,7 +1101,7 @@ class AdminThinkTankController extends Controller
                         'created_by' => $request->user()?->id,
                         'approved_by' => $request->user()?->id,
                         'approved_at' => now(),
-                        'notes' => 'Paid Funding to Think Tanks transfer for ' . ($transfer->thinkTankMember?->name ?? 'think tank') . (! empty($data['notes']) ? ': ' . $data['notes'] : ''),
+                        'notes' => 'Paid Funding to Think Tanks transfer for '.($transfer->thinkTankMember?->name ?? 'think tank').(! empty($data['notes']) ? ': '.$data['notes'] : ''),
                     ]);
                 }
 
@@ -1093,7 +1119,7 @@ class AdminThinkTankController extends Controller
                 $commitment->update([
                     'commitment_amount' => $newAmount,
                     'commitment_year' => (int) $paidAt->format('Y'),
-                    'description' => 'Funding to Think Tanks transfer for ' . ($transfer->thinkTankMember?->name ?? 'think tank'),
+                    'description' => 'Funding to Think Tanks transfer for '.($transfer->thinkTankMember?->name ?? 'think tank'),
                     'status' => BudgetCommitment::STATUS_APPROVED,
                     'approved_by' => $request->user()?->id,
                     'approved_at' => now(),
@@ -1107,7 +1133,7 @@ class AdminThinkTankController extends Controller
                     'delivery_date' => $paidAt->toDateString(),
                     'currency' => $currency,
                     'total_amount' => $newAmount,
-                    'description' => 'Funding transfer to think tank: ' . ($transfer->thinkTankMember?->name ?? 'think tank'),
+                    'description' => 'Funding transfer to think tank: '.($transfer->thinkTankMember?->name ?? 'think tank'),
                     'status' => 'approved',
                 ]);
             }
@@ -1194,66 +1220,43 @@ class AdminThinkTankController extends Controller
         ]);
     }
 
-    private function resolvePortalUser(array $data, bool $createWhenMissing = true): array
-    {
+    private function resolvePortalUser(
+        array $data,
+        bool $createWhenMissing = true,
+        ?ConsortiumThinkTank $expectedMembership = null,
+    ): array {
         if (! empty($data['portal_user_id'])) {
-            $user = User::find($data['portal_user_id']);
+            $user = User::query()->findOrFail($data['portal_user_id']);
+            $this->userManagement->assertCanBeAssignedToMembership($user, $expectedMembership);
 
-            if ($user && $user->user_type !== 'think_tank') {
-                abort(422, 'This email cannot be used for a think tank portal account.');
-            }
-
-            return [$user, null];
+            return [$user, false];
         }
 
         if (! $createWhenMissing || empty($data['email'])) {
-            return [null, null];
+            return [null, false];
         }
 
-        $roleId = Role::where('name', 'Think Tank User')->value('id');
-        $password = Str::password(14);
-
-        $user = User::firstOrCreate(
-            ['email' => Str::lower($data['email'])],
-            [
-                'name' => $data['name'],
-                'password' => Hash::make($password),
-                'user_type' => 'think_tank',
-                'role_id' => $roleId,
-                'must_change_password' => true,
-            ]
+        $resolved = $this->userManagement->resolveOrCreateUnassignedAdministrator(
+            $data['name'],
+            $data['email'],
         );
 
-        if ($user->user_type !== 'think_tank') {
-            abort(422, 'This email is already assigned to another account type.');
-        }
-
-        $user->update([
-            'role_id' => $user->role_id ?: $roleId,
-            'think_tank_access_level' => User::THINK_TANK_ACCESS_ADMIN,
-        ]);
-
-        return [$user, $user->wasRecentlyCreated ? $password : null];
+        return [$resolved['user'], $resolved['created']];
     }
 
-    private function linkPrimaryPortalUser(?User $user, ConsortiumThinkTank $member): void
+    private function sendWelcomeSafely(User $user, ConsortiumThinkTank $member): bool
     {
-        if (! $user) {
-            return;
+        if (! $member->consortium) {
+            return false;
         }
 
-        $user->update([
-            'think_tank_member_id' => $member->id,
-            'think_tank_access_level' => User::THINK_TANK_ACCESS_ADMIN,
-        ]);
-    }
-
-    private function sendWelcomeSafely(User $user, ConsortiumThinkTank $member, ?string $temporaryPassword): void
-    {
         try {
-            Mail::to($user->email)->send(new ThinkTankPortalWelcome($member, $member->consortium, $user, $temporaryPassword));
+            Mail::to($user->email)->send(new ThinkTankPortalWelcome($member, $member->consortium, $user));
+
+            return true;
         } catch (Throwable) {
             // Mail failure should not block profile creation.
+            return false;
         }
     }
 
@@ -1613,7 +1616,7 @@ class AdminThinkTankController extends Controller
     private function nextReference(string $prefix): string
     {
         do {
-            $reference = $prefix . '-' . now()->format('Y') . '-' . Str::upper(Str::random(6));
+            $reference = $prefix.'-'.now()->format('Y').'-'.Str::upper(Str::random(6));
         } while (
             PurchaseRequest::where('reference_no', $reference)->exists()
             || ProcurementDisbursement::where('reference_no', $reference)->exists()

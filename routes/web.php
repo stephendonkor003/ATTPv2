@@ -2053,6 +2053,7 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])->group(function (
         ->name('password.change.form');
 
     Route::post('/change-password', [ChangePasswordController::class, 'update'])
+        ->middleware('throttle:10,1,legacy-change-password')
         ->name('password.change.update');
 });
 
@@ -3883,6 +3884,7 @@ Route::middleware(['auth'])->prefix('security')->name('security.')->group(functi
         ->name('password.change');
 
     Route::post('/password/change', [SecurityController::class, 'submitPasswordChange'])
+        ->middleware('throttle:10,1,legacy-password-change')
         ->name('password.submit');
 
     // OTP Verification
@@ -3890,9 +3892,11 @@ Route::middleware(['auth'])->prefix('security')->name('security.')->group(functi
         ->name('otp.show');
 
     Route::post('/otp/verify', [SecurityController::class, 'verifyOtp'])
+        ->middleware('throttle:10,1,legacy-otp-verify')
         ->name('otp.verify');
 
     Route::post('/otp/resend', [SecurityController::class, 'resendOtp'])
+        ->middleware('throttle:5,1,legacy-otp-resend')
         ->name('otp.resend');
 });
 

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Notifications\ThinkTankPortalPasswordResetNotification;
+use App\Services\ThinkTank\ThinkTankMailSecurityService;
 use App\Support\DiscussionAccountEmailPolicy;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -601,6 +603,15 @@ class User extends Authenticatable
 
     public function sendPasswordResetNotification($token): void
     {
+        if ($this->isThinkTankUser()) {
+            $security = app(ThinkTankMailSecurityService::class);
+            $security->assertCredentialDeliveryIsSecure();
+            $security->assertEncryptedResetQueueIsDurable();
+            $this->notify(new ThinkTankPortalPasswordResetNotification($token));
+
+            return;
+        }
+
         $this->notify(new ResetPassword($token));
     }
 

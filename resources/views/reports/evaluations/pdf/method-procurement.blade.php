@@ -32,6 +32,16 @@
         .rank-2 { background: #eceff2; color: #596772; }
         .rank-3 { background: #f5ddcc; color: #97592f; }
         .note { background: #f5f8fa; border: 1px solid #dbe4e9; color: #60717f; font-size: 8px; margin-bottom: 7px; padding: 6px; }
+        .subsection-title { font-size: 10px; margin: 10px 0 6px; }
+        .criterion-breakdown { border: 1px solid #dde5ea; margin-bottom: 9px; page-break-inside: avoid; }
+        .criterion-breakdown__head { background: #f4f9fb; border-bottom: 1px solid #dde5ea; display: block; padding: 5px 6px; }
+        .criterion-breakdown__head strong { color: #234257; display: block; font-size: 8px; }
+        .criterion-breakdown__head small { color: #687889; display: block; margin-top: 2px; }
+        .criterion-breakdown__rows td { border-top: 1px solid #e7eef2; }
+        .criterion-breakdown__name { width: 170px; }
+        .bar-rail { background: #edf4f6; border-radius: 999px; height: 10px; margin: 2px 0; overflow: hidden; }
+        .bar-rail--value { background: #0f766e; border-radius: inherit; height: 10px; }
+        .meta { color: #657585; display: inline-block; font-size: 8px; }
         .page-break { page-break-before: always; }
     </style>
 </head>
@@ -142,6 +152,79 @@
             </table>
         </section>
     @endforeach
+
+    @if ($method === 'services')
+        <section class="section">
+            <h2 class="section-title">Evaluator criterion-level comparison</h2>
+            <div class="note">Bars show evaluator percentage per criterion for the latest submission for each applicant they scored.</div>
+            @foreach ($evaluationStats as $stat)
+                @if ($stat['type'] !== 'services')
+                    @continue
+                @endif
+
+                <h3 class="subsection-title">{{ $stat['evaluation']->name }}</h3>
+                @foreach ($stat['criteria_stats'] as $criterion)
+                    @php
+                        $scores = collect($criterion['evaluator_scores'] ?? []);
+                        $scoreCount = $scores->count();
+                    @endphp
+                    <div class="criterion-breakdown">
+                        <header class="criterion-breakdown__head">
+                            <strong>{{ $criterion['name'] }}</strong>
+                            <small>{{ $scoreCount }} evaluator{{ $scoreCount === 1 ? '' : 's' }} with submitted scores</small>
+                        </header>
+                        <table>
+                            <thead>
+                                <tr><th class="criterion-breakdown__name">Evaluator</th><th>Email</th><th>Applicants</th><th style="width: 40%;">Average percentage</th><th>Value</th></tr>
+                            </thead>
+                            <tbody class="criterion-breakdown__rows">
+                                @forelse ($scores as $score)
+                                    @php
+                                        $labelWidth = min(100, max(0, (float) $score['percentage']));
+                                    @endphp
+                                    <tr>
+                                        <td>{{ $score['evaluator'] }}</td>
+                                        <td>{{ $score['evaluator_email'] ?: 'Email not available' }}</td>
+                                        <td>{{ number_format((int) $score['applicants']) }}</td>
+                                        <td>
+                                            <div class="bar-rail">
+                                                <div class="bar-rail--value" style="width: {{ $labelWidth }}%;"></div>
+                                            </div>
+                                        </td>
+                                        <td>{{ number_format((float) $score['percentage'], 1) }}%</td>
+                                    </tr>
+                                @empty
+                                    <tr><td colspan="5">No evaluator score data is available for this criterion.</td></tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                @endforeach
+            @endforeach
+        </section>
+    @endif
+
+    <section class="section">
+        <h2 class="section-title">Evaluator activity and volume</h2>
+        <div class="note">Includes all evaluators with submitted reports captured for this procurement.</div>
+        <table>
+            <thead>
+                <tr><th>Evaluator</th><th>Email</th><th>Reports submitted</th><th>Average overall score</th></tr>
+            </thead>
+            <tbody>
+                @forelse ($evaluatorBreakdown as $evaluator)
+                    <tr>
+                        <td>{{ $evaluator['name'] }}</td>
+                        <td>{{ $evaluator['email'] ?: 'Email not available' }}</td>
+                        <td>{{ number_format($evaluator['total']) }}</td>
+                        <td>{{ $evaluator['avg_overall'] !== null ? number_format((float) $evaluator['avg_overall'], 2) : 'N/A' }}</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="4">No panel activity has been recorded yet.</td></tr>
+                @endforelse
+            </tbody>
+        </table>
+    </section>
 
     <section class="section page-break">
         <h2 class="section-title">Submitted Evaluation Audit</h2>

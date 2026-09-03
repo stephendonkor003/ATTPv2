@@ -26,6 +26,12 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
+        abort_if(
+            $request->user()->isThinkTankUser(),
+            403,
+            'Think Tank profile changes must be completed through the dedicated portal.'
+        );
+
         $request->user()->fill($request->validated());
 
         if ($request->user()->isDirty('email')) {
@@ -42,6 +48,12 @@ class ProfileController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        abort_if(
+            $request->user()->isThinkTankUser(),
+            403,
+            'Think Tank accounts must be managed through the dedicated portal.'
+        );
+
         $request->validateWithBag('userDeletion', [
             'password' => ['required', 'current_password'],
         ]);

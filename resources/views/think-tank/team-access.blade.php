@@ -31,18 +31,10 @@
             </article>
         </section>
 
-        @if (session('temporary_password'))
-            <div class="tt-password-once" role="status">
-                <strong>Temporary password—copy it now</strong>
-                <p class="tt-panel-copy">Give this password to the new staff member through a secure channel. It will not be shown again.</p>
-                <code>{{ session('temporary_password') }}</code>
-            </div>
-        @endif
-
         <section class="tt-team-grid">
             <div class="tt-team-create" id="add-user">
                 <h2>Add a staff account</h2>
-                <p class="tt-panel-copy">The new user must change the temporary password after signing in.</p>
+                <p class="tt-panel-copy">The new user receives a secure, single-use link to choose their password. Passwords are never displayed or sent.</p>
 
                 <form method="POST" action="{{ route('think-tank.team-access.store', $portalRouteParams) }}">
                     @csrf

@@ -10,6 +10,7 @@ use App\Models\Program;
 use App\Models\SubActivity;
 use App\Models\User;
 use App\Models\VendorCategory;
+use App\Services\ThinkTank\ThinkTankUserManagementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -79,6 +80,9 @@ class VendorManagementController extends Controller
         $existingUser = $this->findUserByEmail($validated['email']);
 
         if ($existingUser) {
+            app(ThinkTankUserManagementService::class)
+                ->assertNotManagedPortalIdentity($existingUser);
+
             if ($existingUser->user_type === 'vendor') {
                 return back()
                     ->withErrors(['email' => 'This email address already belongs to a vendor account.'])

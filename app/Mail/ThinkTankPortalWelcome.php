@@ -22,7 +22,6 @@ class ThinkTankPortalWelcome extends Mailable implements ShouldQueue
         public ConsortiumThinkTank $member,
         public Consortium $consortium,
         public User $user,
-        public ?string $temporaryPassword = null
     ) {
         $this->afterCommit();
     }
@@ -35,8 +34,7 @@ class ThinkTankPortalWelcome extends Mailable implements ShouldQueue
                 'member' => $this->member,
                 'consortium' => $this->consortium,
                 'user' => $this->user,
-                'temporaryPassword' => $this->temporaryPassword,
-                'loginUrl' => route('login'),
+                'loginUrl' => rtrim((string) config('think_tank_portal.frontend_url'), '/').'/login',
             ]);
     }
 }

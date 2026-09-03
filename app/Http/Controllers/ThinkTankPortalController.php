@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Data\ThinkTank\CreateThinkTankUserData;
+use App\Data\ThinkTank\UpdateThinkTankUserData;
 use App\Mail\ThinkTankResearchQascSubmitted;
 use App\Models\ConsortiumActivityReport;
 use App\Models\ConsortiumDisbursementRequest;
@@ -17,7 +19,6 @@ use App\Models\Procurement;
 use App\Models\ProcurementDisbursement;
 use App\Models\ProcurementInvoice;
 use App\Models\ProcurementPurchaseOrder;
-use App\Models\Role;
 use App\Models\SystemAuditLog;
 use App\Models\ThinkTankProcurementEvent;
 use App\Models\ThinkTankProcurementPlan;
@@ -25,6 +26,7 @@ use App\Models\ThinkTankProcurementReview;
 use App\Models\ThinkTankResearchOutput;
 use App\Models\User;
 use App\Services\EvaluationReworkGuard;
+use App\Services\ThinkTank\ThinkTankUserManagementService;
 use App\Services\ThinkTankLogoService;
 use App\Services\ThinkTankMeAssignmentService;
 use App\Support\IpGeo;
@@ -33,7 +35,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -44,7 +45,8 @@ use Throwable;
 class ThinkTankPortalController extends Controller
 {
     public function __construct(
-        private readonly ThinkTankMeAssignmentService $meAssignments
+        private readonly ThinkTankMeAssignmentService $meAssignments,
+        private readonly ThinkTankUserManagementService $userManagement,
     ) {}
 
     public function dashboard(Request $request)
@@ -217,10 +219,7 @@ class ThinkTankPortalController extends Controller
         $member = $this->member($request);
         $teamMembers = User::query()
             ->where('user_type', 'think_tank')
-            ->where(function ($query) use ($member): void {
-                $query->where('think_tank_member_id', $member->id)
-                    ->orWhere('id', $member->portal_user_id);
-            })
+            ->where('think_tank_member_id', $member->id)
             ->orderByRaw('CASE WHEN id = ? THEN 0 ELSE 1 END', [$member->portal_user_id])
             ->orderBy('name')
             ->get();
@@ -231,7 +230,7 @@ class ThinkTankPortalController extends Controller
             'total' => $teamMembers->count(),
             'active' => $teamMembers->reject(fn (User $user): bool => $user->hasActiveLoginBlock())->count(),
             'administrators' => $teamMembers
-                ->filter(fn (User $user): bool => $user->resolvedThinkTankAccessLevel() === User::THINK_TANK_ACCESS_ADMIN)
+                ->filter(fn (User $user): bool => $user->think_tank_access_level === User::THINK_TANK_ACCESS_ADMIN)
                 ->count(),
         ];
 
@@ -249,40 +248,23 @@ class ThinkTankPortalController extends Controller
         $member = $this->member($request);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
+            'email' => ['required', 'email', 'max:255'],
             'access_level' => ['required', Rule::in(array_keys(User::THINK_TANK_ACCESS_LEVELS))],
         ], [
             'email.unique' => 'This email cannot be used.',
         ]);
 
-        $temporaryPassword = Str::password(16);
-        $role = Role::firstOrCreate(
-            ['name' => 'Think Tank User'],
-            ['description' => 'Think tank staff account; portal areas are controlled by its think tank access level.']
+        $result = $this->userManagement->create(
+            $request,
+            $request->user(),
+            $member,
+            CreateThinkTankUserData::from($data),
         );
 
-        $user = User::create([
-            'name' => $data['name'],
-            'email' => Str::lower($data['email']),
-            'password' => Hash::make($temporaryPassword),
-            'user_type' => 'think_tank',
-            'role_id' => $role->id,
-            'think_tank_member_id' => $member->id,
-            'think_tank_access_level' => $data['access_level'],
-            'must_change_password' => true,
-            'is_disabled' => false,
-            'is_blacklisted' => false,
-        ]);
-
-        $this->auditAction('think_tank.team.created', 'Think tank portal staff account created', [
-            'think_tank_member_id' => $member->id,
-            'staff_user_id' => $user->id,
-            'access_level' => $data['access_level'],
-        ]);
-
         return back()
-            ->with('success', 'Portal staff account created. Copy the temporary password now; it will not be shown again.')
-            ->with('temporary_password', $temporaryPassword);
+            ->with('success', $result['invitation_sent']
+                ? 'Portal staff account created. A secure, single-use password setup link was sent.'
+                : 'Portal staff account created, but the invitation could not be delivered. Resend it or ask the user to use Forgot password.');
     }
 
     public function updateTeamMember(Request $request, User $teamUser)
@@ -294,37 +276,13 @@ class ThinkTankPortalController extends Controller
             'access_level' => ['required', Rule::in(array_keys(User::THINK_TANK_ACCESS_LEVELS))],
             'is_disabled' => ['required', 'boolean'],
         ]);
-        $disable = (bool) $data['is_disabled'];
-        $removesAdminAccess = $teamUser->resolvedThinkTankAccessLevel() === User::THINK_TANK_ACCESS_ADMIN
-            && ($disable || $data['access_level'] !== User::THINK_TANK_ACCESS_ADMIN);
-
-        if ((string) $request->user()?->id === (string) $teamUser->id && $removesAdminAccess) {
-            throw ValidationException::withMessages([
-                'access_level' => 'You cannot remove your own think tank administrator access.',
-            ]);
-        }
-
-        if ($removesAdminAccess && ! $this->hasAnotherActiveThinkTankAdmin($member, $teamUser)) {
-            throw ValidationException::withMessages([
-                'access_level' => 'At least one active think tank administrator is required.',
-            ]);
-        }
-
-        $teamUser->update([
-            'think_tank_member_id' => $member->id,
-            'think_tank_access_level' => $data['access_level'],
-            'is_disabled' => $disable,
-            'disabled_at' => $disable ? ($teamUser->disabled_at ?: now()) : null,
-            'disabled_until' => null,
-            'disabled_reason' => $disable ? 'Disabled by a think tank administrator.' : null,
-        ]);
-
-        $this->auditAction('think_tank.team.updated', 'Think tank portal staff access updated', [
-            'think_tank_member_id' => $member->id,
-            'staff_user_id' => $teamUser->id,
-            'access_level' => $data['access_level'],
-            'is_disabled' => $disable,
-        ]);
+        $this->userManagement->update(
+            $request,
+            $request->user(),
+            $member,
+            $teamUser,
+            UpdateThinkTankUserData::from($data),
+        );
 
         return back()->with('success', 'Portal staff access updated.');
     }
@@ -2152,37 +2110,9 @@ class ThinkTankPortalController extends Controller
     {
         abort_unless(
             $teamUser->user_type === 'think_tank'
-            && (
-                (string) $teamUser->think_tank_member_id === (string) $member->id
-                || (string) $member->portal_user_id === (string) $teamUser->id
-            ),
+            && (string) $teamUser->think_tank_member_id === (string) $member->id,
             404
         );
-    }
-
-    private function hasAnotherActiveThinkTankAdmin(ConsortiumThinkTank $member, User $excluded): bool
-    {
-        return User::query()
-            ->where('user_type', 'think_tank')
-            ->where('id', '!=', $excluded->id)
-            ->where(function ($query) use ($member): void {
-                $query->where('think_tank_member_id', $member->id)
-                    ->orWhere('id', $member->portal_user_id);
-            })
-            ->where(function ($query) use ($member): void {
-                $query->where('think_tank_access_level', User::THINK_TANK_ACCESS_ADMIN)
-                    ->orWhere(function ($legacyQuery) use ($member): void {
-                        $legacyQuery->where('id', $member->portal_user_id)
-                            ->whereNull('think_tank_access_level');
-                    });
-            })
-            ->where('is_disabled', false)
-            ->where('is_blacklisted', false)
-            ->where(function ($query): void {
-                $query->whereNull('disabled_until')
-                    ->orWhere('disabled_until', '<=', now());
-            })
-            ->exists();
     }
 
     private function defaultProcurementFields(): array

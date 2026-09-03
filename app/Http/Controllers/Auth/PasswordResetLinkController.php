@@ -8,7 +8,9 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Timebox;
 use Illuminate\View\View;
 use Throwable;
 
@@ -30,8 +32,12 @@ class PasswordResetLinkController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
-            'email' => ['required', 'email'],
+            'email' => ['required', 'string', 'email:rfc', 'max:255'],
         ]);
+
+        $submittedEmail = trim($request->string('email')->toString());
+        $normalizedEmail = mb_strtolower($submittedEmail);
+        $request->merge(['email' => $submittedEmail]);
 
         if (! $this->passwordResetTokensTableExists()) {
             $this->logPasswordResetFailure('Password reset token table is missing.');
@@ -40,9 +46,18 @@ class PasswordResetLinkController extends Controller
         }
 
         try {
-            $status = Password::sendResetLink(
-                $request->only('email')
-            );
+            $deliveryKey = 'legacy-password-reset-delivery:'.hash('sha256', $normalizedEmail);
+
+            // Keep unknown, throttled and eligible addresses observationally
+            // equivalent while bounding delivery attempts across client IPs.
+            (new Timebox)->call(function () use ($deliveryKey, $request): void {
+                if (RateLimiter::tooManyAttempts($deliveryKey, 3)) {
+                    return;
+                }
+
+                RateLimiter::hit($deliveryKey, 3600);
+                Password::sendResetLink($request->only('email'));
+            }, 200000);
         } catch (QueryException $exception) {
             $this->logPasswordResetFailure('Password reset link database failure.', $exception);
 
@@ -53,10 +68,7 @@ class PasswordResetLinkController extends Controller
             return $this->temporaryPasswordResetFailure($request);
         }
 
-        return $status == Password::RESET_LINK_SENT
-                    ? back()->with('status', 'If an account exists for this email, a password reset link will be sent shortly.')
-                    : back()->withInput($request->only('email'))
-                        ->withErrors(['email' => __($status)]);
+        return back()->with('status', 'If an account exists for this email, a password reset link will be sent shortly.');
     }
 
     private function passwordResetTokensTableExists(): bool

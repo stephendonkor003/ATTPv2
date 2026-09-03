@@ -2,23 +2,26 @@
 
 namespace App\Http\Controllers\System;
 
+use App\Data\ThinkTank\CreateThinkTankUserData;
+use App\Data\ThinkTank\UpdateThinkTankUserData;
 use App\Http\Controllers\Controller;
-use App\Mail\ThinkTankPortalWelcome;
 use App\Models\ConsortiumThinkTank;
-use App\Models\Role;
 use App\Models\SystemAuditLog;
 use App\Models\User;
+use App\Services\ThinkTank\ThinkTankUserManagementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Throwable;
 
 class ThinkTankUserController extends Controller
 {
+    public function __construct(
+        private readonly ThinkTankUserManagementService $userManagement,
+    ) {}
+
     public function index(Request $request)
     {
         $filters = [
@@ -110,7 +113,7 @@ class ThinkTankUserController extends Controller
         $accessLevels = array_keys($this->managedAccessLevels());
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
+            'email' => ['required', 'email', 'max:255'],
             'think_tank_member_id' => ['required', 'uuid', Rule::exists('attp_consortium_think_tanks', 'id')],
             'access_level' => ['required', Rule::in($accessLevels)],
         ], [
@@ -118,48 +121,28 @@ class ThinkTankUserController extends Controller
             'think_tank_member_id.required' => 'Select the Think Tank this user belongs to.',
         ]);
 
-        $temporaryPassword = Str::password(16);
         $member = ConsortiumThinkTank::with('consortium')->findOrFail($data['think_tank_member_id']);
+        $result = $this->userManagement->createForSystemOversight(
+            $request,
+            $request->user(),
+            $member,
+            CreateThinkTankUserData::from($data),
+        );
+        $user = $result['user'];
+        $this->synchronizePrimaryAdministrator($member);
 
-        $user = DB::transaction(function () use ($data, $temporaryPassword, $member): User {
-            $role = Role::firstOrCreate(
-                ['name' => 'Think Tank User'],
-                ['description' => 'Think tank staff account; portal areas are controlled by its think tank access level.']
-            );
-
-            $user = User::create([
-                'name' => $data['name'],
-                'email' => Str::lower($data['email']),
-                'password' => Hash::make($temporaryPassword),
-                'user_type' => 'think_tank',
-                'role_id' => $role->id,
-                'think_tank_member_id' => $member->id,
-                'think_tank_access_level' => $data['access_level'],
-                'must_change_password' => true,
-                'is_disabled' => false,
-                'is_blacklisted' => false,
-            ]);
-
-            $this->synchronizePrimaryAdministrator($member);
-
-            return $user;
-        });
-
-        $emailQueued = $this->queueWelcomeSafely($user, $member, $temporaryPassword);
         $this->audit($request, 'think_tank_user_created', 'Think Tank portal user created', [
             'staff_user_id' => $user->id,
             'think_tank_member_id' => $member->id,
             'access_level' => $data['access_level'],
-            'email_queued' => $emailQueued,
+            'invitation_delivered' => $result['invitation_sent'],
         ]);
 
         return redirect()
             ->route('system.think-tank-users.index')
-            ->with('success', $emailQueued
-                ? 'Think Tank user created. The credentials email has been queued for delivery.'
-                : 'Think Tank user created, but the email could not be queued. Copy the temporary password below.')
-            ->with('temporary_password', $temporaryPassword)
-            ->with('temporary_password_user', $user->name);
+            ->with('success', $result['invitation_sent']
+                ? 'Think Tank user created. A secure, single-use password setup link was sent.'
+                : 'Think Tank user created, but the secure invitation could not be delivered. Resend the invitation or ask the user to use Forgot password.');
     }
 
     public function update(Request $request, User $user)
@@ -173,34 +156,32 @@ class ThinkTankUserController extends Controller
             'account_status' => ['required', Rule::in(['active', 'disabled'])],
         ]);
 
-        $oldMember = $user->resolvedThinkTankMembership();
-        $oldAccessLevel = $user->resolvedThinkTankAccessLevel();
+        $oldMember = $user->assignedThinkTankMembership()->first();
+        abort_unless($oldMember, 422, 'This user has no explicit Think Tank assignment. Resolve the account-link audit before editing it.');
+        $oldAccessLevel = $user->think_tank_access_level;
         $newMember = ConsortiumThinkTank::query()->findOrFail($data['think_tank_member_id']);
         $disable = $data['account_status'] === 'disabled';
 
-        $primaryAssignments = DB::transaction(function () use ($user, $oldMember, $newMember, $data, $disable): array {
-            $user->update([
-                'name' => $data['name'],
-                'email' => Str::lower($data['email']),
-                'think_tank_member_id' => $newMember->id,
-                'think_tank_access_level' => $data['access_level'],
-                'is_disabled' => $disable,
-                'disabled_at' => $disable ? ($user->disabled_at ?: now()) : null,
-                'disabled_until' => null,
-                'disabled_reason' => $disable ? 'Disabled by ATTP Think Tank user administration.' : null,
+        if ((string) $oldMember->getKey() !== (string) $newMember->getKey()) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'think_tank_member_id' => ['Tenant reassignment is disabled during the API migration. Create the account in the correct Think Tank or use an audited transfer workflow.'],
             ]);
+        }
 
-            $assignments = [];
-            $memberIds = collect([$oldMember?->id, $newMember->id])->filter()->unique();
-            foreach ($memberIds as $memberId) {
-                $member = ConsortiumThinkTank::query()->find($memberId);
-                if ($member) {
-                    $assignments[(string) $memberId] = $this->synchronizePrimaryAdministrator($member)?->id;
-                }
-            }
-
-            return $assignments;
-        });
+        $result = $this->userManagement->updateForSystemOversight(
+            $request,
+            $request->user(),
+            $oldMember,
+            $user,
+            UpdateThinkTankUserData::from([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'access_level' => $data['access_level'],
+                'is_disabled' => $disable,
+            ]),
+        );
+        $user = $result['user'];
+        $primaryAssignment = $this->synchronizePrimaryAdministrator($oldMember)?->id;
 
         $this->audit($request, 'think_tank_user_updated', 'Think Tank portal user access updated', [
             'staff_user_id' => $user->id,
@@ -210,48 +191,45 @@ class ThinkTankUserController extends Controller
             'previous_access_level' => $oldAccessLevel,
             'access_level' => $data['access_level'],
             'is_disabled' => $disable,
-            'primary_administrator_assignments' => $primaryAssignments,
+            'primary_administrator_assignment' => $primaryAssignment,
+            'invitation_delivered' => $result['invitation_sent'],
         ]);
 
-        return back()->with('success', 'Account details and access were updated successfully. Primary administrator assignment was synchronized automatically.');
+        return back()->with('success', $result['invitation_sent'] === false
+            ? 'Account access was updated, but the secure email-change invitation could not be delivered.'
+            : 'Account details and access were updated successfully. Primary administrator assignment was synchronized automatically.');
     }
 
     public function resetPassword(Request $request, User $user)
     {
         $this->assertThinkTankUser($user);
-        $member = $user->resolvedThinkTankMembership();
+        $member = $user->assignedThinkTankMembership()->first();
         abort_unless($member, 422, 'This user is not assigned to a Think Tank.');
         $member->loadMissing('consortium');
 
-        $temporaryPassword = Str::password(16);
-        $user->update([
-            'password' => Hash::make($temporaryPassword),
-            'must_change_password' => true,
-        ]);
-
-        $emailQueued = $this->queueWelcomeSafely($user, $member, $temporaryPassword);
-        $this->audit($request, 'think_tank_user_password_reset', 'Think Tank portal user password reset', [
+        $delivered = $this->userManagement->resetPasswordForSystemOversight(
+            $request,
+            $request->user(),
+            $member,
+            $user,
+        );
+        $this->audit($request, 'think_tank_user_password_reset_initiated', 'Think Tank portal password and sessions revoked; secure reset initiated', [
             'staff_user_id' => $user->id,
             'think_tank_member_id' => $member->id,
-            'email_queued' => $emailQueued,
+            'reset_link_delivered' => $delivered,
         ]);
 
         return back()
-            ->with('success', $emailQueued
-                ? 'A new temporary password was generated and queued for email delivery.'
-                : 'The password was reset, but the email could not be queued. Copy the temporary password below.')
-            ->with('temporary_password', $temporaryPassword)
-            ->with('temporary_password_user', $user->name);
+            ->with('success', $delivered
+                ? 'The previous password and active sessions were revoked, and a secure single-use reset link was sent.'
+                : 'The previous password and active sessions were revoked, but the reset link could not be delivered. Retry or ask the user to use Forgot password.');
     }
 
     private function thinkTankUsersQuery()
     {
         return User::query()
             ->where('user_type', 'think_tank')
-            ->where(function ($query): void {
-                $query->whereNotNull('think_tank_member_id')
-                    ->orWhereHas('thinkTankMembership');
-            });
+            ->whereNotNull('think_tank_member_id');
     }
 
     private function activeUsers($query)
@@ -281,6 +259,7 @@ class ThinkTankUserController extends Controller
             User::THINK_TANK_ACCESS_ADMIN => 'Think Tank Administrator',
             User::THINK_TANK_ACCESS_PROCUREMENT => 'Procurement Officer',
             User::THINK_TANK_ACCESS_ME => 'M&E Officer',
+            User::THINK_TANK_ACCESS_FINANCE => 'Finance Officer',
         ];
     }
 
@@ -293,7 +272,11 @@ class ThinkTankUserController extends Controller
             && $currentPrimary->user_type === 'think_tank'
             && (string) $currentPrimary->think_tank_member_id === (string) $member->id
             && $currentPrimary->think_tank_access_level === User::THINK_TANK_ACCESS_ADMIN
-            && ! $currentPrimary->hasActiveLoginBlock();
+            && ! $currentPrimary->hasActiveLoginBlock()
+            && ! ConsortiumThinkTank::query()
+                ->where('portal_user_id', $currentPrimary->id)
+                ->whereKeyNot($member->id)
+                ->exists();
 
         if ($currentPrimaryIsValid) {
             return $currentPrimary;
@@ -303,6 +286,7 @@ class ThinkTankUserController extends Controller
             ->where('user_type', 'think_tank')
             ->where('think_tank_member_id', $member->id)
             ->where('think_tank_access_level', User::THINK_TANK_ACCESS_ADMIN)
+            ->whereDoesntHave('thinkTankMembership', fn ($claim) => $claim->whereKeyNot($member->id))
             ->orderBy('created_at'))
             ->first();
 
@@ -316,29 +300,6 @@ class ThinkTankUserController extends Controller
     private function assertThinkTankUser(User $user): void
     {
         abort_unless($user->user_type === 'think_tank', 404);
-    }
-
-    private function queueWelcomeSafely(User $user, ConsortiumThinkTank $member, string $temporaryPassword): bool
-    {
-        if (! $member->consortium) {
-            return false;
-        }
-
-        try {
-            Mail::to($user->email)->queue(
-                new ThinkTankPortalWelcome($member, $member->consortium, $user, $temporaryPassword)
-            );
-
-            return true;
-        } catch (Throwable $exception) {
-            Log::warning('Think Tank user credentials email could not be queued.', [
-                'user_id' => $user->id,
-                'think_tank_member_id' => $member->id,
-                'error' => $exception->getMessage(),
-            ]);
-
-            return false;
-        }
     }
 
     private function audit(Request $request, string $action, string $message, array $payload): void

@@ -15,17 +15,9 @@ Portal access: {{ $user->thinkTankAccessLabel() }}
 Country: {{ $member->country ?? 'Not specified' }}
 
 Login email: {{ $user->email }}
-
-@if($temporaryPassword)
-Temporary password: {{ $temporaryPassword }}
-@endif
 @endcomponent
 
-@if($temporaryPassword)
-Use the temporary password above to sign in. For security, you may be asked to change it after your first login.
-@else
-Use your existing ATTP account password to sign in.
-@endif
+Use your existing ATTP account password to sign in. If you do not know it, use the Forgot password link on the portal to request a secure, single-use reset link. Passwords are never sent by email.
 
 @component('mail::button', ['url' => $loginUrl])
 Open Think Tank Portal
