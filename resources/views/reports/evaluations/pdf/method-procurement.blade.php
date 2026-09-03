@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -27,22 +27,18 @@
         .summary span { color: #71808d; display: block; font-size: 7px; text-transform: uppercase; }
         .summary strong { color: #123a48; display: block; font-size: 14px; margin-top: 2px; }
         .badge { border: 1px solid #badfd7; border-radius: 8px; color: #0f6c63; display: inline-block; font-size: 7px; font-weight: bold; padding: 2px 5px; }
-        .rank { background: #edf3f4; border-radius: 10px; display: inline-block; font-weight: bold; padding: 2px 5px; }
-        .rank-1 { background: #fff0b8; color: #8c6106; }
-        .rank-2 { background: #eceff2; color: #596772; }
-        .rank-3 { background: #f5ddcc; color: #97592f; }
         .note { background: #f5f8fa; border: 1px solid #dbe4e9; color: #60717f; font-size: 8px; margin-bottom: 7px; padding: 6px; }
-        .subsection-title { font-size: 10px; margin: 10px 0 6px; }
-        .criterion-breakdown { border: 1px solid #dde5ea; margin-bottom: 9px; page-break-inside: avoid; }
-        .criterion-breakdown__head { background: #f4f9fb; border-bottom: 1px solid #dde5ea; display: block; padding: 5px 6px; }
-        .criterion-breakdown__head strong { color: #234257; display: block; font-size: 8px; }
-        .criterion-breakdown__head small { color: #687889; display: block; margin-top: 2px; }
-        .criterion-breakdown__rows td { border-top: 1px solid #e7eef2; }
-        .criterion-breakdown__name { width: 170px; }
-        .bar-rail { background: #edf4f6; border-radius: 999px; height: 10px; margin: 2px 0; overflow: hidden; }
+        .bar-rail { background: #edf4f6; border-radius: 999px; height: 10px; margin: 2px 0; overflow: hidden; width: 100%; }
         .bar-rail--value { background: #0f766e; border-radius: inherit; height: 10px; }
-        .meta { color: #657585; display: inline-block; font-size: 8px; }
+        .subsection-title { font-size: 10px; margin: 10px 0 6px; }
+        .section-grid-2 { display: table; width: 100%; }
+        .section-grid-2 td { border: 0; padding: 0 0 6px 0; }
+        .app-card { border: 1px solid #d7e2ea; margin-top: 8px; }
+        .app-card h3 { background: #f2f8fb; border-bottom: 1px solid #d7e2ea; font-size: 8px; padding: 6px; }
+        .app-card table td { font-size: 8px; }
+        .metric { color: #0f766e; font-size: 8px; font-weight: bold; }
         .page-break { page-break-before: always; }
+        .small { font-size: 7px; color: #637482; }
     </style>
 </head>
 <body>
@@ -61,185 +57,200 @@
         {{ $platformName }} · {{ $methodDefinition['label'] }} Evaluation Report · Generated {{ now()->format('d M Y, H:i') }}
     </footer>
 
+    @php
+        $highestScore = $summary['highest_score'] !== null ? number_format((float) $summary['highest_score'], 2).'%' : 'N/A';
+        $resultValue = $resultSummary['value'] !== null ? number_format((float) $resultSummary['value'], $method === 'services' ? 1 : 0).$resultSummary['suffix'] : 'N/A';
+    @endphp
+
     <section class="section">
+        <h2 class="section-title">Section 1: Executive summary</h2>
+        <div class="note">
+            Four management cards: applicants, reports, evaluators, templates and highest score for comparison.
+        </div>
         <table class="summary">
             <tr>
-                <td><span>Applicants evaluated</span><strong>{{ number_format($summary['applicants']) }}</strong></td>
-                <td><span>Panel reports</span><strong>{{ number_format($summary['total']) }}</strong></td>
-                <td><span>Evaluators</span><strong>{{ number_format($summary['evaluators']) }}</strong></td>
-                <td><span>Templates</span><strong>{{ number_format($summary['templates']) }}</strong></td>
-                <td><span>{{ $resultSummary['label'] }}</span><strong>{{ $resultSummary['value'] !== null ? number_format($resultSummary['value'], $method === 'services' ? 1 : 0).$resultSummary['suffix'] : 'N/A' }}</strong></td>
+                <td><span>Total applicants</span><strong>{{ number_format((int) ($summary['applicants'] ?? 0)) }}</strong></td>
+                <td><span>Evaluator submissions</span><strong>{{ number_format((int) ($summary['total'] ?? 0)) }}</strong></td>
+                <td><span>Evaluators</span><strong>{{ number_format((int) ($summary['evaluators'] ?? 0)) }}</strong></td>
+                <td><span>Templates used</span><strong>{{ number_format((int) ($summary['templates'] ?? 0)) }}</strong></td>
+                <td><span>Highest score</span><strong>{{ $highestScore }}</strong></td>
+            </tr>
+            <tr>
+                <td colspan="5"><span>{{ $resultSummary['label'] }}</span><strong>{{ $resultValue }}</strong></td>
             </tr>
         </table>
     </section>
 
-    @if ($method === 'services')
-        @forelse ($serviceRankingGroups as $rankingGroup)
-            <section class="section">
-                <h2 class="section-title">{{ $rankingGroup['phase'] }} · {{ $rankingGroup['evaluation']->name }} Ranking</h2>
-                <div class="note">This evaluation is ranked independently. Scores are normalised against its configured maximum; incomplete panels have no rank or medal.</div>
+    <section class="section">
+        <h2 class="section-title">Section 2: Evaluator vs applicant score charts</h2>
+        <div class="note">
+            For each applicant, evaluator names are shown on the X-axis and percentage scores on the Y-axis.
+        </div>
+        @if ($evaluatorApplicantCharts->isNotEmpty())
+            @foreach ($evaluatorApplicantCharts as $chartGroup)
+                <h3 class="subsection-title">{{ $chartGroup['evaluation']?->name ?? 'Evaluation' }} - {{ $chartGroup['phase'] }}</h3>
                 <table>
-                    <thead><tr><th>Rank</th><th>Submission</th><th>Applicant</th><th>Panel average</th><th>Highest</th><th>Lowest</th><th>Panel status</th><th>Tasks</th></tr></thead>
-                    <tbody>
-                        @forelse ($rankingGroup['rankings'] as $row)
-                            <tr>
-                                <td><span class="rank {{ $row['rank'] && $row['rank'] <= 3 ? 'rank-'.$row['rank'] : '' }}">{{ $row['rank'] ? '#'.$row['rank'] : 'N/A' }}</span></td>
-                                <td>{{ $row['submission']?->procurement_submission_code ?: 'N/A' }}</td>
-                                <td>{{ $row['submission']?->display_name ?: 'Applicant not available' }}</td>
-                                <td>{{ $row['metric'] !== null ? number_format($row['metric'], 1).'%' : 'N/A' }}</td>
-                                <td>{{ $row['highest'] !== null ? number_format($row['highest'], 1).'%' : 'N/A' }}</td>
-                                <td>{{ $row['lowest'] !== null ? number_format($row['lowest'], 1).'%' : 'N/A' }}</td>
-                                <td>{{ $row['outcome'] }}</td>
-                                <td>{{ $row['expected_tasks'] !== null ? $row['completed_tasks'].'/'.$row['expected_tasks'] : $row['completed_tasks'].' recorded' }}</td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="8">No scored submissions are available for this evaluation.</td></tr>
-                        @endforelse
-                    </tbody>
+                    <thead>
+                        <tr>
+                            <th style="width: 18%;">Applicant code</th>
+                            <th style="width: 21%;">Applicant</th>
+                            <th style="width: 38%;">Evaluator</th>
+                            <th style="width: 12%;">Score %</th>
+                            <th style="width: 11%;">Evaluator email</th>
+                        </tr>
+                    </thead>
                 </table>
-            </section>
-        @empty
-            <section class="section"><h2 class="section-title">Applicant Rankings</h2><div class="note">No scored Services evaluations are available.</div></section>
-        @endforelse
-    @else
-        <section class="section">
-            <h2 class="section-title">Applicant Compliance Evidence</h2>
-            <div class="note">Goods decisions are categorical. Yes and No results are submitted evidence, not a numeric rank or final award decision.</div>
-            <table>
-                <thead><tr><th>Submission</th><th>Applicant</th><th>Submitted evidence</th><th>Yes</th><th>No</th><th>Panel status</th><th>Tasks</th><th>Reports</th></tr></thead>
-                <tbody>
-                    @forelse ($applicantSummaries as $row)
-                        <tr>
-                            <td>{{ $row['submission']?->procurement_submission_code ?: 'N/A' }}</td>
-                            <td>{{ $row['submission']?->display_name ?: 'Applicant not available' }}</td>
-                            <td><span class="badge">{{ $row['outcome'] }}</span></td>
-                            <td>{{ $row['counts']['yes'] ?? 0 }}</td>
-                            <td>{{ $row['counts']['no'] ?? 0 }}</td>
-                            <td>{{ $row['panel_status'] }}</td>
-                            <td>{{ $row['expected_tasks'] !== null ? $row['completed_tasks'].'/'.$row['expected_tasks'] : $row['completed_tasks'].' recorded' }}</td>
-                            <td>{{ $row['evaluations'] }}</td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="8">No completed applicant results are available.</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </section>
-    @endif
-
-    @foreach ($evaluationStats as $stat)
-        <section class="section">
-            <h2 class="section-title">{{ $stat['evaluation']->name }} · Criteria Analysis</h2>
-            <table>
-                <thead>
-                    @if ($method === 'services')<tr><th>Criterion</th><th>Maximum</th><th>Average score</th><th>Samples</th></tr>
-                    @else<tr><th>Criterion</th><th>Yes</th><th>No</th><th>Pass rate</th><th>Samples</th></tr>@endif
-                </thead>
-                <tbody>
-                    @forelse ($stat['criteria_stats'] as $criterion)
-                        <tr>
-                            <td>{{ $criterion['name'] }}</td>
-                            @if ($method === 'services')
-                                <td>{{ number_format((float) $criterion['max'], 2) }}</td><td>{{ number_format((float) $criterion['avg'], 2) }}</td><td>{{ $criterion['total'] }}</td>
-                            @else
-                                <td>{{ $criterion['yes'] }}</td><td>{{ $criterion['no'] }}</td><td>{{ number_format($criterion['rate'], 1) }}%</td><td>{{ $criterion['total'] }}</td>
-                            @endif
-                        </tr>
-                    @empty
-                        <tr><td colspan="{{ $method === 'services' ? 4 : 5 }}">No criterion data is available.</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </section>
-    @endforeach
-
-    @if ($method === 'services')
-        <section class="section">
-            <h2 class="section-title">Evaluator criterion-level comparison</h2>
-            <div class="note">Bars show evaluator percentage per criterion for the latest submission for each applicant they scored.</div>
-            @foreach ($evaluationStats as $stat)
-                @if ($stat['type'] !== 'services')
-                    @continue
-                @endif
-
-                <h3 class="subsection-title">{{ $stat['evaluation']->name }}</h3>
-                @foreach ($stat['criteria_stats'] as $criterion)
-                    @php
-                        $scores = collect($criterion['evaluator_scores'] ?? []);
-                        $scoreCount = $scores->count();
-                    @endphp
-                    <div class="criterion-breakdown">
-                        <header class="criterion-breakdown__head">
-                            <strong>{{ $criterion['name'] }}</strong>
-                            <small>{{ $scoreCount }} evaluator{{ $scoreCount === 1 ? '' : 's' }} with submitted scores</small>
-                        </header>
+                @foreach ($chartGroup['applicant_charts'] as $applicantChart)
+                    <div class="app-card">
+                        <h3>{{ $applicantChart['submission_code'] }} - {{ $applicantChart['submission_name'] }} (avg {{ number_format((float) $applicantChart['average_percentage'], 1) }}%)</h3>
                         <table>
-                            <thead>
-                                <tr><th class="criterion-breakdown__name">Evaluator</th><th>Email</th><th>Applicants</th><th style="width: 40%;">Average percentage</th><th>Value</th></tr>
-                            </thead>
-                            <tbody class="criterion-breakdown__rows">
-                                @forelse ($scores as $score)
+                            <tbody>
+                                @if ($applicantChart['scores']->isEmpty())
+                                    <tr>
+                                        <td colspan="5" class="small">No evaluator percentage available for this applicant.</td>
+                                    </tr>
+                                @else
+                                @forelse ($applicantChart['scores'] as $scoreRow)
                                     @php
-                                        $labelWidth = min(100, max(0, (float) $score['percentage']));
+                                        $width = min(100, max(0, (float) $scoreRow['percentage']));
                                     @endphp
                                     <tr>
-                                        <td>{{ $score['evaluator'] }}</td>
-                                        <td>{{ $score['evaluator_email'] ?: 'Email not available' }}</td>
-                                        <td>{{ number_format((int) $score['applicants']) }}</td>
-                                        <td>
+                                        <td colspan="2">{{ $scoreRow['evaluator'] }}</td>
+                                        <td colspan="2">
                                             <div class="bar-rail">
-                                                <div class="bar-rail--value" style="width: {{ $labelWidth }}%;"></div>
+                                                <div class="bar-rail--value" style="width: {{ $width }}%;"></div>
                                             </div>
                                         </td>
-                                        <td>{{ number_format((float) $score['percentage'], 1) }}%</td>
+                                        <td>{{ number_format((float) $scoreRow['percentage'], 1) }}%</td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="5" class="small">{{ $scoreRow['evaluator_email'] ?: 'Email not available' }}</td>
                                     </tr>
                                 @empty
-                                    <tr><td colspan="5">No evaluator score data is available for this criterion.</td></tr>
+                                    <tr><td colspan="5" class="small">No evaluator score rows available.</td></tr>
                                 @endforelse
+                                @endif
                             </tbody>
                         </table>
                     </div>
                 @endforeach
             @endforeach
-        </section>
-    @endif
-
-    <section class="section">
-        <h2 class="section-title">Evaluator activity and volume</h2>
-        <div class="note">Includes all evaluators with submitted reports captured for this procurement.</div>
-        <table>
-            <thead>
-                <tr><th>Evaluator</th><th>Email</th><th>Reports submitted</th><th>Average overall score</th></tr>
-            </thead>
-            <tbody>
-                @forelse ($evaluatorBreakdown as $evaluator)
-                    <tr>
-                        <td>{{ $evaluator['name'] }}</td>
-                        <td>{{ $evaluator['email'] ?: 'Email not available' }}</td>
-                        <td>{{ number_format($evaluator['total']) }}</td>
-                        <td>{{ $evaluator['avg_overall'] !== null ? number_format((float) $evaluator['avg_overall'], 2) : 'N/A' }}</td>
-                    </tr>
-                @empty
-                    <tr><td colspan="4">No panel activity has been recorded yet.</td></tr>
-                @endforelse
-            </tbody>
-        </table>
+        @else
+            <div class="note">No evaluator chart data is available for this method.</div>
+        @endif
     </section>
 
     <section class="section page-break">
-        <h2 class="section-title">Submitted Evaluation Audit</h2>
-        <table>
-            <thead><tr><th>Submission</th><th>Applicant</th><th>Evaluation</th><th>Phase</th><th>Evaluator</th><th>Result</th><th>Submitted</th></tr></thead>
-            <tbody>
-                @forelse ($submissionRows as $row)
+        <h2 class="section-title">Section 3: Detailed evaluator submissions</h2>
+        @if ($submissionRows->isNotEmpty())
+            <table>
+                <thead>
                     <tr>
-                        <td>{{ $row['code'] }}</td><td>{{ $row['applicant'] }}</td><td>{{ $row['evaluation'] }}</td><td>{{ $row['phase'] }}</td><td>{{ $row['evaluator'] }}</td><td>{{ $row['result'] }}</td><td>{{ $row['submitted_at']?->format('Y-m-d H:i') ?: 'N/A' }}</td>
+                        <th>Submission</th>
+                        <th>Applicant</th>
+                        <th>Evaluation</th>
+                        <th>Evaluator</th>
+                        <th>Phase</th>
+                        <th>Result</th>
+                        <th>Submitted</th>
+                        <th>Section</th>
+                        <th>Criterion</th>
+                        <th>Score/Decision</th>
+                        <th>Comment</th>
                     </tr>
-                @empty
-                    <tr><td colspan="7">No submitted evaluations are available.</td></tr>
-                @endforelse
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    @foreach ($submissionRows as $submissionRow)
+                        @if ($submissionRow['criterion_rows']->isEmpty())
+                            <tr>
+                                <td>{{ $submissionRow['code'] }}</td>
+                                <td>{{ $submissionRow['applicant'] }}</td>
+                                <td>{{ $submissionRow['evaluation'] }}</td>
+                                <td>{{ $submissionRow['evaluator'] }}</td>
+                                <td>{{ $submissionRow['phase'] }}</td>
+                                <td>{{ $submissionRow['result'] }}</td>
+                                <td>{{ $submissionRow['submitted_at']?->format('Y-m-d H:i') ?: 'N/A' }}</td>
+                                <td colspan="4" class="small">No criteria rows were submitted.</td>
+                            </tr>
+                        @else
+                            @foreach ($submissionRow['criterion_rows'] as $index => $criterionRow)
+                                <tr>
+                                    <td>{{ $submissionRow['code'] }}</td>
+                                    <td>{{ $submissionRow['applicant'] }}</td>
+                                    <td>{{ $submissionRow['evaluation'] }}</td>
+                                    <td>{{ $submissionRow['evaluator'] }}</td>
+                                    <td>{{ $submissionRow['phase'] }}</td>
+                                    <td>{{ $submissionRow['result'] }}</td>
+                                    <td>{{ $submissionRow['submitted_at']?->format('Y-m-d H:i') ?: 'N/A' }}</td>
+                                    <td>{{ $criterionRow['section'] }}</td>
+                                    <td>{{ $criterionRow['criterion'] }}</td>
+                                    <td>{{ $criterionRow['score_display'] }}</td>
+                                    <td>{{ $criterionRow['comment'] }}</td>
+                                </tr>
+                            @endforeach
+                        @endif
+                    @endforeach
+                </tbody>
+            </table>
+        @else
+            <div class="note">No detailed evaluator submissions are available.</div>
+        @endif
+    </section>
+
+    <section class="section">
+        <h2 class="section-title">Section 4: Applicant intelligence and ranking</h2>
+        @if ($intelligenceSummary->isNotEmpty())
+            @foreach ($intelligenceSummary as $group)
+                <div class="note">
+                    {{ $group['evaluation']?->name ?? 'Combined view' }} - {{ $group['phase'] }}. Rank and medal details are included below.
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Submission</th>
+                            <th>Applicant</th>
+                            <th>Metric</th>
+                            <th>Metric label</th>
+                            <th>Highest</th>
+                            <th>Lowest</th>
+                            <th>Spread</th>
+                            <th>Panel status</th>
+                            <th>Evaluators</th>
+                            <th>Medal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($group['rankings'] as $row)
+                            <tr>
+                                <td>
+                                    @if (($row['medal'] ?? null) === 'gold') <strong>&#x1F947; GOLD</strong>
+                                    @elseif (($row['medal'] ?? null) === 'silver') <strong>&#x1F948; SILVER</strong>
+                                    @elseif (($row['medal'] ?? null) === 'bronze') <strong>&#x1F949; BRONZE</strong>
+                                    @else <span>{{ $row['rank'] ?: 'N/A' }}</span>
+                                    @endif
+                                </td>
+                                <td>{{ $row['submission']?->procurement_submission_code ?: 'N/A' }}</td>
+                                <td>{{ $row['submission']?->display_name ?: 'Applicant not available' }}</td>
+                                <td>{{ $row['metric'] !== null ? number_format((float) $row['metric'], 2).'%' : 'N/A' }}</td>
+                                <td>{{ $row['metric_label'] ?? 'N/A' }}</td>
+                                <td>{{ $row['highest'] !== null ? number_format((float) $row['highest'], 2) : 'N/A' }}</td>
+                                <td>{{ $row['lowest'] !== null ? number_format((float) $row['lowest'], 2) : 'N/A' }}</td>
+                                <td>{{ $row['spread'] !== null ? number_format((float) $row['spread'], 2) : 'N/A' }}</td>
+                                <td>{{ $row['outcome'] ?? $row['panel_status'] ?? 'N/A' }}</td>
+                                <td>{{ $row['evaluators'] ?? 0 }}</td>
+                                <td>{{ strtoupper((string) ($row['medal'] ?? '')) }}</td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            @endforeach
+        @else
+            <div class="note">No ranking data is available for applicant intelligence.</div>
+        @endif
     </section>
 </body>
 </html>
+
+
+

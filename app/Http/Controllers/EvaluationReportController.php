@@ -1124,6 +1124,14 @@ class EvaluationReportController extends Controller
         $applicantSummaries = $method === Evaluation::TYPE_SERVICES
             ? collect()
             : $this->buildMethodApplicantSummaries($submissions, $method, $assignments);
+        $evaluatorApplicantCharts = $this->buildEvaluatorApplicantCharts($submissions);
+        $intelligenceSummary = $method === Evaluation::TYPE_SERVICES
+            ? $serviceRankingGroups
+            : $this->buildNonServicesIntelligenceSummary($applicantSummaries, $method);
+        $summary['highest_score'] = collect($intelligenceSummary)
+            ->flatMap(fn (array $group): Collection => collect($group['rankings'])->pluck('metric'))
+            ->filter(fn ($value) => $value !== null)
+            ->max();
 
         return [
             'method' => $method,
@@ -1135,6 +1143,8 @@ class EvaluationReportController extends Controller
             'resultSummary' => $this->methodResultSummary($submissions, $method),
             'applicantSummaries' => $applicantSummaries,
             'serviceRankingGroups' => $serviceRankingGroups,
+            'evaluatorApplicantCharts' => $evaluatorApplicantCharts,
+            'intelligenceSummary' => $intelligenceSummary,
             'evaluatorBreakdown' => $this->buildEvaluatorBreakdown($submissions),
             'evaluationStats' => $this->buildEvaluationStats($submissions),
         ];
@@ -1181,6 +1191,161 @@ class EvaluationReportController extends Controller
                 $group['phase'].' '.$group['evaluation']->name
             ))
             ->values();
+    }
+
+    private function buildEvaluatorApplicantCharts($submissions): Collection
+    {
+        $groups = $submissions
+            ->filter(fn (EvaluationSubmission $submission): bool => filled($submission->evaluation_id)
+                && filled($submission->evaluator_id)
+                && filled($submission->form_submission_id))
+            ->groupBy(fn (EvaluationSubmission $submission): string => (string) $submission->evaluation_id);
+
+        return $groups
+            ->map(function ($evaluationSubmissions): array {
+                $evaluation = $evaluationSubmissions->first()?->evaluation;
+
+                $latestSubmissions = $evaluationSubmissions
+                    ->groupBy(fn (EvaluationSubmission $submission): string => (string) $submission->evaluator_id.'|'.(string) $submission->form_submission_id)
+                    ->map(fn ($entries) => $entries
+                        ->sortByDesc(fn (EvaluationSubmission $submission): int => $submission->submitted_at?->getTimestamp() ?? 0)
+                        ->first()
+                    )
+                    ->filter()
+                    ->values();
+
+                $applicantCharts = $latestSubmissions
+                    ->groupBy(fn (EvaluationSubmission $submission): string => (string) $submission->form_submission_id)
+                    ->map(function ($applicantSubmissions): ?array {
+                        $first = $applicantSubmissions->first();
+                        if (! $first) {
+                            return null;
+                        }
+
+                        $scores = $applicantSubmissions
+                            ->map(function (EvaluationSubmission $submission) {
+                                $percentage = $this->submissionGraphPercentage($submission);
+                                if ($percentage === null) {
+                                    return null;
+                                }
+
+                                $evaluator = $submission->evaluator;
+
+                                return [
+                                    'evaluator' => $evaluator?->name ?: 'Unassigned',
+                                    'evaluator_email' => $evaluator?->email,
+                                    'percentage' => round((float) $percentage, 2),
+                                ];
+                            })
+                            ->filter()
+                            ->values();
+
+                        return [
+                            'submission' => $first->applicant,
+                            'submission_code' => $first->applicant?->procurement_submission_code
+                                ?: ('Applicant '.(string) $first->form_submission_id),
+                            'submission_name' => $first->applicant?->display_name
+                                ?: ('Applicant '.(string) $first->form_submission_id),
+                            'scores' => $scores->sortBy('evaluator')->values(),
+                            'average_percentage' => $scores->isNotEmpty() ? round((float) $scores->avg('percentage'), 2) : null,
+                            'evaluators' => $scores->count(),
+                        ];
+                    })
+                    ->filter()
+                    ->values()
+                    ->sortByDesc('average_percentage')
+                    ->values();
+
+                return [
+                    'evaluation' => $evaluation,
+                    'phase' => filled($evaluation?->evaluation_phase)
+                        ? Str::headline((string) $evaluation->evaluation_phase)
+                        : 'Evaluation',
+                    'applicant_charts' => $applicantCharts,
+                    'applicant_count' => $applicantCharts->count(),
+                ];
+            })
+            ->filter(fn ($group): bool => $group !== null && $group['applicant_charts']->isNotEmpty())
+            ->values();
+    }
+
+    private function buildNonServicesIntelligenceSummary(Collection $applicantSummaries, string $method): Collection
+    {
+        $rankedRows = $applicantSummaries
+            ->map(function (array $row) use ($method): array {
+                if ($method === Evaluation::TYPE_GOODS) {
+                    $yes = $row['counts']['yes'] ?? 0;
+                    $no = $row['counts']['no'] ?? 0;
+                    $total = (int) ($row['counts']['total'] ?? ($yes + $no));
+                    $metric = $total > 0 ? round(($yes / max(1, $total)) * 100, 2) : null;
+
+                    return array_merge($row, [
+                        'metric' => $metric,
+                        'metric_label' => 'Yes percentage',
+                        'metric_display' => $metric !== null ? number_format($metric, 1).'%' : 'N/A',
+                    ]);
+                }
+
+                return array_merge($row, [
+                    'metric' => null,
+                    'metric_label' => 'Outcome score',
+                    'metric_display' => 'N/A',
+                ]);
+            })
+            ->sort(function (array $left, array $right): int {
+                if (($left['metric'] === null) !== ($right['metric'] === null)) {
+                    return $left['metric'] === null ? 1 : -1;
+                }
+
+                if ($left['metric'] === null) {
+                    return 0;
+                }
+
+                $metricCompare = $right['metric'] <=> $left['metric'];
+
+                return $metricCompare === 0
+                    ? strcmp(
+                        Str::lower((string) ($left['submission']?->display_name ?? $left['submission']?->procurement_submission_code ?? '')),
+                        Str::lower((string) ($right['submission']?->display_name ?? $right['submission']?->procurement_submission_code ?? ''))
+                    )
+                    : $metricCompare;
+            })
+            ->values();
+
+        $position = 0;
+        $currentRank = 0;
+        $previousMetric = null;
+
+        $rankedRows = $rankedRows
+            ->map(function (array $row) use (&$position, &$currentRank, &$previousMetric): array {
+                if (! ($row['panel_complete'] ?? false) || $row['metric'] === null) {
+                    return $row;
+                }
+
+                $position++;
+                if ($previousMetric === null || abs((float) $previousMetric - (float) $row['metric']) >= 0.005) {
+                    $currentRank = $position;
+                }
+                $row['rank'] = $currentRank;
+                $row['medal'] = match ((int) $currentRank) {
+                    1 => 'gold',
+                    2 => 'silver',
+                    3 => 'bronze',
+                    default => null,
+                };
+                $previousMetric = (float) $row['metric'];
+
+                return $row;
+            })
+            ->values();
+
+        return collect([[
+            'evaluation' => null,
+            'phase' => 'Applicant comparison',
+            'rankings' => $rankedRows,
+            'ranked_applicants' => $rankedRows->whereNotNull('rank')->count(),
+            'incomplete_applicants' => $rankedRows->where('panel_complete', false)->count(),
+        ]]);
     }
 
     private function buildMethodApplicantSummaries($submissions, string $method, $assignments = null)
@@ -1342,6 +1507,12 @@ class EvaluationReportController extends Controller
                 }
 
                 $row['rank'] = $currentRank;
+                $row['medal'] = match ((int) $currentRank) {
+                    1 => 'gold',
+                    2 => 'silver',
+                    3 => 'bronze',
+                    default => null,
+                };
                 $previousMetric = $row['metric'];
 
                 return $row;
@@ -1417,6 +1588,34 @@ class EvaluationReportController extends Controller
             : null;
     }
 
+    private function submissionGraphPercentage(EvaluationSubmission $submission): ?float
+    {
+        if ($submission->evaluation?->isServices()) {
+            return $this->normalisedServiceScore($submission);
+        }
+
+        $scores = $submission->criteriaScores;
+
+        if (! $submission->evaluation || $scores->isEmpty()) {
+            return null;
+        }
+
+        if ($submission->evaluation->isGoods()) {
+            $yes = $scores->where('decision', 1)->count();
+            $no = $scores->where('decision', 0)->count();
+            $total = $yes + $no;
+
+            return $total > 0 ? round(($yes / max(1, $total)) * 100, 2) : null;
+        }
+
+        $qualified = $scores->where('decision', 2)->count();
+        $average = $scores->where('decision', 1)->count();
+        $notQualified = $scores->where('decision', 0)->count();
+        $total = $qualified + $average + $notQualified;
+
+        return $total > 0 ? round((($qualified * 2 + $average) / max(1, ($total * 2))) * 100, 2) : null;
+    }
+
     private function methodResultSummary($submissions, string $method): array
     {
         if ($method === Evaluation::TYPE_SERVICES) {
@@ -1462,6 +1661,35 @@ class EvaluationReportController extends Controller
     {
         return $submissions->map(function (EvaluationSubmission $submission) use ($method): array {
             $scores = $submission->criteriaScores;
+            $criterionRows = $scores
+                ->map(function ($score) use ($method, $submission): array {
+                    $sectionName = $score->criteria?->section?->name ?: 'No section';
+                    $criterionName = $score->criteria?->name ?: 'No criterion';
+                    $maxScore = (float) ($score->criteria?->max_score ?? 0);
+                    $scoreValue = $score->score;
+                    $decision = $submission->evaluation?->decisionLabel($score->decision);
+                    $percent = $scoreValue !== null && $maxScore > 0
+                        ? round(((float) $scoreValue / $maxScore) * 100, 2)
+                        : null;
+
+                    return [
+                        'section' => $sectionName,
+                        'criterion' => $criterionName,
+                        'decision' => $decision,
+                        'comment' => $score->comment ?: 'No comment',
+                        'score' => $scoreValue,
+                        'max_score' => $maxScore,
+                        'percentage' => $percent,
+                        'score_display' => match ($method) {
+                            Evaluation::TYPE_SERVICES => $scoreValue !== null
+                                ? number_format((float) $scoreValue, 2).($maxScore > 0 ? ' / '.number_format($maxScore, 2) : '')
+                                : 'No score',
+                            Evaluation::TYPE_GOODS => $decision ?: 'No decision',
+                            default => $decision ?: 'No decision',
+                        },
+                    ];
+                })
+                ->values();
 
             if ($method === Evaluation::TYPE_SERVICES) {
                 $maximum = $this->overallMax($submission);
@@ -1494,6 +1722,8 @@ class EvaluationReportController extends Controller
                 'evaluator_email' => $submission->evaluator?->email,
                 'result' => $result,
                 'submitted_at' => $submission->submitted_at,
+                'criterion_rows' => $criterionRows,
+                'criterion_count' => $criterionRows->count(),
             ];
         })->values();
     }
@@ -1512,50 +1742,116 @@ class EvaluationReportController extends Controller
             ['Completed reports', $summary['total']],
             ['Applicants evaluated', $summary['applicants']],
             ['Evaluators', $summary['evaluators']],
+            ['Templates used', $summary['templates']],
+            ['Highest score', $summary['highest_score'] !== null ? $summary['highest_score'].'%' : 'N/A'],
             [$result['label'], $result['value'] !== null ? $result['value'].$result['suffix'] : 'N/A'],
             ['Generated at', now()->format('Y-m-d H:i:s')],
         ];
 
-        if ($report['method'] === Evaluation::TYPE_SERVICES) {
-            $applicants = [[
-                'Evaluation', 'Phase', 'Rank', 'Submission code', 'Applicant', 'Panel average',
-                'Panel status', 'Completed tasks', 'Expected tasks', 'Evaluators',
-            ]];
+        $chartRows = [[
+            'Evaluation', 'Evaluation phase', 'Submission code', 'Applicant', 'Evaluator', 'Evaluator email', 'Score (%)',
+        ]];
+        foreach ($report['evaluatorApplicantCharts'] as $chartGroup) {
+            $evaluationName = $chartGroup['evaluation']?->name ?: 'Evaluation';
+            $phase = $chartGroup['phase'];
+            foreach ($chartGroup['applicant_charts'] as $applicantChart) {
+                if ($applicantChart['scores']->isEmpty()) {
+                    $chartRows[] = [
+                        $this->safeSpreadsheetValue($evaluationName),
+                        $this->safeSpreadsheetValue($phase),
+                        $this->safeSpreadsheetValue($applicantChart['submission_code']),
+                        $this->safeSpreadsheetValue($applicantChart['submission_name']),
+                        'No evaluator scores',
+                        'No evaluator score available',
+                        'N/A',
+                    ];
+                    continue;
+                }
 
-            foreach ($report['serviceRankingGroups'] as $rankingGroup) {
-                foreach ($rankingGroup['rankings'] as $row) {
-                    $applicants[] = [
-                        $this->safeSpreadsheetValue($rankingGroup['evaluation']->name),
-                        $this->safeSpreadsheetValue($rankingGroup['phase']),
-                        $row['rank'] ?: '',
-                        $this->safeSpreadsheetValue($row['submission']?->procurement_submission_code ?: 'N/A'),
-                        $this->safeSpreadsheetValue($row['submission']?->display_name ?: 'Applicant not available'),
-                        $row['metric'] !== null ? $row['metric'].'%' : 'N/A',
-                        $row['outcome'],
-                        $row['completed_tasks'],
-                        $row['expected_tasks'] ?? 'Not available',
-                        $row['evaluators'],
+                foreach ($applicantChart['scores'] as $score) {
+                    $chartRows[] = [
+                        $this->safeSpreadsheetValue($evaluationName),
+                        $this->safeSpreadsheetValue($phase),
+                        $this->safeSpreadsheetValue($applicantChart['submission_code']),
+                        $this->safeSpreadsheetValue($applicantChart['submission_name']),
+                        $this->safeSpreadsheetValue($score['evaluator']),
+                        $this->safeSpreadsheetValue($score['evaluator_email'] ?: 'N/A'),
+                        (float) $score['percentage'],
                     ];
                 }
             }
-        } else {
-            $applicants = [[
-                'Submission code', 'Applicant', 'Submitted evidence', 'Decision counts',
-                'Panel status', 'Completed tasks', 'Expected tasks', 'Evaluators', 'Reports',
-            ]];
+        }
 
-            foreach ($report['applicantSummaries'] as $row) {
-                $counts = collect($row['counts'])->map(fn ($value, $key): string => Str::headline((string) $key).': '.$value)->implode(' / ');
-                $applicants[] = [
+        $submissionRows = [[
+            'Submission code',
+            'Applicant',
+            'Evaluation',
+            'Evaluator',
+            'Section',
+            'Criterion',
+            'Score',
+            'Decision',
+            'Comment',
+            'Overall result',
+            'Submitted at',
+        ]];
+        foreach ($report['submissionRows'] as $row) {
+            $submittedAt = $row['submitted_at']?->format('Y-m-d H:i:s') ?: 'N/A';
+
+            if (empty($row['criterion_rows'])) {
+                $submissionRows[] = [
+                    $this->safeSpreadsheetValue($row['code']),
+                    $this->safeSpreadsheetValue($row['applicant']),
+                    $this->safeSpreadsheetValue($row['evaluation']),
+                    $this->safeSpreadsheetValue($row['evaluator']),
+                    'No section',
+                    'No criterion',
+                    'N/A',
+                    'N/A',
+                    'No detail available',
+                    $this->safeSpreadsheetValue($row['result']),
+                    $submittedAt,
+                ];
+                continue;
+            }
+
+            foreach ($row['criterion_rows'] as $criterionRow) {
+                $submissionRows[] = [
+                    $this->safeSpreadsheetValue($row['code']),
+                    $this->safeSpreadsheetValue($row['applicant']),
+                    $this->safeSpreadsheetValue($row['evaluation']),
+                    $this->safeSpreadsheetValue($row['evaluator']),
+                    $this->safeSpreadsheetValue($criterionRow['section']),
+                    $this->safeSpreadsheetValue($criterionRow['criterion']),
+                    $this->safeSpreadsheetValue($criterionRow['score_display']),
+                    $this->safeSpreadsheetValue($criterionRow['decision'] ?: ''),
+                    $this->safeSpreadsheetValue($criterionRow['comment']),
+                    $this->safeSpreadsheetValue($row['result']),
+                    $submittedAt,
+                ];
+            }
+        }
+
+        $intelligence = [[
+            'Evaluation', 'Applicant phase', 'Rank', 'Submission code', 'Applicant', 'Metric', 'Metric label', 'Highest', 'Lowest',
+            'Spread', 'Panel status', 'Evaluators', 'Medal',
+        ]];
+        foreach ($report['intelligenceSummary'] as $rankingGroup) {
+            foreach ($rankingGroup['rankings'] as $row) {
+                $intelligence[] = [
+                    $this->safeSpreadsheetValue($rankingGroup['evaluation']?->name ?: 'Combined view'),
+                    $this->safeSpreadsheetValue($rankingGroup['phase']),
+                    $row['rank'] ?: '',
                     $this->safeSpreadsheetValue($row['submission']?->procurement_submission_code ?: 'N/A'),
                     $this->safeSpreadsheetValue($row['submission']?->display_name ?: 'Applicant not available'),
-                    $row['outcome'],
-                    $counts ?: 'No decisions',
-                    $row['panel_status'],
-                    $row['completed_tasks'],
-                    $row['expected_tasks'] ?? 'Not available',
-                    $row['evaluators'],
-                    $row['evaluations'],
+                    $row['metric'] !== null ? $this->safeSpreadsheetValue($row['metric']) : 'N/A',
+                    $this->safeSpreadsheetValue($row['metric_label'] ?? 'N/A'),
+                    $row['highest'] !== null ? $this->safeSpreadsheetValue($row['highest']) : 'N/A',
+                    $row['lowest'] !== null ? $this->safeSpreadsheetValue($row['lowest']) : 'N/A',
+                    $row['spread'] !== null ? $this->safeSpreadsheetValue($row['spread']) : 'N/A',
+                    $this->safeSpreadsheetValue($row['outcome'] ?? $row['panel_status'] ?? 'N/A'),
+                    $row['evaluators'] ?? 0,
+                    $this->safeSpreadsheetValue($row['medal'] ? strtoupper((string) $row['medal']).' medal' : ''),
                 ];
             }
         }
@@ -1593,64 +1889,321 @@ class EvaluationReportController extends Controller
         }
 
         return [
-            'Overview' => $overview,
-            $report['method'] === Evaluation::TYPE_SERVICES ? 'Rankings by Evaluation' : 'Applicant Outcomes' => $applicants,
+            'Section 1: Executive Summary' => $overview,
+            'Section 2: Evaluator vs Applicant Scores' => $chartRows,
+            'Section 3: Detailed Evaluator Submissions' => $submissionRows,
+            'Section 4: Applicant Intelligence' => $intelligence,
             'Criteria Analysis' => $criteria,
-            'Evaluation Audit' => $audit,
         ];
     }
 
     private function csvRows(array $report): array
     {
         $headings = [
-            'Procurement reference',
-            'Evaluation method',
+            'Section',
+            'Group',
             'Submission code',
             'Applicant',
             'Evaluator',
             'Evaluation',
-            'Phase',
-            'Section',
+            'Evaluation phase',
+            'Section name',
             'Criterion',
-            'Score',
+            'Score / Metric',
             'Decision',
             'Comment',
-            'Overall result',
+            'Result / Metric',
+            'Value',
             'Submitted at',
+            'Medal',
         ];
         $rows = (function () use ($report): \Generator {
-            foreach ($report['submissionRows'] as $submissionRow) {
-                $submission = $submissionRow['submission'];
-                $criterionScores = $submission->criteriaScores;
+            yield [
+                'Section 1: Executive Summary',
+                'Procurement',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                'Procurement',
+                $report['procurement']->title,
+                '',
+                '',
+            ];
+            yield [
+                'Section 1: Executive Summary',
+                'Reference number',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                'Reference number',
+                $report['procurement']->reference_no ?: 'N/A',
+                '',
+                '',
+            ];
+            yield [
+                'Section 1: Executive Summary',
+                'Method',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                'Method',
+                $report['methodDefinition']['label'],
+                '',
+                '',
+            ];
+            yield [
+                'Section 1: Executive Summary',
+                'Completed reports',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                'Completed reports',
+                $report['summary']['total'],
+                '',
+                '',
+            ];
+            yield [
+                'Section 1: Executive Summary',
+                'Applicants evaluated',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                'Applicants evaluated',
+                $report['summary']['applicants'],
+                '',
+                '',
+            ];
+            yield [
+                'Section 1: Executive Summary',
+                'Evaluators',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                'Evaluators',
+                $report['summary']['evaluators'],
+                '',
+                '',
+            ];
+            yield [
+                'Section 1: Executive Summary',
+                'Templates used',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                'Templates used',
+                $report['summary']['templates'],
+                '',
+                '',
+            ];
+            yield [
+                'Section 1: Executive Summary',
+                'Highest score',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                'Highest score',
+                $report['summary']['highest_score'] !== null ? $report['summary']['highest_score'].'%' : 'N/A',
+                '',
+                '',
+            ];
+            yield [
+                'Section 1: Executive Summary',
+                $report['resultSummary']['label'],
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                $report['resultSummary']['label'],
+                $report['resultSummary']['value'] !== null ? $report['resultSummary']['value'].$report['resultSummary']['suffix'] : 'N/A',
+                '',
+                '',
+            ];
+            yield ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
 
-                if ($criterionScores->isEmpty()) {
-                    $criterionScores = collect([null]);
+            foreach ($report['evaluatorApplicantCharts'] as $chartGroup) {
+                foreach ($chartGroup['applicant_charts'] as $applicantChart) {
+                    if ($applicantChart['scores']->isEmpty()) {
+                        yield [
+                            'Section 2: Evaluator vs Applicant Scores',
+                            'Graph point',
+                            $this->safeSpreadsheetValue($applicantChart['submission_code']),
+                            $this->safeSpreadsheetValue($applicantChart['submission_name']),
+                            'No evaluator scores',
+                            $this->safeSpreadsheetValue($chartGroup['evaluation']?->name ?: 'Evaluation'),
+                            $this->safeSpreadsheetValue($chartGroup['phase']),
+                            '',
+                            '',
+                            'N/A',
+                            '',
+                            'No evaluator percentage available',
+                            'Evaluator percentage',
+                            'N/A',
+                            '',
+                            '',
+                        ];
+                        continue;
+                    }
+
+                    foreach ($applicantChart['scores'] as $score) {
+                        yield [
+                            'Section 2: Evaluator vs Applicant Scores',
+                            'Graph point',
+                            $this->safeSpreadsheetValue($applicantChart['submission_code']),
+                            $this->safeSpreadsheetValue($applicantChart['submission_name']),
+                            $this->safeSpreadsheetValue($score['evaluator']),
+                            $this->safeSpreadsheetValue($chartGroup['evaluation']?->name ?: 'Evaluation'),
+                            $this->safeSpreadsheetValue($chartGroup['phase']),
+                            '',
+                            '',
+                            number_format((float) $score['percentage'], 2),
+                            '',
+                            '',
+                            'Evaluator percentage',
+                            $this->safeSpreadsheetValue($score['evaluator_email'] ?: 'N/A'),
+                            '',
+                            '',
+                        ];
+                    }
+                }
+            }
+
+            yield ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+
+            foreach ($report['submissionRows'] as $submissionRow) {
+                $criterionRows = $submissionRow['criterion_rows'];
+                if ($criterionRows->isEmpty()) {
+                    yield [
+                        'Section 3: Detailed Evaluator Submissions',
+                        'No submission detail',
+                        $submissionRow['code'],
+                        $submissionRow['applicant'],
+                        $submissionRow['evaluator'],
+                        $submissionRow['evaluation'],
+                        $submissionRow['phase'],
+                        'No section',
+                        'No criterion',
+                        '',
+                        '',
+                        'No scores were submitted',
+                        'Overall result',
+                        $submissionRow['result'],
+                        $submissionRow['submitted_at']?->format('Y-m-d H:i:s') ?: 'N/A',
+                        '',
+                    ];
+                    continue;
                 }
 
-                foreach ($criterionScores as $criterionScore) {
-                    $decision = $criterionScore
-                        ? $submission->evaluation?->decisionLabel($criterionScore->decision)
-                        : null;
-
+                foreach ($criterionRows as $criterionRow) {
                     yield array_map(
                         fn ($value) => $this->safeSpreadsheetValue($value),
                         [
-                            $report['procurement']->reference_no ?: 'N/A',
-                            $report['methodDefinition']['label'],
+                            'Section 3: Detailed Evaluator Submissions',
+                            'Criterion row',
                             $submissionRow['code'],
                             $submissionRow['applicant'],
                             $submissionRow['evaluator'],
                             $submissionRow['evaluation'],
                             $submissionRow['phase'],
-                            $criterionScore?->criteria?->section?->name ?: '',
-                            $criterionScore?->criteria?->name ?: '',
-                            $criterionScore?->score,
-                            $decision ?: '',
-                            $criterionScore?->comment ?: '',
+                            $criterionRow['section'],
+                            $criterionRow['criterion'],
+                            $criterionRow['score_display'],
+                            $criterionRow['decision'] ?: '',
+                            $criterionRow['comment'],
+                            'Overall result',
                             $submissionRow['result'],
-                            $submissionRow['submitted_at']?->format('Y-m-d H:i:s') ?: '',
+                            $submissionRow['submitted_at']?->format('Y-m-d H:i:s') ?: 'N/A',
+                            '',
                         ]
                     );
+                }
+            }
+
+            yield ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+
+            foreach ($report['intelligenceSummary'] as $rankingGroup) {
+                foreach ($rankingGroup['rankings'] as $row) {
+                    $medal = $row['medal'] ?? null;
+                    $medalText = $medal === null ? '' : strtoupper((string) $medal).' MEDAL';
+                    yield [
+                        'Section 4: Applicant Intelligence',
+                        $rankingGroup['evaluation']?->name ?: 'Combined view',
+                        $this->safeSpreadsheetValue($row['submission']?->procurement_submission_code ?: 'N/A'),
+                        $this->safeSpreadsheetValue($row['submission']?->display_name ?: 'Applicant not available'),
+                        $this->safeSpreadsheetValue($row['outcome'] ?? 'N/A'),
+                        $this->safeSpreadsheetValue($rankingGroup['phase']),
+                        '',
+                        '',
+                        '',
+                        $this->safeSpreadsheetValue($row['metric'] ?? 'N/A'),
+                        '',
+                        $this->safeSpreadsheetValue($row['metric_label'] ?? 'N/A'),
+                        'Rank',
+                        $this->safeSpreadsheetValue($row['rank'] ?? ''),
+                        '',
+                        $this->safeSpreadsheetValue($medalText),
+                    ];
                 }
             }
         })();

@@ -1,297 +1,332 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('title', $methodDefinition['label'].' Report - '.($procurement->reference_no ?: $procurement->title))
 
-@section('content')
-    @php
-        $isServices = $method === \App\Models\Evaluation::TYPE_SERVICES;
-        $isGoods = $method === \App\Models\Evaluation::TYPE_GOODS;
-        $metricValue = $resultSummary['value'] !== null
-            ? number_format($resultSummary['value'], $isServices ? 1 : 0).$resultSummary['suffix']
-            : '—';
-    @endphp
+@php
+    $isServices = $method === \App\Models\Evaluation::TYPE_SERVICES;
+    $metricValue = $resultSummary['value'] !== null
+        ? number_format((float) $resultSummary['value'], $isServices ? 1 : 0).$resultSummary['suffix']
+        : '—';
+    $highestScore = $summary['highest_score'] !== null
+        ? number_format((float) $summary['highest_score'], 2).'%'
+        : '—';
+    $summaryCards = [
+        ['feather-users', 'Total applicants', number_format((int) $summary['applicants'])],
+        ['feather-user-check', 'Evaluators', number_format((int) $summary['evaluators'])],
+        ['feather-layers', 'Templates used', number_format((int) ($summary['templates'] ?? 0))],
+        ['feather-award', 'Highest score', $highestScore],
+    ];
+@endphp
 
-    <main class="nxl-container evr-shell" aria-labelledby="procurementReportTitle">
-        <header class="evr-hero">
-            <div class="evr-hero__copy">
-                <span class="evr-eyebrow">{{ $methodDefinition['label'] }} · {{ $methodDefinition['mode'] }}</span>
-                <h1 id="procurementReportTitle">{{ $procurement->title ?: 'Untitled procurement' }}</h1>
-                <p>Method-specific panel report with applicant outcomes, evaluator activity, criterion analysis, and the full submitted evaluation trail.</p>
-                <div class="evr-hero__meta">
-                    <span><i class="feather-hash" aria-hidden="true"></i>{{ $procurement->reference_no ?: 'No reference number' }}</span>
-                    <span><i class="feather-activity" aria-hidden="true"></i>{{ Str::headline($procurement->status ?: 'Status not specified') }}</span>
-                    @if ($summary['latest_at'])<span><i class="feather-clock" aria-hidden="true"></i>Updated {{ $summary['latest_at']->format('d M Y, H:i') }}</span>@endif
-                </div>
+<main class="nxl-container evr-shell" aria-labelledby="procurementReportTitle">
+    <header class="evr-hero">
+        <div class="evr-hero__copy">
+            <span class="evr-eyebrow">{{ $methodDefinition['label'] }} · {{ $methodDefinition['mode'] }}</span>
+            <h1 id="procurementReportTitle">{{ $procurement->title ?: 'Untitled procurement' }}</h1>
+            <p>Method report with a four-section management view: summary cards, evaluator-by-applicant scoring insight, detailed submission evidence, and applicant intelligence ranking.</p>
+            <div class="evr-hero__meta">
+                <span><i class="feather-hash" aria-hidden="true"></i>{{ $procurement->reference_no ?: 'No reference number' }}</span>
+                <span><i class="feather-activity" aria-hidden="true"></i>{{ Str::headline($procurement->status ?: 'Status not specified') }}</span>
+                @if ($summary['latest_at'])<span><i class="feather-clock" aria-hidden="true"></i>Updated {{ $summary['latest_at']->format('d M Y, H:i') }}</span>@endif
             </div>
-            <div class="evr-hero__actions evr-no-print" aria-label="Report export actions">
-                <a href="{{ route('reports.evaluations.method', $method) }}" class="evr-btn evr-btn--ghost">
-                    <i class="feather-arrow-left" aria-hidden="true"></i> Procurement list
-                </a>
-                <a href="{{ route('reports.evaluations.method.procurement.excel', [$method, $procurement]) }}" class="evr-btn evr-btn--light">
-                    <i class="feather-grid" aria-hidden="true"></i> Excel
-                </a>
-                <a href="{{ route('reports.evaluations.method.procurement.csv', [$method, $procurement]) }}" class="evr-btn evr-btn--ghost">
-                    <i class="feather-file-text" aria-hidden="true"></i> CSV
-                </a>
-                <a href="{{ route('reports.evaluations.method.procurement.pdf', [$method, $procurement]) }}" class="evr-btn evr-btn--ghost">
-                    <i class="feather-download" aria-hidden="true"></i> PDF
-                </a>
-                <button type="button" class="evr-btn evr-btn--ghost" onclick="window.print()">
-                    <i class="feather-printer" aria-hidden="true"></i> Print
-                </button>
+        </div>
+        <div class="evr-hero__actions evr-no-print" aria-label="Report export actions">
+            <a href="{{ route('reports.evaluations.method', $method) }}" class="evr-btn evr-btn--ghost">
+                <i class="feather-arrow-left" aria-hidden="true"></i> Procurement list
+            </a>
+            <a href="{{ route('reports.evaluations.method.procurement.excel', [$method, $procurement]) }}" class="evr-btn evr-btn--light">
+                <i class="feather-grid" aria-hidden="true"></i> Excel
+            </a>
+            <a href="{{ route('reports.evaluations.method.procurement.csv', [$method, $procurement]) }}" class="evr-btn evr-btn--ghost">
+                <i class="feather-file-text" aria-hidden="true"></i> CSV
+            </a>
+            <a href="{{ route('reports.evaluations.method.procurement.pdf', [$method, $procurement]) }}" class="evr-btn evr-btn--ghost">
+                <i class="feather-download" aria-hidden="true"></i> PDF
+            </a>
+            <button type="button" class="evr-btn evr-btn--ghost" onclick="window.print()">
+                <i class="feather-printer" aria-hidden="true"></i> Print
+            </button>
+        </div>
+    </header>
+
+    <section class="evr-section evr-panel" aria-labelledby="executive-summary">
+        <header class="evr-panel__head">
+            <div>
+                <span class="evr-eyebrow">Section 1</span>
+                <h2 id="executive-summary">Executive summary</h2>
+                <p>Key outcome metrics for one-screen management visibility.</p>
             </div>
         </header>
-
-        <section class="evr-kpi-grid" aria-label="Report summary">
-            @foreach ([
-                ['feather-users', 'Applicants evaluated', $summary['applicants'], null],
-                ['feather-file-text', 'Panel reports', $summary['total'], null],
-                ['feather-user-check', 'Evaluators', $summary['evaluators'], null],
-                ['feather-layers', 'Templates used', $summary['templates'], null],
-                [$methodDefinition['icon'], $resultSummary['label'], $metricValue, $resultSummary['detail']],
-            ] as [$icon, $label, $value, $detail])
-                <article class="evr-kpi">
-                    <span class="evr-kpi__icon"><i class="{{ $icon }}" aria-hidden="true"></i></span>
-                    <div><span>{{ $label }}</span><strong>{{ is_numeric($value) ? number_format($value) : $value }}</strong>@if ($detail)<small>{{ $detail }}</small>@endif</div>
-                </article>
-            @endforeach
-        </section>
-
-        @if ($isServices && $summary['configuration_warnings'] > 0)
-            <div class="evr-alert evr-alert--warning" role="alert">
-                <i class="feather-alert-triangle" aria-hidden="true"></i>
-                <div><strong>Scoring configuration needs attention</strong><span>{{ number_format($summary['configuration_warnings']) }} submitted report(s) were excluded from percentage calculations because their evaluation template has no positive maximum score.</span></div>
+        <div class="evr-panel__body">
+            <div class="evr-kpi-grid evr-kpi-grid--summary">
+                @foreach ($summaryCards as [$icon, $label, $value])
+                    <article class="evr-kpi">
+                        <span class="evr-kpi__icon"><i class="{{ $icon }}" aria-hidden="true"></i></span>
+                        <div><span>{{ $label }}</span><strong>{{ $value }}</strong></div>
+                    </article>
+                @endforeach
             </div>
-        @endif
 
-        @if ($isServices)
-            <section class="evr-section evr-panel" aria-labelledby="rankingTitle">
-                <header class="evr-panel__head">
+            <div class="evr-steps">
+                <div class="evr-step">
+                    <span class="evr-step__number">1</span>
                     <div>
-                        <span class="evr-eyebrow">Panel scoring</span>
-                        <h2 id="rankingTitle">Applicant rankings by evaluation</h2>
-                        <p>Each evaluation is ranked separately. Scores are normalised against that template's configured maximum, and medals appear only after every assigned panel member has submitted.</p>
-                    </div>
-                    <span class="evr-evaluation-card__badge"><i class="feather-award" aria-hidden="true"></i> Complete panels only</span>
-                </header>
-
-                <div class="evr-panel__body">
-                                    <div class="evr-evaluation-stack">
-                        @forelse ($serviceRankingGroups as $rankingGroup)
-                            @php
-                                $groupRankings = $rankingGroup['rankings'];
-                                $topApplicants = $groupRankings
-                                    ->filter(fn (array $row): bool => $row['rank'] !== null && $row['rank'] <= 3)
-                                    ->values();
-                            @endphp
-                            <article class="evr-evaluation-card">
-                                <header class="evr-evaluation-card__head">
-                                    <div>
-                                        <span class="evr-eyebrow">{{ $rankingGroup['phase'] }}</span>
-                                        <h3>{{ $rankingGroup['evaluation']->name }}</h3>
-                                        <p>{{ number_format($rankingGroup['ranked_applicants']) }} ranked · {{ number_format($rankingGroup['incomplete_applicants']) }} awaiting panel completion</p>
-                                    </div>
-                                    <span class="evr-evaluation-card__badge">Separate ranking</span>
-                                </header>
-
-                                @if ($topApplicants->isNotEmpty())
-                                    <div class="evr-podium" aria-label="Top ranked applicants for {{ $rankingGroup['evaluation']->name }}">
-                                        @foreach ($topApplicants as $row)
-                                            @php
-                                                $podiumClass = match ((int) $row['rank']) { 1 => 'first', 2 => 'second', default => 'third' };
-                                            @endphp
-                                            <article class="evr-podium-card evr-podium-card--{{ $podiumClass }}">
-                                                <span class="evr-medal"><i class="feather-award" aria-hidden="true"></i></span>
-                                                <small>Rank {{ $row['rank'] }}</small>
-                                                <h3>{{ $row['submission']?->display_name ?: 'Applicant not available' }}</h3>
-                                                <p>{{ $row['submission']?->procurement_submission_code ?: 'No submission code' }}</p>
-                                                <strong class="evr-podium-score">{{ number_format($row['metric'], 1) }}%</strong>
-                                            </article>
-                                        @endforeach
-                                    </div>
-                                @endif
-
-                                <div class="evr-table-wrap">
-                                    <table class="evr-table">
-                                        <thead><tr><th>Rank</th><th>Submission</th><th>Applicant</th><th>Panel average</th><th>Score range</th><th>Panel status</th><th>Evaluators</th></tr></thead>
-                                        <tbody>
-                                            @forelse ($groupRankings as $row)
-                                                <tr>
-                                                    <td><span class="evr-rank {{ $row['rank'] && $row['rank'] <= 3 ? 'evr-rank--'.$row['rank'] : '' }}">{{ $row['rank'] ? '#'.$row['rank'] : '—' }}</span></td>
-                                                    <td><strong>{{ $row['submission']?->procurement_submission_code ?: 'N/A' }}</strong></td>
-                                                    <td>{{ $row['submission']?->display_name ?: 'Applicant not available' }}</td>
-                                                    <td><span class="evr-score">{{ $row['metric'] !== null ? number_format($row['metric'], 1).'%' : '—' }}</span></td>
-                                                    <td>{{ $row['lowest'] !== null ? number_format($row['lowest'], 1).'–'.number_format($row['highest'], 1).'%' : '—' }}@if ($row['spread'] !== null)<small>{{ number_format($row['spread'], 1) }} point spread</small>@endif</td>
-                                                    <td><span class="evr-outcome evr-outcome--{{ $row['outcome_tone'] }}">{{ $row['panel_status'] }}</span><small>{{ $row['expected_tasks'] !== null ? $row['completed_tasks'].'/'.$row['expected_tasks'].' assigned tasks' : $row['completed_tasks'].' recorded report(s)' }}</small></td>
-                                                    <td>{{ number_format($row['evaluators']) }}</td>
-                                                </tr>
-                                            @empty
-                                                <tr><td colspan="7" class="text-center py-4">No scored submissions are available for this evaluation.</td></tr>
-                                            @endforelse
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </article>
-                        @empty
-                            <div class="evr-empty"><span class="evr-empty__icon"><i class="feather-bar-chart-2" aria-hidden="true"></i></span><h3>No scored Services evaluations yet</h3><p>Rankings appear after assigned panel members submit valid scores.</p></div>
-                        @endforelse
+                        <strong>Templates used</strong>
+                        <p>{{ $summary['templates'] }} template{{ $summary['templates'] === 1 ? '' : 's' }} contributed to this report.</p>
                     </div>
                 </div>
-            </section>
-        @else
-            <section class="evr-section evr-panel" aria-labelledby="outcomesTitle">
-                <header class="evr-panel__head">
+                <div class="evr-step">
+                    <span class="evr-step__number">2</span>
                     <div>
-                        <span class="evr-eyebrow">Compliance evidence</span>
-                        <h2 id="outcomesTitle">Applicant compliance summary</h2>
-                        <p>Goods evaluations are categorical. Yes and No decisions are shown as submitted evidence, not converted into numeric ranks or treated as a final award decision.</p>
-                    </div>
-                    <span class="evr-evaluation-card__badge"><i class="feather-check-square" aria-hidden="true"></i> Decision counts</span>
-                </header>
-                <div class="evr-table-wrap">
-                    <table class="evr-table">
-                        <thead><tr><th>Submission</th><th>Applicant</th><th>Submitted evidence</th><th>Yes decisions</th><th>No decisions</th><th>Panel status</th><th>Evaluators</th><th>Reports</th></tr></thead>
-                        <tbody>
-                            @forelse ($applicantSummaries as $row)
-                                <tr>
-                                    <td><strong>{{ $row['submission']?->procurement_submission_code ?: 'N/A' }}</strong></td>
-                                    <td>{{ $row['submission']?->display_name ?: 'Applicant not available' }}</td>
-                                    <td><span class="evr-outcome evr-outcome--{{ $row['outcome_tone'] }}">{{ $row['outcome'] }}</span></td>
-                                    <td>{{ number_format($row['counts']['yes'] ?? 0) }}</td>
-                                    <td>{{ number_format($row['counts']['no'] ?? 0) }}</td>
-                                    <td><span class="evr-outcome evr-outcome--{{ $row['panel_complete'] ? 'positive' : 'attention' }}">{{ $row['panel_status'] }}</span><small>{{ $row['expected_tasks'] !== null ? $row['completed_tasks'].'/'.$row['expected_tasks'].' assigned tasks' : $row['completed_tasks'].' recorded report(s)' }}</small></td>
-                                    <td>{{ number_format($row['evaluators']) }}</td>
-                                    <td>{{ number_format($row['evaluations']) }}</td>
-                                </tr>
-                            @empty
-                                <tr><td colspan="8" class="text-center py-4">No Goods decisions have been submitted yet.</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-        @endif
-
-        <div class="evr-detail-grid">
-            <section class="evr-panel" aria-labelledby="criteriaAnalysisTitle">
-                <header class="evr-panel__head">
-                    <div><span class="evr-eyebrow">Evaluation data</span><h2 id="criteriaAnalysisTitle">Criteria analysis</h2><p>Results remain separated by evaluation template.</p></div>
-                </header>
-                <div class="evr-panel__body">
-                    <div class="evr-evaluation-stack">
-                                        @forelse ($evaluationStats as $stat)
-                                            <article class="evr-evaluation-card">
-                                                <header class="evr-evaluation-card__head">
-                                                    <div><h3>{{ $stat['evaluation']->name }}</h3><p>{{ number_format($stat['total']) }} submitted evaluation(s)</p></div>
-                                                    <span class="evr-evaluation-card__badge">{{ $stat['evaluation']->typeLabel() }}</span>
-                                </header>
-                                <div class="evr-table-wrap">
-                                    <table class="evr-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Criterion</th>
-                                                @if ($isServices)<th>Maximum</th><th>Average score</th><th>Samples</th>
-                                                @else<th>Yes</th><th>No</th><th>Pass rate</th><th>Samples</th>@endif
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @forelse ($stat['criteria_stats'] as $criterion)
-                                                <tr>
-                                                    <td><strong>{{ $criterion['name'] }}</strong></td>
-                                                    @if ($isServices)
-                                                        <td>{{ number_format((float) $criterion['max'], 2) }}</td>
-                                                        <td><span class="evr-score">{{ number_format((float) $criterion['avg'], 2) }}</span></td>
-                                                        <td>{{ number_format($criterion['total']) }}</td>
-                                                    @else
-                                                        <td>{{ number_format($criterion['yes']) }}</td>
-                                                        <td>{{ number_format($criterion['no']) }}</td>
-                                                        <td>{{ number_format($criterion['rate'], 1) }}%</td>
-                                                        <td>{{ number_format($criterion['total']) }}</td>
-                                                    @endif
-                                                </tr>
-                                            @empty
-                                                <tr><td colspan="{{ $isServices ? 4 : 5 }}" class="text-center py-3">No criterion results are available.</td></tr>
-                                                    @endforelse
-                                                </tbody>
-                                            </table>
-                                </div>
-                                @if ($isServices)
-                                    <div class="evr-criteria-charts">
-                                        @foreach ($stat['criteria_stats'] as $criterion)
-                                            @php
-                                                $evaluatorScores = $criterion['evaluator_scores'] ?? [];
-                                                $evaluatorCount = count($evaluatorScores);
-                                            @endphp
-                                            <article class="evr-chart-card">
-                                                <header class="evr-chart-card__head">
-                                                    <h4>{{ $criterion['name'] }}</h4>
-                                                    <span>{{ $evaluatorCount }} evaluator{{ $evaluatorCount === 1 ? '' : 's' }}</span>
-                                                </header>
-                                                @if ($evaluatorCount > 0)
-                                                    <div class="evr-chart-wrap">
-                                                        <canvas class="evr-evaluator-score-chart" data-chart='{{ e(json_encode($evaluatorScores)) }}'></canvas>
-                                                    </div>
-                                                @else
-                                                    <div class="evr-chart-empty">No evaluator score data is available yet.</div>
-                                                @endif
-                                            </article>
-                                        @endforeach
-                                    </div>
-                                @endif
-                            </article>
-                        @empty
-                            <div class="evr-empty"><span class="evr-empty__icon"><i class="feather-bar-chart-2"></i></span><h3>No evaluation data yet</h3><p>Criterion analysis appears after evaluators submit.</p></div>
-                        @endforelse
+                        <strong>{{ $resultSummary['label'] }}</strong>
+                        <p>{{ $metricValue }}</p>
                     </div>
                 </div>
-            </section>
-
-            <aside class="evr-panel" aria-labelledby="evaluatorActivityTitle">
-                <header class="evr-panel__head"><div><span class="evr-eyebrow">Panel activity</span><h2 id="evaluatorActivityTitle">Evaluators</h2></div></header>
-                <div class="evr-panel__body">
-                    <div class="evr-evaluator-list">
-                        @forelse ($evaluatorBreakdown as $evaluator)
-                            <article class="evr-evaluator">
-                                <span class="evr-avatar">{{ Str::upper(Str::substr($evaluator['name'], 0, 1)) }}</span>
-                                <div><strong>{{ $evaluator['name'] }}</strong><small>{{ $evaluator['email'] ?: 'Email not available' }}</small></div>
-                                <div class="evr-evaluator__count">{{ number_format($evaluator['total']) }}<small>reports</small></div>
-                            </article>
-                        @empty
-                            <div class="evr-empty"><span class="evr-empty__icon"><i class="feather-users"></i></span><h3>No panel activity</h3></div>
-                        @endforelse
+                <div class="evr-step">
+                    <span class="evr-step__number">3</span>
+                    <div>
+                        <strong>Highest evaluated score</strong>
+                        <p>{{ $highestScore }}</p>
                     </div>
                 </div>
-            </aside>
+            </div>
         </div>
+    </section>
 
-        <section class="evr-section evr-panel" aria-labelledby="evaluationAuditTitle">
-            <header class="evr-panel__head">
-                <div><span class="evr-eyebrow">Audit trail</span><h2 id="evaluationAuditTitle">Submitted evaluations</h2><p>Open an individual report for section scores, criterion comments, and evidence.</p></div>
-                <span class="evr-evaluation-card__badge">{{ number_format($submissionRows->count()) }} reports</span>
-            </header>
-            <div class="evr-table-wrap">
-                <table class="evr-table">
-                    <thead><tr><th>Submission</th><th>Applicant</th><th>Evaluation</th><th>Phase</th><th>Evaluator</th><th>Result</th><th>Submitted</th><th class="evr-no-print">Action</th></tr></thead>
-                    <tbody>
-                        @forelse ($submissionRows as $row)
-                            <tr>
-                                <td><strong>{{ $row['code'] }}</strong></td>
-                                <td>{{ $row['applicant'] }}</td>
-                                <td><strong>{{ $row['evaluation'] }}</strong></td>
-                                <td>{{ $row['phase'] }}</td>
-                                <td>{{ $row['evaluator'] }}<small>{{ $row['evaluator_email'] }}</small></td>
-                                <td><span class="evr-outcome {{ $isServices ? 'evr-outcome--positive' : '' }}">{{ $row['result'] }}</span></td>
-                                <td>{{ $row['submitted_at']?->format('d M Y, H:i') ?: 'N/A' }}</td>
-                                <td class="evr-no-print"><a href="{{ route('reports.evaluations.submission', $row['submission']) }}" class="evr-btn evr-btn--outline"><i class="feather-eye"></i> View</a></td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="8" class="text-center py-4">No completed evaluations have been submitted.</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
+    <section class="evr-section evr-panel" aria-labelledby="section-two-title">
+        <header class="evr-panel__head">
+            <div>
+                <span class="evr-eyebrow">Section 2</span>
+        <h2 id="section-two-title">Evaluator graph component</h2>
+                <p>One bar chart per applicant. X-axis shows evaluator names and Y-axis shows percentage scores.</p>
             </div>
-        </section>
-    </main>
+        </header>
+        <div class="evr-panel__body">
+            @if ($evaluatorApplicantCharts->isNotEmpty())
+                @forelse ($evaluatorApplicantCharts as $chartGroup)
+                    <article class="evr-graph-section">
+                        <header class="evr-graph-section__head">
+                            <div>
+                                <strong>{{ $chartGroup['evaluation']?->name ?? 'Evaluation' }}</strong>
+                                <small>{{ $chartGroup['phase'] }}</small>
+                            </div>
+                            <span class="evr-evaluation-card__badge">{{ number_format((int) $chartGroup['applicant_count']) }} applicant{{ $chartGroup['applicant_count'] === 1 ? '' : 's' }}</span>
+                        </header>
+
+                        <div class="evr-graph-grid">
+                            @forelse ($chartGroup['applicant_charts'] as $applicantChart)
+                                @php
+                                    $scores = $applicantChart['scores'];
+                                    $scoreCount = $scores->count();
+                                    $averageDisplay = $applicantChart['average_percentage'] !== null
+                                        ? number_format((float) $applicantChart['average_percentage'], 2)
+                                        : 'N/A';
+                                @endphp
+                                <article class="evr-chart-card">
+                                    <header class="evr-chart-card__head">
+                                        <div>
+                                            <h4>{{ $applicantChart['submission_code'] }}</h4>
+                                            <small>{{ $applicantChart['submission_name'] }}</small>
+                                        </div>
+                                        <span>{{ $scoreCount }} evaluator{{ $scoreCount === 1 ? '' : 's' }} · avg {{ $averageDisplay }}%</span>
+                                    </header>
+                                    @if ($scores->isNotEmpty())
+                                        <div class="evr-chart-wrap">
+                                            <canvas class="evr-evaluator-applicant-chart" data-chart='{{ e(json_encode($scores->map(fn ($score) => [
+                                                'evaluator' => $score['evaluator'],
+                                                'percentage' => (float) $score['percentage'],
+                                            ])->values()->toArray())) }}'></canvas>
+                                        </div>
+                                    @else
+                                        <div class="evr-chart-empty">No evaluator percentage yet for this applicant.</div>
+                                    @endif
+                                </article>
+                            @empty
+                                <p class="evr-empty-line">No applicant evaluations yet for this template.</p>
+                            @endforelse
+                        </div>
+                    </article>
+                @empty
+                    <p class="evr-empty-line">No evaluator score series found for this method.</p>
+                @endforelse
+            @else
+                <div class="evr-empty">
+                    <span class="evr-empty__icon"><i class="feather-bar-chart-2"></i></span>
+                <h3>No evaluator graph data available</h3>
+                <p>Submit evaluator percentages for any completed submission to render section charts.</p>
+            </div>
+            @endif
+        </div>
+    </section>
+
+    <section class="evr-section evr-panel" aria-labelledby="section-three-title">
+        <header class="evr-panel__head">
+            <div>
+                <span class="evr-eyebrow">Section 3</span>
+                <h2 id="section-three-title">Detailed evaluator submissions</h2>
+                <p>Every evaluator submission, with section and criterion-level details.</p>
+            </div>
+        </header>
+        <div class="evr-panel__body">
+            @if ($submissionRows->isNotEmpty())
+                <div class="evr-submission-stack">
+                    @foreach ($submissionRows as $submissionRow)
+                        <article class="evr-submission-card">
+                            <header class="evr-submission-card__head">
+                                <div>
+                                    <strong>{{ $submissionRow['code'] }}</strong>
+                                    <span>{{ $submissionRow['applicant'] }}</span>
+                                </div>
+                                <ul>
+                                    <li><strong>{{ $submissionRow['evaluator'] }}</strong><small>{{ $submissionRow['evaluator_email'] ?: 'Email not available' }}</small></li>
+                                    <li><strong>{{ $submissionRow['evaluation'] }}</strong><small>{{ $submissionRow['phase'] }}</small></li>
+                                    <li><strong>{{ $submissionRow['result'] }}</strong><small>{{ $submissionRow['submitted_at']?->format('d M Y, H:i') ?: 'N/A' }}</small></li>
+                                </ul>
+                            </header>
+
+                            <div class="evr-table-wrap">
+                                <table class="evr-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Section</th>
+                                            <th>Criterion</th>
+                                            <th>Score</th>
+                                            <th>Decision</th>
+                                            <th>Comment</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse ($submissionRow['criterion_rows'] as $criterionRow)
+                                            <tr>
+                                                <td>{{ $criterionRow['section'] }}</td>
+                                                <td>{{ $criterionRow['criterion'] }}</td>
+                                                <td>{{ $criterionRow['score_display'] }}</td>
+                                                <td>{{ $criterionRow['decision'] ?: 'N/A' }}</td>
+                                                <td>{{ $criterionRow['comment'] }}</td>
+                                            </tr>
+                                        @empty
+                                            <tr><td colspan="5" class="text-center py-3">No criteria details were submitted.</td></tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        </article>
+                    @endforeach
+                </div>
+            @else
+                <div class="evr-empty">
+                    <span class="evr-empty__icon"><i class="feather-file-minus"></i></span>
+                    <h3>No detailed submissions</h3>
+                    <p>No evaluator submissions are available yet.</p>
+                </div>
+            @endif
+        </div>
+    </section>
+
+    <section class="evr-section evr-panel" aria-labelledby="section-four-title">
+        <header class="evr-panel__head">
+            <div>
+                <span class="evr-eyebrow">Section 4</span>
+                <h2 id="section-four-title">Applicant intelligence and ranking</h2>
+                <p>Applicant score comparison with podium markers and medal icons for top performers.</p>
+            </div>
+        </header>
+        <div class="evr-panel__body">
+            @forelse ($intelligenceSummary as $group)
+                @php
+                    $groupRankings = collect($group['rankings'] ?? []);
+                    $topRows = $groupRankings
+                        ->filter(fn (array $row): bool => filled($row['rank']) && $row['rank'] <= 3)
+                        ->values();
+                @endphp
+                    <article class="evr-evaluation-card">
+                    <header class="evr-evaluation-card__head">
+                        <div>
+                            <span class="evr-eyebrow">{{ $group['phase'] ?? 'Applicant comparison' }}</span>
+                            <h3>{{ $group['evaluation']?->name ?? 'Combined view' }}</h3>
+                        <p>{{ number_format((int) ($group['ranked_applicants'] ?? 0)) }} ranked · {{ number_format((int) ($group['incomplete_applicants'] ?? 0)) }} awaiting complete panel</p>
+                        <p>{{ $group['phase'] }} ranking set compares all applicants by outcome metric.</p>
+                    </div>
+                    <span class="evr-evaluation-card__badge">{{ number_format((int) $groupRankings->count()) }} applicant{{ $groupRankings->count() === 1 ? '' : 's' }}</span>
+                </header>
+
+                    <div class="evr-podium">
+                        @forelse ($topRows as $top)
+                            <article class="evr-podium-card evr-podium-card--{{ $top['medal'] ?? '' }}">
+                                <span class="evr-medal">
+                                    @if (($top['medal'] ?? null) === 'gold') 🥇
+                                    @elseif (($top['medal'] ?? null) === 'silver') 🥈
+                                    @elseif (($top['medal'] ?? null) === 'bronze') 🥉
+                                    @else <i class="feather-hash" aria-hidden="true"></i> @endif
+                                </span>
+                                <small>Rank {{ (int) ($top['rank'] ?? 0) }}</small>
+                                <h3>{{ $top['submission']?->display_name ?: 'Applicant not available' }}</h3>
+                                <p>{{ $top['submission']?->procurement_submission_code ?: 'N/A' }}</p>
+                                <strong class="evr-podium-score">{{ $top['metric'] !== null ? number_format((float) $top['metric'], 2).'%' : 'N/A' }}</strong>
+                            </article>
+                        @empty
+                            <p class="evr-empty-line">No ranked applicants yet.</p>
+                        @endforelse
+                    </div>
+
+                    <div class="evr-table-wrap">
+                        <table class="evr-table">
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Submission</th>
+                                    <th>Applicant</th>
+                                    <th>Metric</th>
+                                    <th>Highest</th>
+                                    <th>Lowest</th>
+                                    <th>Spread</th>
+                                    <th>Panel status</th>
+                                    <th>Evaluators</th>
+                                    <th>Medal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse ($groupRankings as $row)
+                                    <tr>
+                                <td>
+                                    @if (in_array($row['medal'] ?? null, ['gold', 'silver', 'bronze']))
+                                        <span class="evr-ranking-badge evr-ranking-badge--{{ $row['medal'] }}">
+                                            @if (($row['medal'] ?? null) === 'gold') 🥇 GOLD
+                                            @elseif (($row['medal'] ?? null) === 'silver') 🥈 SILVER
+                                            @elseif (($row['medal'] ?? null) === 'bronze') 🥉 BRONZE
+                                            @endif
+                                        </span>
+                                    @else
+                                        N/A
+                                    @endif
+                                </td>
+                                        <td><strong>{{ $row['submission']?->procurement_submission_code ?: 'N/A' }}</strong></td>
+                                        <td>{{ $row['submission']?->display_name ?: 'Applicant not available' }}</td>
+                                        <td>{{ $row['metric'] !== null ? number_format((float) $row['metric'], 2).'%' : 'N/A' }}</td>
+                                        <td>{{ $row['highest'] !== null ? number_format((float) $row['highest'], 2) : 'N/A' }}</td>
+                                        <td>{{ $row['lowest'] !== null ? number_format((float) $row['lowest'], 2) : 'N/A' }}</td>
+                                        <td>{{ $row['spread'] !== null ? number_format((float) $row['spread'], 2) : 'N/A' }}</td>
+                                        <td><span class="evr-outcome evr-outcome--{{ $row['outcome_tone'] ?? 'neutral' }}">{{ $row['outcome'] ?? $row['panel_status'] ?? 'N/A' }}</span></td>
+                                        <td>{{ number_format((int) ($row['evaluators'] ?? 0)) }}</td>
+                                        <td><small>{{ strtoupper((string) ($row['medal'] ?? '')) }}</small></td>
+                                    </tr>
+                                @empty
+                                    <tr><td colspan="10" class="text-center py-3">No ranked applicants for this evaluation set.</td></tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </article>
+            @empty
+                <div class="evr-empty">
+                    <span class="evr-empty__icon"><i class="feather-users"></i></span>
+                    <h3>No ranking data</h3>
+                    <p>Applicant intelligence needs at least one completed numeric submission.</p>
+                </div>
+            @endforelse
+        </div>
+    </section>
+</main>
 @endsection
 
 @push('styles')
@@ -302,17 +337,18 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            if (typeof Chart === 'undefined') return;
+            if (typeof Chart === 'undefined') {
+                return;
+            }
 
-            const percentageFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
-            document.querySelectorAll('.evr-evaluator-score-chart').forEach((canvas) => {
+            document.querySelectorAll('.evr-evaluator-applicant-chart').forEach((canvas) => {
                 const rawRows = canvas.dataset.chart || '[]';
                 let rows = [];
 
                 try {
                     rows = JSON.parse(rawRows);
                 } catch {
-                    return;
+                    rows = [];
                 }
 
                 if (!Array.isArray(rows) || rows.length === 0) {
@@ -321,39 +357,27 @@
 
                 const labels = rows.map((row) => row.evaluator || 'Unassigned');
                 const percentages = rows.map((row) => Number(row.percentage ?? 0));
-                const applicants = rows.map((row) => Number(row.applicants ?? 0));
-                const emails = rows.map((row) => row.evaluator_email || '');
-
-                new Chart(canvas, {
+                const chart = new Chart(canvas, {
                     type: 'bar',
                     data: {
                         labels,
                         datasets: [{
                             data: percentages,
-                            backgroundColor: 'rgba(15, 118, 110, 0.22)',
-                            borderColor: 'rgba(15, 118, 110, 0.92)',
+                            backgroundColor: 'rgba(15, 118, 110, 0.25)',
+                            borderColor: 'rgba(15, 118, 110, 0.95)',
                             borderWidth: 1,
-                            borderRadius: 7,
+                            borderRadius: 8,
                         }],
                     },
                     options: {
                         indexAxis: 'x',
                         responsive: true,
                         maintainAspectRatio: false,
-                        layout: {
-                            padding: {
-                                top: 8,
-                                right: 6,
-                                bottom: 6,
-                                left: 6,
-                            },
-                        },
                         scales: {
                             x: {
                                 ticks: {
                                     autoSkip: false,
                                     maxRotation: 35,
-                                    minRotation: 0,
                                     color: '#4d6275',
                                     font: { size: 10 },
                                 },
@@ -374,21 +398,19 @@
                             legend: { display: false },
                             tooltip: {
                                 callbacks: {
-                                    label: (context) => {
-                                        const applicantCount = applicants[context.dataIndex] || 0;
-                                        const safeApplicantCount = Number(applicantCount);
-                                        return `${percentageFormatter.format(context.parsed.y)}% (${safeApplicantCount} applicant${safeApplicantCount === 1 ? '' : 's'})`;
-                                    },
-                                    afterLabel: (context) => {
-                                        const email = emails[context.dataIndex] || '';
-                                        return email ? `email: ${email}` : '';
-                                    },
+                                    label: (context) => `${Number(context.parsed.y).toFixed(1)}%`,
                                 },
                             },
                         },
                     },
                 });
+
+                if (chart) {
+                    chart.resize();
+                }
             });
         });
     </script>
 @endpush
+
+
