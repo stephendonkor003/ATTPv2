@@ -2,6 +2,7 @@
 
 @section('title', $methodDefinition['label'].' Report - '.($procurement->reference_no ?: $procurement->title))
 
+@section('content')
 @php
     $isServices = $method === \App\Models\Evaluation::TYPE_SERVICES;
     $metricValue = $resultSummary['value'] !== null
