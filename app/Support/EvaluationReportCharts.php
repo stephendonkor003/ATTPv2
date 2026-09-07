@@ -17,7 +17,7 @@ final class EvaluationReportCharts
     ];
 
     /**
-     * @param  array<int, string>  $labels  Applicant codes in the intended display order.
+     * @param  array<int, string>  $labels  Applicant names in the intended display order.
      * @param  array<int, array{name:string, color?:string, values:array<int, int|float|null>}>  $series
      * @return array<int, array{title:string, src:string, alt:string, note:string, data:array}>
      */
@@ -150,7 +150,7 @@ final class EvaluationReportCharts
                     }
                 }
             }
-            $body .= self::text(570, $bottom + $labelHeight + 44, 'Applicants (submission codes)', 12, '#60738b', 'middle');
+            $body .= self::text(570, $bottom + $labelHeight + 44, 'Applicants', 12, '#60738b', 'middle');
             $charts[] = self::chart($chartTitle, $body, $height, $alt, $note) + ['data' => [
                 'kind' => $kind,
                 'labels' => $chunk,

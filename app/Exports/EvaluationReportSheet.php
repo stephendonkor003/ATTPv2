@@ -102,7 +102,7 @@ class EvaluationReportSheet implements FromArray, WithCharts, WithColumnWidths, 
             $chart = new Chart('evaluation_'.substr(hash('sha256', $this->title), 0, 10).'_'.$index,
                 new Title($placement['title']), new Legend(Legend::POSITION_BOTTOM), new PlotArea($layout, [$series]),
                 true, DataSeries::EMPTY_AS_GAP,
-                $pie ? null : new Title('Applicants (submission codes)'),
+                $pie ? null : new Title('Applicants'),
                 $pie ? null : new Title($data['axis'] ?? 'Score (%)'), null, $axis);
             $chart->setTopLeftPosition('A'.$placement['chart_top']);
             $chart->setBottomRightPosition('I'.($placement['chart_top'] + 22));
@@ -161,7 +161,7 @@ class EvaluationReportSheet implements FromArray, WithCharts, WithColumnWidths, 
             $rows[] = [];
             $sourceHeader = count($rows) + 1;
             $rows[] = array_map([self::class, 'literal'], array_merge(
-                [$data['kind'] === 'pie' ? 'Category' : 'Applicant code'], array_column($data['series'], 'name')));
+                [$data['kind'] === 'pie' ? 'Category' : 'Applicant name'], array_column($data['series'], 'name')));
             foreach ($data['labels'] as $labelIndex => $label) {
                 $rows[] = array_merge([self::literal($label)], array_map(fn ($series) => $series['values'][$labelIndex], $data['series']));
             }
@@ -170,7 +170,9 @@ class EvaluationReportSheet implements FromArray, WithCharts, WithColumnWidths, 
                 'note_row' => $noteRow, 'source_header' => $sourceHeader, 'data' => $data, 'has_values' => $hasValues,
             ];
         }
-        $this->preparedRows = $rows;
+        // Laravel Excel flattens [] out of the export. A real empty-string cell
+        // also retains trailing spacer rows across its 1,000-row write chunks.
+        $this->preparedRows = array_map(static fn ($row) => $row === [] ? [''] : $row, $rows);
     }
 
     private function sourceRange(string $column, int $first, int $last): string
@@ -273,6 +275,20 @@ class EvaluationReportSheet implements FromArray, WithCharts, WithColumnWidths, 
                     $sheet->getStyle('A'.$header.':'.$endColumn.$header)->getFont()->setBold(true);
                     $sheet->getRowDimension($header)->setRowHeight(32);
                     $lastDataRow = $header + count($placement['data']['labels']);
+                    foreach ($placement['data']['labels'] as $index => $label) {
+                        $lines = 1;
+                        $used = 0;
+                        foreach (preg_split('/\s+/u', (string) $label, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $word) {
+                            $width = max(1, mb_strwidth($word, 'UTF-8'));
+                            if ($used > 0 && $used + 1 + $width > 18) {
+                                $lines++;
+                                $used = 0;
+                            }
+                            $lines += intdiv(max(0, $width - 1), 18);
+                            $used += (($width - 1) % 18 + 1) + ($used > 0 ? 1 : 0);
+                        }
+                        $sheet->getRowDimension($header + $index + 1)->setRowHeight(min(409, $lines * 15 + 3));
+                    }
                     if ($lastDataRow > $header && $endColumn !== 'A') {
                         $sheet->getStyle('B'.($header + 1).':'.$endColumn.$lastDataRow)->getNumberFormat()
                             ->setFormatCode($placement['data']['kind'] === 'pie' ? '0' : '0.00');

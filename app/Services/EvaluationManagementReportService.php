@@ -247,7 +247,7 @@ class EvaluationManagementReportService
                 }
             }
             $rankings = $numeric ? $this->rank($rankings, 'score') : $rankings;
-            $labels = array_column($rankings, 'code');
+            $labels = array_column($rankings, 'name');
             $orderedIds = array_column($rankings, '_id');
             $series = [];
             foreach ($people as $person) {
