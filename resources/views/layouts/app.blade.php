@@ -401,6 +401,10 @@
     <div class="main-wrapper">
         <!-- Sidebar -->
         @include('layouts.partials.sidebar')
+        @if (auth()->check() && app(\App\Services\AssistantSubmissionService::class)->isReviewer(auth()->user()))
+            <a href="{{ route('assistant-approvals.index') }}" class="btn btn-primary shadow-sm" style="position:fixed;right:20px;bottom:24px;z-index:1040"><i class="feather-check-square me-1"></i> Assistant approvals</a>
+        @endif
+
 
         <div class="content-wrapper">
             <!-- Header -->

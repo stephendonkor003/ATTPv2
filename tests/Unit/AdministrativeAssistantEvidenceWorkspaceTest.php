@@ -36,7 +36,7 @@ it('shows assistant evidence on finance and vendor invoice pages', function () {
         ->toContain('multiple data-file-input')
         ->toContain('data-file-preview-modal')
         ->toContain('new DataTransfer()')
-        ->toContain('URL.createObjectURL(file)')
+        ->toContain('reader.readAsDataURL(file)')
         ->toContain('data-file-list');
 });
 

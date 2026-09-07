@@ -168,6 +168,24 @@ public function index()
     }
 
     public function store(Request $request)
+    {
+        if ($request->user()?->isAdministrativeAssistant()) return $this->persistPurchaseRequest($request);
+
+        return DB::transaction(function () use ($request) {
+            // Every creator competes for the same allocation, even across fundings.
+            $allocationId = $request->input('allocation_id');
+            if (is_string($allocationId) && Str::isUuid($allocationId)) {
+                SubActivity::whereKey($allocationId)->lockForUpdate()->first();
+            }
+            $fundingId = $request->input('program_funding_id');
+            if (is_string($fundingId) && Str::isUuid($fundingId)) {
+                ProgramFunding::whereKey($fundingId)->lockForUpdate()->first();
+            }
+            return $this->persistPurchaseRequest($request);
+        });
+    }
+
+    private function persistPurchaseRequest(Request $request)
 {
 	    /* =====================================================
 	     * 1. VALIDATION
@@ -442,6 +460,22 @@ public function index()
 		                ->withInput();
 		        }
 
+        if ($request->user()?->isAdministrativeAssistant()) {
+            return app(\App\Services\AssistantSubmissionService::class)->capture($request, 'purchase_request', $validated, $funding->governance_node_id, [
+                'Program' => $funding->program?->name,
+                'Sub-activity' => SubActivity::find($validated['allocation_id'])?->name,
+                'Description' => $validated['description'] ?? '',
+                'Delivery date' => $validated['delivery_date'], 'Budget year' => $startYear,
+                'Currency' => $funding->currency ?? $funding->program?->currency, 'Total amount' => $requestedAmount,
+                'Line items' => collect($items)->map(fn ($item) => [
+                    'Resource' => Resource::find($item['resource_id'])?->name,
+                    'Category' => ResourceCategory::find($item['resource_category_id'])?->name,
+                    'Quantity' => $item['quantity'], 'Unit price' => $item['unit_price'], 'Amount' => $item['amount'],
+                    'Milestone' => $item['milestone'] ?? '', 'Due date' => $item['milestone_date'] ?? '',
+                ])->all(),
+            ]);
+        }
+
 		        DB::beginTransaction();
 		        $transactionStarted = true;
 
@@ -517,6 +551,7 @@ public function index()
 		            ])->save();
 		        }
 
+        $request->attributes->set('assistant_published_ids', [$purchaseRequest->id]);
 		        DB::commit();
 		        $transactionStarted = false;
 
@@ -2033,6 +2068,11 @@ protected function aiSummary(array $allocated, array $committed)
     private function scopedNodeIds(): ?array
     {
         $currentUser = Auth::user();
+
+        // Assistants prepare requests here; only reviewed submissions become financial records.
+        if ($currentUser?->isAdministrativeAssistant() && request()->routeIs('administrative-assistant.requests.*')) {
+            return $currentUser->governance_node_id ? [$currentUser->governance_node_id] : null;
+        }
 
         if (!$currentUser || $currentUser->isAdmin() || $currentUser->isSuperAdmin()) {
             return null;

@@ -246,8 +246,11 @@ class ProcurementDisbursementController extends Controller
                                 } elseif ($extension === '' && ! empty($document['path'])) {
                                     $extension = $this->detectWordDocumentExtension((string) $document['path']);
                                 }
-                                $previewUrl = route('procurement.purchase-orders.line-item-evidence.document', [$order, $evidence, $index]);
-                                $wordPreviewUrl = in_array($extension, ['doc', 'docx'], true)
+                                $assistantPreview = auth()->user()?->isAdministrativeAssistant();
+                                $previewUrl = $assistantPreview
+                                    ? route('administrative-assistant.evidence.documents.download', [$order, $evidence->purchase_request_item_id, $evidence, $index])
+                                    : route('procurement.purchase-orders.line-item-evidence.document', [$order, $evidence, $index]);
+                                $wordPreviewUrl = ! $assistantPreview && in_array($extension, ['doc', 'docx'], true)
                                     ? route('procurement.purchase-orders.line-item-evidence.document-preview', [$order, $evidence, $index])
                                     : null;
                                 $publicPreviewUrl = URL::temporarySignedRoute(
@@ -329,6 +332,19 @@ class ProcurementDisbursementController extends Controller
 
     public function store(Request $request)
     {
+        if ($request->user()?->isAdministrativeAssistant()) return $this->persistDisbursement($request);
+
+        return DB::transaction(function () use ($request) {
+            $purchaseOrderId = $request->input('purchase_order_id');
+            if (is_string($purchaseOrderId) && Str::isUuid($purchaseOrderId)) {
+                ProcurementPurchaseOrder::whereKey($purchaseOrderId)->lockForUpdate()->first();
+            }
+            return $this->persistDisbursement($request);
+        });
+    }
+
+    private function persistDisbursement(Request $request)
+    {
         $data = $request->validate([
             'purchase_order_id'  => 'required|exists:procurement_purchase_orders,id',
             'payments' => ['required', 'array', 'min:1', 'max:50'],
@@ -384,6 +400,25 @@ class ProcurementDisbursementController extends Controller
 
         $paymentRows = $this->validatedPaymentRows($purchaseOrder, $data['payments']);
 
+        if ($request->user()?->isAdministrativeAssistant()) {
+            return app(\App\Services\AssistantSubmissionService::class)->capture($request, 'disbursement', $data, $purchaseOrder->governance_node_id, [
+                'Purchase order' => $purchaseOrder->reference_no, 'Vendor' => $purchaseOrder->vendor?->name,
+                'Currency' => $purchaseOrder->resolved_currency, 'Total amount' => collect($paymentRows)->sum('amount'),
+                'Line items' => collect($paymentRows)->map(fn ($row) => [
+                    'Deliverable' => PurchaseRequestItem::find($row['purchase_request_item_id'])?->milestone,
+                    'Amount' => $row['amount'], 'Payment method' => $row['payment_method'],
+                    'Payment date' => $row['paid_at'], 'Reference' => $row['reference_no'],
+                    'Transfer reference' => $row['transfer_reference'], 'Status' => $row['status'], 'Notes' => $row['notes'],
+                ])->all(),
+                'Deliverable evidence' => collect($data['item_evidence'] ?? [])->map(fn ($evidence, $itemId) => [
+                    'Deliverable' => PurchaseRequestItem::find($itemId)?->milestone,
+                    'Marked received' => (bool) ($evidence['is_met'] ?? false),
+                    'Deliverable date' => $evidence['deliverable_date'] ?? '',
+                    'Notes' => $evidence['notes'] ?? '',
+                ])->values()->all(),
+            ]);
+        }
+
         $this->storeLineItemEvidence($request, $purchaseOrder);
 
         $disbursements = collect();
@@ -411,13 +446,28 @@ class ProcurementDisbursementController extends Controller
             ]);
         });
 
-        $disbursements->each(fn (ProcurementDisbursement $row) => $this->sendReceipt($row->fresh()));
-        $handoffNotifier = app(ProcurementDisbursementHandoffNotificationService::class);
-        $disbursements->each(fn (ProcurementDisbursement $row) => $handoffNotifier->notify($row->fresh()));
+        $request->attributes->set('assistant_published_ids', $disbursements->pluck('id')->all());
+        DB::afterCommit(function () use ($disbursements) {
+            $handoffNotifier = app(ProcurementDisbursementHandoffNotificationService::class);
+            foreach ($disbursements as $row) {
+                // Delivery failures cannot undo a committed financial record or make
+                // the approval appear unsuccessful (which could prompt resubmission).
+                try {
+                    $this->sendReceipt($row->fresh());
+                } catch (\Throwable $exception) {
+                    \Log::warning('Disbursement receipt failed after posting.', ['disbursement_id' => $row->id, 'exception' => $exception::class]);
+                }
+                try {
+                    $handoffNotifier->notify($row->fresh());
+                } catch (\Throwable $exception) {
+                    \Log::warning('Disbursement handoff failed after posting.', ['disbursement_id' => $row->id, 'exception' => $exception::class]);
+                }
+            }
+        });
 
         $message = $disbursements->count() === 1
-            ? 'Disbursement recorded and receipt sent.'
-            : $disbursements->count() . ' disbursements recorded and receipts sent.';
+            ? 'Disbursement recorded successfully.'
+            : $disbursements->count() . ' disbursements recorded successfully.';
 
         return redirect()
             ->route('procurement.disbursements.index')

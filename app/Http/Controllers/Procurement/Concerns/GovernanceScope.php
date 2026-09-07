@@ -20,6 +20,10 @@ trait GovernanceScope
     {
         $currentUser = Auth::user();
 
+        if ($currentUser?->isAdministrativeAssistant() && request()->routeIs('administrative-assistant.disbursements.*')) {
+            return $currentUser->governance_node_id ? [$currentUser->governance_node_id] : null;
+        }
+
         if (!$currentUser || $currentUser->isAdmin() || $currentUser->isSuperAdmin()) {
             return null;
         }

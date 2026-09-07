@@ -16,8 +16,8 @@ it('registers the assistant purchase request intake workspace and navigation', f
         ->toContain("->name('purchase-requests.documents.download')");
 
     expect($layout)
-        ->toContain("route('administrative-assistant.purchase-requests.create')")
-        ->toContain("request()->routeIs('administrative-assistant.purchase-requests.*')")
+        ->toContain("route('administrative-assistant.requests.create')")
+        ->toContain("request()->routeIs('administrative-assistant.requests.*')")
         ->toContain('Create PR');
 
     expect($redirectMiddleware)

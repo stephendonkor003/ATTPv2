@@ -9,14 +9,17 @@ class EvaluationProcurementWorkbookExport implements WithMultipleSheets
     /**
      * @param  array<string, array<int, array<int, mixed>>>  $reportSheets
      */
-    public function __construct(private readonly array $reportSheets) {}
+    public function __construct(
+        private readonly array $reportSheets,
+        private readonly array $chartMap = [],
+    ) {}
 
     public function sheets(): array
     {
         $sheets = [];
 
         foreach ($this->reportSheets as $title => $rows) {
-            $sheets[] = new EvaluationReportSheet($title, $rows);
+            $sheets[] = new EvaluationReportSheet($title, $rows, $this->chartMap[$title] ?? []);
         }
 
         return $sheets;

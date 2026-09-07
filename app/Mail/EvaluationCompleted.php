@@ -3,7 +3,9 @@
 namespace App\Mail;
 
 use App\Models\EvaluationSubmission;
+use App\Services\EvaluationManagementReportService;
 use App\Support\PdfBranding;
+use App\Support\PdfPageNumbering;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -34,11 +36,12 @@ class EvaluationCompleted extends Mailable
                 ->sum('max_score')
             : null;
 
-        $pdf = Pdf::loadView('reports.evaluations.pdf.submission', array_merge([
-            'submission' => $submission,
-            'overallMax' => $overallMax,
-            'anonymised' => false,
-        ], PdfBranding::viewData()));
+        $pdf = Pdf::loadView('reports.evaluations.pdf.method-procurement', array_merge([
+            'procurement' => $submission->procurement,
+            'management' => app(EvaluationManagementReportService::class)->forSubmission($submission),
+            'methodDefinition' => ['label' => 'Individual evaluation', 'mode' => 'Individual evaluator record'],
+        ], PdfBranding::viewData()))->setPaper('a4', 'landscape');
+        PdfPageNumbering::stamp($pdf);
 
         return $this->subject('Evaluation Submitted: '.($submission->applicant?->procurement_submission_code ?? 'Submission'))
             ->view('emails.evaluations.completed', compact('submission', 'overallMax'))

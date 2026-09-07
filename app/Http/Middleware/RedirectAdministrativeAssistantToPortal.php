@@ -37,6 +37,13 @@ class RedirectAdministrativeAssistantToPortal
             abort(403, 'Administrative Assistant accounts can only use their focused workspace.');
         }
 
+        if ($request->routeIs('finance.purchase-requests.create')) {
+            return redirect()->route('administrative-assistant.requests.create');
+        }
+        if ($request->routeIs('procurement.disbursements.create')) {
+            return redirect()->route('administrative-assistant.disbursements.create');
+        }
+
         return redirect()
             ->route('administrative-assistant.dashboard')
             ->with('info', 'Your account has a focused workspace for purchase requests, invoices, and evidence documents.');

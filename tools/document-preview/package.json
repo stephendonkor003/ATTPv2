@@ -1,0 +1,27 @@
+{
+  "name": "attp-local-document-preview",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reproducible local PDF and Word browser preview assets for ATTP.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node tests/legacy-word.test.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "buffer": "6.0.3",
+    "docx-preview": "0.4.0",
+    "events": "3.3.0",
+    "jszip": "3.10.1",
+    "pdfjs-dist": "6.3.289",
+    "process": "0.11.10",
+    "stream-browserify": "3.0.0",
+    "word-extractor": "1.0.4"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

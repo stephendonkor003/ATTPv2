@@ -115,6 +115,7 @@
         .status-qualified, .status-submitted { color: #146c3b; }
         .status-late, .status-under-review { color: #89610b; }
     </style>
+    @include('reports.evaluations.pdf.management-styles')
 </head>
 <body data-layout-revision="detailed-v3">
     @php
@@ -150,6 +151,11 @@
         <td class="brand-cell">@if (! empty($logoDataUri))<img src="{{ $logoDataUri }}" alt="{{ $platformName }}">@else<span class="brand-fallback">{{ $platformName }}</span>@endif</td>
         <td class="heading-cell"><span class="document-tag">Official internal report &middot; Complete decision and evidence register</span><h1>Expression of Interest Qualification Report</h1><p>{{ $procurement->reference_no ?? 'No reference' }}</p></td>
     </tr></table></header>
+
+    @isset($management)
+        @include('reports.evaluations.pdf.management-report', ['management' => $management])
+        <h2 class="section-title page-break-before">Detailed qualification appendix</h2>
+    @endisset
 
     <section class="procurement-banner"><h2>{{ $procurement->title ?? 'Procurement' }}</h2><p>Consolidated active-panel qualification, current shortlist progression, evaluator evidence, and read-only post-qualification workflow snapshot.</p></section>
     <table class="meta-table"><tr>

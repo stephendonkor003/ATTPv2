@@ -33,6 +33,10 @@
         .aa-topbar { min-height: 78px; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 30px; background: rgba(255,255,255,.94); border-bottom: 1px solid var(--aa-border); position: sticky; top: 0; z-index: 15; backdrop-filter: blur(8px); }
         .aa-topbar-kicker { color: var(--aa-teal); font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
         .aa-content { max-width: 1480px; margin: 0 auto; padding: 30px; }
+        .aa-content > .nxl-container { margin: 0; top: 0; padding: 0; min-height: auto; width: 100%; }
+        .aa-content > .nxl-container > .page-header { position: static; min-height: auto; padding: 0 0 18px; display: block; background: transparent; border: 0; }
+        .aa-content > .disb-create > .page-header { padding: 24px; background: linear-gradient(120deg, #10233f, #087f73); }
+        .aa-portal-body :focus-visible { outline: 3px solid #0c9488; outline-offset: 3px; }
         .aa-page-title { font-size: clamp(1.55rem, 3vw, 2.25rem); color: var(--aa-navy); font-weight: 850; letter-spacing: -.035em; }
         .aa-card { background: #fff; border: 1px solid var(--aa-border); border-radius: 18px; box-shadow: 0 14px 34px rgba(16,35,63,.07); }
         .btn-aa { background: var(--aa-teal); border-color: var(--aa-teal); color: #fff; font-weight: 700; }
@@ -45,7 +49,8 @@
             .aa-topbar { padding: 14px 18px; }
             .aa-content { padding: 20px 16px 90px; }
             .aa-mobile-menu { display: flex; position: fixed; bottom: 14px; left: 14px; right: 14px; z-index: 30; padding: 9px; border-radius: 16px; background: var(--aa-navy); box-shadow: 0 16px 35px rgba(15,23,42,.3); justify-content: space-around; }
-            .aa-mobile-menu a, .aa-mobile-menu button { color: #fff; background: transparent; border: 0; text-decoration: none; font-size: .8rem; font-weight: 700; padding: 8px 12px; }
+            .aa-mobile-menu a, .aa-mobile-menu button { color: #fff; background: transparent; border: 0; text-decoration: none; font-size: .7rem; font-weight: 700; padding: 7px 5px; text-align: center; }
+            .aa-mobile-menu i { display: block; font-size: 1rem; margin-bottom: 3px; }
         }
     </style>
     @stack('styles')
@@ -65,10 +70,16 @@
 
         <div class="aa-nav-label">My workspace</div>
         <a href="{{ route('administrative-assistant.dashboard') }}" class="aa-nav-link {{ request()->routeIs('administrative-assistant.dashboard', 'administrative-assistant.evidence.*') ? 'active' : '' }}">
-            <i class="feather-upload-cloud"></i> Upload centre
+            <i class="feather-upload-cloud"></i> Invoice upload center
         </a>
-        <a href="{{ route('administrative-assistant.purchase-requests.create') }}" class="aa-nav-link {{ request()->routeIs('administrative-assistant.purchase-requests.*') ? 'active' : '' }}">
-            <i class="feather-file-plus"></i> Create PR
+        <a href="{{ route('administrative-assistant.requests.create') }}" class="aa-nav-link {{ request()->routeIs('administrative-assistant.requests.*') ? 'active' : '' }}">
+            <i class="feather-file-plus"></i> Create purchase request
+        </a>
+        <a href="{{ route('administrative-assistant.disbursements.create') }}" class="aa-nav-link {{ request()->routeIs('administrative-assistant.disbursements.*') ? 'active' : '' }}">
+            <i class="feather-credit-card"></i> Create disbursement
+        </a>
+        <a href="{{ route('administrative-assistant.submissions.index') }}" class="aa-nav-link {{ request()->routeIs('administrative-assistant.submissions.*') ? 'active' : '' }}">
+            <i class="feather-check-square"></i> My submissions
         </a>
 
         <div class="aa-user">
@@ -113,9 +124,11 @@
 </div>
 
 <div class="aa-mobile-menu">
-    <a href="{{ route('administrative-assistant.dashboard') }}"><i class="feather-upload-cloud me-1"></i> Uploads</a>
-    <a href="{{ route('administrative-assistant.purchase-requests.create') }}"><i class="feather-file-plus me-1"></i> Create PR</a>
-    <button type="button" onclick="document.getElementById('aaLogoutForm').submit();"><i class="feather-log-out me-1"></i> Sign out</button>
+    <a href="{{ route('administrative-assistant.dashboard') }}"><i class="feather-upload-cloud me-1"></i> Invoice uploads</a>
+    <a href="{{ route('administrative-assistant.requests.create') }}"><i class="feather-file-plus"></i> Create PR</a>
+    <a href="{{ route('administrative-assistant.disbursements.create') }}"><i class="feather-credit-card"></i> Payment</a>
+    <a href="{{ route('administrative-assistant.submissions.index') }}"><i class="feather-check-square"></i> My requests</a>
+    <button type="button" onclick="document.getElementById('aaLogoutForm').submit();"><i class="feather-log-out"></i> Sign out</button>
 </div>
 <form id="aaLogoutForm" method="POST" action="{{ route('logout') }}" class="d-none">@csrf</form>
 

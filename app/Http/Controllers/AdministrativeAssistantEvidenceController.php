@@ -410,6 +410,10 @@ class AdministrativeAssistantEvidenceController extends Controller
             ? 'Invoice and evidence documents uploaded. The vendor account and invoice register have been updated automatically.'
             : 'Evidence documents uploaded and added to the vendor account.';
 
+        if ($request->expectsJson()) {
+            return response()->json(['message' => $message, 'documents_added' => count($storedDocuments)]);
+        }
+
         return redirect()
             ->route('administrative-assistant.evidence.show', array_filter([
                 $purchaseOrder,
@@ -448,7 +452,9 @@ class AdministrativeAssistantEvidenceController extends Controller
             'X-Content-Type-Options' => 'nosniff',
         ];
 
-        return $request->boolean('download')
+        $safePreview = in_array($disk->mimeType($file['path']), ['application/pdf', 'image/jpeg', 'image/png', 'text/plain', 'text/csv'], true);
+
+        return $request->boolean('download') || ! $safePreview
             ? $disk->download($file['path'], $name, $headers)
             : $disk->response($file['path'], $name, $headers);
     }

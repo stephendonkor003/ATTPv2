@@ -41,6 +41,7 @@ it('provides method-aware rankings, categorical outcomes, and every requested ex
     $eoiQualificationService = file_get_contents($root.'/app/Services/EoiQualificationService.php');
     $routes = file_get_contents($root.'/routes/web.php');
     $detail = file_get_contents($root.'/resources/views/reports/evaluations/method-procurement.blade.php');
+    $managementDetail = file_get_contents($root.'/resources/views/reports/evaluations/partials/management-report.blade.php');
     $eoiDetail = file_get_contents($root.'/resources/views/reports/evaluations/eoi-procurement.blade.php');
     $eoiPdf = file_get_contents($root.'/resources/views/reports/evaluations/pdf/eoi-procurement.blade.php');
     $eoiSheet = file_get_contents($root.'/app/Exports/EvaluationReportSheet.php');
@@ -67,15 +68,28 @@ it('provides method-aware rankings, categorical outcomes, and every requested ex
         ->toContain("->name('eoi.procurement.excel')")
         ->toContain("->name('eoi.procurement.csv')")
         ->and($detail)
-        ->toContain('feather-award')
-        ->toContain('Applicant ranking')
-        ->toContain('Applicant compliance summary')
-        ->toContain('Goods evaluations are categorical')
-        ->toContain('not converted into numeric ranks')
+        ->toContain("@include('reports.evaluations.partials.management-report'")
+        ->not->toContain('cdn.jsdelivr.net/npm/chart.js')
         ->toContain("route('reports.evaluations.method.procurement.excel'")
         ->toContain("route('reports.evaluations.method.procurement.csv'")
         ->toContain("route('reports.evaluations.method.procurement.pdf'")
         ->toContain('onclick="window.print()"')
+        ->and($managementDetail)
+        ->toContain('1 Summary overview')
+        ->toContain('2 Evaluation results and rankings')
+        ->toContain('3 Detailed evaluator and section scores')
+        ->toContain('4 Panel consistency and management insights')
+        ->toContain('5 Governance, audit trail and next steps')
+        ->toContain('id="{{ $managementAnchor }}-summary"')
+        ->toContain('id="{{ $managementAnchor }}-results"')
+        ->toContain('id="{{ $managementAnchor }}-details"')
+        ->toContain('id="{{ $managementAnchor }}-consistency"')
+        ->toContain('id="{{ $managementAnchor }}-governance"')
+        ->toContain('<img class="eval-chart" src="{{ $chart[\'src\'] }}" alt="{{ $chart[\'alt\'] }}">')
+        ->toContain('@if($numericGroup || $qualificationGroup)')
+        ->toContain('Qualification position')
+        ->toContain('Numeric scores and numeric ranks do not apply.')
+        ->toContain('Not recorded')
         ->and($eoiDetail)
         ->toContain("route('reports.evaluations.eoi.procurement.excel'")
         ->toContain("route('reports.evaluations.eoi.procurement.csv'")

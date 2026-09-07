@@ -1,4 +1,7 @@
-@extends('layouts.app')
+@extends(($assistantMode ?? false) ? 'layouts.administrative-assistant' : 'layouts.app')
+
+@php($assistantMode = $assistantMode ?? false)
+@section('workspace-heading', 'Create a disbursement')
 
 @push('styles')
     <style>
@@ -478,12 +481,22 @@
         <div class="page-header d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3">
             <div>
                 <h4 class="fw-bold mb-1">Create Disbursement</h4>
-                <p class="text-muted mb-0">Record payment against a purchase order and confirm linked deliverables.</p>
+                <p class="text-muted mb-0">{{ $assistantMode ? 'Prepare a payment request for the Project Coordinator or an administrator to review and approve.' : 'Record payment against a purchase order and confirm linked deliverables.' }}</p>
             </div>
-            <a href="{{ route('procurement.disbursements.index') }}" class="btn btn-outline-secondary">
+            <a href="{{ route($assistantMode ? 'administrative-assistant.submissions.index' : 'procurement.disbursements.index') }}" class="btn btn-outline-secondary">
                 <i class="feather-arrow-left me-1"></i> Back
             </a>
         </div>
+
+        @if ($assistantMode)
+            <div class="alert alert-info border-0 d-flex gap-3 align-items-start mt-4">
+                <i class="feather-shield fs-24 mt-1" aria-hidden="true"></i>
+                <div>
+                    <div class="fw-bold mb-1">Project Coordinator / administrator approval is required</div>
+                    <div>Submitting this form sends the disbursement for review. No payment, purchase order balance, or financial report changes until an authorized administrator approves it.</div>
+                </div>
+            </div>
+        @endif
 
         @if (session('error'))
             <div class="alert alert-danger mt-3">{{ session('error') }}</div>
@@ -504,7 +517,7 @@
                 No purchase orders with remaining balance are available for disbursement.
             </div>
         @else
-            <form method="POST" action="{{ route('procurement.disbursements.store') }}" enctype="multipart/form-data" id="disbursementForm">
+            <form method="POST" action="{{ route($assistantMode ? 'administrative-assistant.disbursements.store' : 'procurement.disbursements.store') }}" enctype="multipart/form-data" id="disbursementForm">
                 @csrf
 
                 <div class="po-document mt-4">
@@ -662,7 +675,7 @@
                                         <div class="text-muted small">Add every PO item line being paid. Each row gets its own receipt reference and payment details.</div>
                                     </div>
                                     <div class="payment-note small">
-                                        Payment is posted per PO item line. Use add/remove to build a batch without losing the line-level audit trail.
+                                        {{ $assistantMode ? 'The coordinator reviews the complete batch. Each item is posted only after approval.' : 'Payment is posted per PO item line. Use add/remove to build a batch without losing the line-level audit trail.' }}
                                     </div>
                                 </div>
 
@@ -683,11 +696,11 @@
                                 </div>
 
                                 <div class="d-flex flex-wrap justify-content-end gap-2 mt-3">
-                                    <a href="{{ route('procurement.disbursements.index') }}" class="btn btn-light">
+                                    <a href="{{ route($assistantMode ? 'administrative-assistant.submissions.index' : 'procurement.disbursements.index') }}" class="btn btn-light">
                                         Cancel
                                     </a>
                                     <button type="submit" class="btn btn-primary">
-                                        <i class="feather-check-circle me-1"></i> Record Disbursements
+                                        <i class="feather-check-circle me-1"></i> {{ $assistantMode ? 'Submit for approval' : 'Record Disbursements' }}
                                     </button>
                                 </div>
                             </div>

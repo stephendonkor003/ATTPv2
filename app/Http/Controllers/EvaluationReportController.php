@@ -13,6 +13,9 @@ use App\Models\EvaluationSubmission;
 use App\Models\Procurement;
 use App\Models\ProcurementPlan;
 use App\Services\EoiQualificationService;
+use App\Services\EvaluationManagementReportService;
+use App\Support\EvaluationManagementExportData;
+use App\Support\EvaluationReportPdf;
 use App\Services\EoiReportCommunicationService;
 use App\Support\PdfBranding;
 use App\Support\PdfPageNumbering;
@@ -566,7 +569,7 @@ class EvaluationReportController extends Controller
         $filename = $this->methodReportFilename($method, $procurement).'.xlsx';
 
         return $this->downloadWorkbook(
-            new EvaluationProcurementWorkbookExport($this->workbookRows($report)),
+            new EvaluationProcurementWorkbookExport($this->workbookRows($report), EvaluationManagementExportData::charts($report['management'])),
             $filename
         );
     }
@@ -606,12 +609,10 @@ class EvaluationReportController extends Controller
         }
 
         $report = $this->buildMethodProcurementReport($method, $procurement);
-        $pdf = Pdf::loadView(
-            'reports.evaluations.pdf.method-procurement',
-            array_merge($report, PdfBranding::viewData())
-        )->setPaper('a4', 'landscape');
-
-        return $pdf->download($this->methodReportFilename($method, $procurement).'.pdf');
+        return EvaluationReportPdf::download(
+            array_merge($report, PdfBranding::viewData()),
+            $this->methodReportFilename($method, $procurement).'.pdf'
+        );
     }
 
     public function submission(EvaluationSubmission $submission)
@@ -629,7 +630,9 @@ class EvaluationReportController extends Controller
 
         $overallMax = $this->overallMax($submission);
 
-        return view('reports.evaluations.submission', compact('submission', 'overallMax'));
+        $management = app(EvaluationManagementReportService::class)->forSubmission($submission);
+
+        return view('reports.evaluations.submission', compact('submission', 'overallMax', 'management'));
     }
 
     public function submissionPdf(EvaluationSubmission $submission)
@@ -653,6 +656,8 @@ class EvaluationReportController extends Controller
     ) {
         $this->assertEvaluationProcurementScope($procurement);
         $report = $qualificationService->buildProcurementReport($procurement);
+        $management = app(EvaluationManagementReportService::class)->forProcurement($procurement, Evaluation::TYPE_EOI);
+        $report['management'] = $management;
 
         abort_if(
             $report['evaluations']->isEmpty(),
@@ -713,6 +718,7 @@ class EvaluationReportController extends Controller
 
         return view('reports.evaluations.eoi-procurement', compact(
             'report',
+            'management',
             'communications',
             'communicationPreview',
             'technicalProposalRounds'
@@ -725,6 +731,8 @@ class EvaluationReportController extends Controller
     ) {
         $this->assertEvaluationProcurementScope($procurement);
         $report = $qualificationService->buildProcurementReport($procurement);
+        $management = app(EvaluationManagementReportService::class)->forProcurement($procurement, Evaluation::TYPE_EOI);
+        $report['management'] = $management;
 
         abort_if(
             $report['evaluations']->isEmpty(),
@@ -734,9 +742,10 @@ class EvaluationReportController extends Controller
 
         $supportingData = $this->eoiPdfSupportingData($procurement);
 
+        EvaluationReportPdf::prepare();
         $pdf = Pdf::loadView(
             'reports.evaluations.pdf.eoi-procurement',
-            array_merge(['report' => $report], $supportingData, PdfBranding::viewData())
+            array_merge(['report' => $report, 'management' => $management], $supportingData, PdfBranding::viewData())
         )->setPaper('a4', 'landscape');
 
         $name = Str::slug($procurement->reference_no ?: $procurement->title ?: $procurement->getKey());
@@ -759,6 +768,8 @@ class EvaluationReportController extends Controller
     ) {
         $this->assertEvaluationProcurementScope($procurement);
         $report = $qualificationService->buildProcurementReport($procurement);
+        $management = app(EvaluationManagementReportService::class)->forProcurement($procurement, Evaluation::TYPE_EOI);
+        $report['management'] = $management;
 
         abort_if(
             $report['evaluations']->isEmpty(),
@@ -773,7 +784,7 @@ class EvaluationReportController extends Controller
                 $report,
                 $supportingData['technicalProposalRounds'],
                 $supportingData['communications']
-            )),
+            ), EvaluationManagementExportData::charts($management)),
             $this->methodReportFilename(Evaluation::TYPE_EOI, $procurement).'.xlsx'
         );
 
@@ -791,6 +802,8 @@ class EvaluationReportController extends Controller
     ) {
         $this->assertEvaluationProcurementScope($procurement);
         $report = $qualificationService->buildProcurementReport($procurement);
+        $management = app(EvaluationManagementReportService::class)->forProcurement($procurement, Evaluation::TYPE_EOI);
+        $report['management'] = $management;
 
         abort_if(
             $report['evaluations']->isEmpty(),
@@ -841,13 +854,14 @@ class EvaluationReportController extends Controller
             : Str::slug($submission->applicant?->procurement_submission_code ?: $submission->id);
         $prefix = $anonymised ? 'evaluation-submission-anonymised-' : 'evaluation-submission-';
 
-        $pdf = Pdf::loadView('reports.evaluations.pdf.submission', array_merge([
-            'submission' => $submission,
-            'overallMax' => $overallMax,
-            'anonymised' => $anonymised,
-        ], PdfBranding::viewData()))->setPaper('a4', 'portrait');
+        EvaluationReportPdf::prepare();
+        $pdf = Pdf::loadView('reports.evaluations.pdf.method-procurement', array_merge([
+            'procurement' => $submission->procurement,
+            'management' => app(EvaluationManagementReportService::class)->forSubmission($submission, $anonymised),
+            'methodDefinition' => ['label' => $anonymised ? 'Anonymised individual evaluation' : 'Individual evaluation', 'mode' => $anonymised ? 'Applicant identity and narrative withheld' : 'Individual evaluator record'],
+        ], PdfBranding::viewData()))->setPaper('a4', 'landscape');
 
-        return $pdf->download($prefix.trim($name.'-'.$code, '-').'.pdf');
+        return PdfPageNumbering::stamp($pdf)->download($prefix.trim($name.'-'.$code, '-').'.pdf');
     }
 
     public function procurement(Procurement $procurement)
@@ -872,7 +886,10 @@ class EvaluationReportController extends Controller
         $evaluatorBreakdown = $this->buildEvaluatorBreakdown($submissions);
         $evaluationStats = $this->buildEvaluationStats($submissions);
 
+        $management = app(EvaluationManagementReportService::class)->forProcurement($procurement);
+
         return view('reports.evaluations.procurement', compact(
+            'management',
             'procurement',
             'submissions',
             'summary',
@@ -886,34 +903,11 @@ class EvaluationReportController extends Controller
     {
         $this->assertEvaluationProcurementScope($procurement);
 
-        $submissions = $this->activeReportSubmissions(EvaluationSubmission::with([
-            'procurement',
-            'applicant.submitter',
-            'evaluation.sections.criteria',
-            'criteriaScores',
-            'sectionScores',
-            'evaluator',
-        ])
-            ->where('procurement_id', $procurement->id)
-            ->whereNotNull('submitted_at')
-            ->orderByDesc('submitted_at')
-            ->get());
-
-        $summary = $this->buildSummary($submissions);
-        $rankings = $this->buildApplicantRankings($submissions);
-        $evaluatorBreakdown = $this->buildEvaluatorBreakdown($submissions);
-        $evaluationStats = $this->buildEvaluationStats($submissions);
-
-        $pdf = Pdf::loadView('reports.evaluations.pdf.procurement', compact(
-            'procurement',
-            'submissions',
-            'summary',
-            'rankings',
-            'evaluatorBreakdown',
-            'evaluationStats'
-        ))->setPaper('a4', 'landscape');
-
-        return $pdf->download('evaluation-procurement-'.$procurement->id.'.pdf');
+        return EvaluationReportPdf::download(array_merge([
+            'procurement' => $procurement,
+            'management' => app(EvaluationManagementReportService::class)->forProcurement($procurement),
+            'methodDefinition' => ['label' => 'All evaluation methods', 'mode' => 'Procurement management report'],
+        ], PdfBranding::viewData()), 'evaluation-procurement-'.$procurement->id.'.pdf');
     }
 
     public function consolidated()
@@ -934,7 +928,10 @@ class EvaluationReportController extends Controller
         $evaluatorBreakdown = $this->buildEvaluatorBreakdown($submissions);
         $procurementStats = $this->buildProcurementStats($submissions);
 
+        $management = app(EvaluationManagementReportService::class)->consolidated($submissions);
+
         return view('reports.evaluations.consolidated', compact(
+            'management',
             'submissions',
             'summary',
             'evaluatorBreakdown',
@@ -956,18 +953,11 @@ class EvaluationReportController extends Controller
         $this->applyEvaluationReportSubmissionScope($submissionQuery);
         $submissions = $this->activeReportSubmissions($submissionQuery->get());
 
-        $summary = $this->buildSummary($submissions);
-        $evaluatorBreakdown = $this->buildEvaluatorBreakdown($submissions);
-        $procurementStats = $this->buildProcurementStats($submissions);
-
-        $pdf = Pdf::loadView('reports.evaluations.pdf.consolidated', compact(
-            'submissions',
-            'summary',
-            'evaluatorBreakdown',
-            'procurementStats'
-        ))->setPaper('a4', 'landscape');
-
-        return $pdf->download('evaluation-consolidated.pdf');
+        return EvaluationReportPdf::download(array_merge([
+            'procurement' => (object) ['title' => 'Consolidated evaluation report', 'reference_no' => 'Authorized procurements'],
+            'management' => app(EvaluationManagementReportService::class)->consolidated($submissions),
+            'methodDefinition' => ['label' => 'Consolidated evaluations', 'mode' => 'Each procurement, form and phase is evaluated separately'],
+        ], PdfBranding::viewData()), 'evaluation-consolidated.pdf');
     }
 
     private function normaliseMethod(string $method): string
@@ -1134,6 +1124,7 @@ class EvaluationReportController extends Controller
             ->max();
 
         return [
+            'management' => app(\App\Services\EvaluationManagementReportService::class)->forProcurement($procurement, $method),
             'method' => $method,
             'methodDefinition' => $this->methodDefinition($method),
             'procurement' => $procurement,
@@ -1309,33 +1300,6 @@ class EvaluationReportController extends Controller
                         Str::lower((string) ($right['submission']?->display_name ?? $right['submission']?->procurement_submission_code ?? ''))
                     )
                     : $metricCompare;
-            })
-            ->values();
-
-        $position = 0;
-        $currentRank = 0;
-        $previousMetric = null;
-
-        $rankedRows = $rankedRows
-            ->map(function (array $row) use (&$position, &$currentRank, &$previousMetric): array {
-                if (! ($row['panel_complete'] ?? false) || $row['metric'] === null) {
-                    return $row;
-                }
-
-                $position++;
-                if ($previousMetric === null || abs((float) $previousMetric - (float) $row['metric']) >= 0.005) {
-                    $currentRank = $position;
-                }
-                $row['rank'] = $currentRank;
-                $row['medal'] = match ((int) $currentRank) {
-                    1 => 'gold',
-                    2 => 'silver',
-                    3 => 'bronze',
-                    default => null,
-                };
-                $previousMetric = (float) $row['metric'];
-
-                return $row;
             })
             ->values();
 
@@ -1730,6 +1694,7 @@ class EvaluationReportController extends Controller
 
     private function workbookRows(array $report): array
     {
+        if (isset($report['management'])) return \App\Support\EvaluationManagementExportData::sheets($report['management']);
         $procurement = $report['procurement'];
         $definition = $report['methodDefinition'];
         $summary = $report['summary'];
@@ -1899,6 +1864,7 @@ class EvaluationReportController extends Controller
 
     private function csvRows(array $report): array
     {
+        if (isset($report['management'])) return \App\Support\EvaluationManagementExportData::csv($report['management']);
         $headings = [
             'Section',
             'Group',
@@ -2489,7 +2455,7 @@ class EvaluationReportController extends Controller
             $communications
         );
 
-        return [
+        return array_merge(isset($report['management']) ? EvaluationManagementExportData::sheets($report['management']) : [], [
             'Overview' => $overview,
             'Decision Summary' => $decisionSummary,
             'Qualified Ranking' => $ranking,
@@ -2500,7 +2466,7 @@ class EvaluationReportController extends Controller
             'Proposal Candidates' => $proposalCandidates,
             'Proposal Rules & Files' => $proposalRules,
             'Communications' => $communicationRows,
-        ];
+        ]);
     }
 
     private function eoiCsvRows(
@@ -2727,6 +2693,12 @@ class EvaluationReportController extends Controller
                 'proposal_round' => $communication->technical_proposal_round_id ?: '',
                 'submitted_at' => $communication->sent_at?->format('Y-m-d H:i:s') ?? '',
             ]);
+        }
+
+        if (isset($report['management'])) {
+            [$managementHeadings, $managementRows] = EvaluationManagementExportData::csv($report['management']);
+            $rows[] = array_pad($managementHeadings, count($headings), '');
+            foreach ($managementRows as $row) $rows[] = array_pad($row, count($headings), '');
         }
 
         return [$headings, $rows];

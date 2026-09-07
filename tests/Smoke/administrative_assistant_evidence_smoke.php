@@ -51,7 +51,7 @@ try {
 
     $dashboard = assistantEvidenceRequest($http, $session, '/administrative-assistant');
     assistantEvidenceAssert($dashboard->getStatusCode() === 200, 'Assistant dashboard did not load.');
-    assistantEvidenceAssert(str_contains((string) $dashboard->getContent(), 'Upload centre'), 'Assistant dashboard content is missing.');
+    assistantEvidenceAssert(str_contains((string) $dashboard->getContent(), 'Invoice upload center'), 'Assistant dashboard content is missing.');
 
     $folderDate = $evidence->deliverable_date ?: $item->milestone_date ?: now();
     $folderYear = $folderDate->year;
@@ -180,6 +180,30 @@ try {
         'An over-limit upload changed the evidence documents.'
     );
 
+    $beforeQueue = count($evidence->documents);
+    foreach ([10, 10, 5] as $batchNumber => $batchSize) {
+        $batchResponse = assistantEvidenceRequest(
+            $http, $session,
+            "/administrative-assistant/purchase-orders/{$purchaseOrder->id}/items/{$item->id}",
+            'POST',
+            ['_token' => $token, 'deliverable_date' => $folderDate->format('Y-m-d')],
+            ['supporting_documents' => array_map(
+                fn ($index) => UploadedFile::fake()->createWithContent("queue-{$batchNumber}-{$index}.txt", 'Saved preview content'),
+                range(1, $batchSize)
+            )],
+            true
+        );
+        assistantEvidenceAssert($batchResponse->getStatusCode() === 200, 'Queue batch failed.');
+        assistantEvidenceAssert(json_decode($batchResponse->getContent(), true)['documents_added'] === $batchSize, 'Batch acknowledgement is incorrect.');
+    }
+    $evidence->refresh();
+    assistantEvidenceAssert(count($evidence->documents) === $beforeQueue + 25, 'Queue did not append all 25 documents.');
+    $preview = assistantEvidenceRequest($http, $session,
+        "/administrative-assistant/purchase-orders/{$purchaseOrder->id}/items/{$item->id}/evidence/{$evidence->id}/documents/{$beforeQueue}");
+    assistantEvidenceAssert($preview->getStatusCode() === 200, 'Saved preview did not load.');
+    assistantEvidenceAssert(str_contains((string) $preview->headers->get('Content-Disposition'), 'inline'), 'Text preview was not inline.');
+    assistantEvidenceAssert($preview->headers->get('X-Content-Type-Options') === 'nosniff', 'Preview is missing content protection.');
+
     $admin = User::query()->where('user_type', 'admin')->firstOrFail();
     Auth::login($admin);
     $adminSession = $app['session.store'];
@@ -234,9 +258,11 @@ function assistantEvidenceRequest(
     string $uri,
     string $method = 'GET',
     array $parameters = [],
-    array $files = []
+    array $files = [],
+    bool $json = false
 ) {
     $request = Request::create($uri, $method, $parameters, [], $files);
+    if ($json) $request->headers->set('Accept', 'application/json');
     $request->setLaravelSession($session);
 
     return $http->handle($request);

@@ -3,6 +3,7 @@
 @section('title', 'Upload Documents')
 
 @push('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/administrative-document-preview.css') }}?v={{ filemtime(public_path('assets/css/administrative-document-preview.css')) }}">
 <style>
     .step-chip { display: flex; gap: 11px; align-items: center; padding: 13px; border-radius: 13px; background: #f7fafc; }
     .step-number { flex: 0 0 31px; width: 31px; height: 31px; display: grid; place-items: center; border-radius: 50%; background: var(--aa-teal); color: #fff; font-weight: 800; }
@@ -38,7 +39,7 @@
     .file-preview-unavailable .doc-icon { margin: 0 auto 14px; width: 58px; height: 58px; }
     .file-preview-footer { padding: 11px 20px; border-top: 1px solid var(--aa-border); background: #f8fafc; color: #607087; font-size: .78rem; }
     body.file-preview-open { overflow: hidden; }
-    .doc-row { display: flex; gap: 12px; align-items: center; padding: 13px 0; border-bottom: 1px solid #e8edf3; }
+    .doc-row { flex-wrap: wrap; display: flex; gap: 12px; align-items: center; padding: 13px 0; border-bottom: 1px solid #e8edf3; }
     .doc-row:last-child { border-bottom: 0; }
     .doc-icon { flex: 0 0 40px; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 11px; background: var(--aa-mint); color: var(--aa-teal); }
     @media(max-width:575.98px) {
@@ -105,7 +106,7 @@
                         <h4 class="fw-bold mb-1">Add files</h4>
                         <div class="text-muted small">An invoice or at least one supporting document is required.</div>
                     </div>
-                    <span class="badge bg-light text-dark border">20 files &middot; 20MB each &middot; 60MB total</span>
+                    <span class="badge bg-light text-dark border">Multiple files &middot; 20MB each</span>
                 </div>
 
                 <div class="mb-4">
@@ -122,7 +123,7 @@
                     </div>
                     <input id="invoiceDocuments" type="file" name="invoice_documents[]" class="form-control @error('invoice_documents') is-invalid @enderror @error('invoice_documents.*') is-invalid @enderror"
                            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png" multiple data-file-input data-file-category="invoice">
-                    <div class="form-text">Choose several files together, or open the chooser again to add more.</div>
+                    <div class="form-text">Choose or drop multiple files here. Add more whenever you need; there is no total document count limit.</div>
                     <div class="small text-success mt-2 d-none" data-file-summary aria-live="polite"></div>
                     <div class="selected-files d-none" data-file-list></div>
                     <div class="small text-danger mt-2 d-none" data-file-error role="alert"></div>
@@ -149,7 +150,7 @@
                     </div>
                     <input id="supportingDocuments" type="file" name="supporting_documents[]" class="form-control @error('supporting_documents') is-invalid @enderror @error('supporting_documents.*') is-invalid @enderror" multiple
                            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,.zip" data-file-input data-file-category="supporting">
-                    <div class="form-text">Choose several files together, or open the chooser again to add more.</div>
+                    <div class="form-text">Choose or drop multiple files here. Add more whenever you need; there is no total document count limit.</div>
                     <div class="small text-success mt-2 d-none" data-file-summary aria-live="polite"></div>
                     <div class="selected-files d-none" data-file-list></div>
                     <div class="small text-danger mt-2 d-none" data-file-error role="alert"></div>
@@ -186,6 +187,10 @@
                                     @if (!empty($document['uploaded_by_name'])) · {{ $document['uploaded_by_name'] }} @endif
                                 </div>
                             </div>
+                            <button type="button" class="btn btn-sm btn-aa-soft" data-saved-preview
+                                data-url="{{ route('administrative-assistant.evidence.documents.download', [$purchaseOrder, $item, $evidence, $index]) }}"
+                                data-name="{{ $document['display_name'] ?? $document['name'] ?? 'Document' }}"
+                                data-size="{{ $document['size'] ?? 0 }}"><i class="feather-eye me-1"></i> Preview</button>
                             <a href="{{ route('administrative-assistant.evidence.documents.download', [$purchaseOrder, $item, $evidence, $index, 'download' => 1]) }}" class="btn btn-sm btn-aa-soft"><i class="feather-download"></i><span class="d-none d-sm-inline ms-1">Download</span></a>
                         </div>
                     @endforeach
@@ -207,7 +212,7 @@
                 </button>
             </header>
             <div class="file-preview-body" data-file-preview-body></div>
-            <footer class="file-preview-footer">
+            <footer class="file-preview-footer" data-preview-footer>
                 This local preview stays in your browser. Files are uploaded only after you press <strong>Upload and link everything</strong>.
             </footer>
         </section>
@@ -220,9 +225,8 @@
         const form = document.getElementById('evidenceUploadForm');
         if (!form) return;
 
-        const maxFiles = 20;
         const maxFileBytes = 20 * 1024 * 1024;
-        const maxCombinedBytes = 60 * 1024 * 1024;
+        let uploading = false;
         const textPreviewBytes = 200 * 1024;
         const uploadFeedback = form.querySelector('[data-upload-selection-feedback]');
         const uploadButton = document.getElementById('uploadButton');
@@ -232,7 +236,14 @@
         const modalTitle = modal?.querySelector('[data-file-preview-title]');
         const modalMeta = modal?.querySelector('[data-file-preview-meta]');
         const modalBody = modal?.querySelector('[data-file-preview-body]');
-        let modalObjectUrl = null;
+        let activeDocumentPreview = null;
+        const previewModuleUrl = @json(asset('assets/js/administrative-document-preview.js')).concat('?v={{ filemtime(public_path('assets/js/administrative-document-preview.js')) }}');
+        const fileDataUrl = file => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error('This image could not be read.'));
+            reader.readAsDataURL(file);
+        });
         let previewReturnFocus = null;
         let previewSequence = 0;
 
@@ -246,7 +257,6 @@
                 list: box?.querySelector('[data-file-list]'),
                 error: box?.querySelector('[data-file-error]'),
                 files: [],
-                thumbnailUrls: [],
                 notice: '',
             };
         });
@@ -261,6 +271,7 @@
             const extension = fileExtension(file);
             if (file.type?.startsWith('image/') || ['jpg', 'jpeg', 'png'].includes(extension)) return 'image';
             if (file.type === 'application/pdf' || extension === 'pdf') return 'pdf';
+            if (['doc', 'docx'].includes(extension)) return 'word';
             if (file.type?.startsWith('text/') || ['txt', 'csv'].includes(extension)) return 'text';
             return 'unavailable';
         };
@@ -286,7 +297,6 @@
 
         const selectedFiles = () => controllers.flatMap((controller) => controller.files);
         const selectedFileCount = () => selectedFiles().length;
-        const selectedByteCount = () => selectedFiles().reduce((total, file) => total + file.size, 0);
 
         const replaceInputFiles = (controller) => {
             if (typeof DataTransfer !== 'function') return false;
@@ -300,11 +310,6 @@
                 console.warn('This browser could not update the selected document list.', error);
                 return false;
             }
-        };
-
-        const revokeThumbnailUrls = (controller) => {
-            controller.thumbnailUrls.forEach((url) => URL.revokeObjectURL(url));
-            controller.thumbnailUrls = [];
         };
 
         const appendButtonContent = (button, iconName, label) => {
@@ -343,18 +348,13 @@
             modalBody?.replaceChildren(unavailable);
         };
 
-        const releaseModalObjectUrl = () => {
-            if (!modalObjectUrl) return;
-            URL.revokeObjectURL(modalObjectUrl);
-            modalObjectUrl = null;
-        };
-
         const openPreview = async (file, trigger) => {
             if (!modal || !modalBody || !modalTitle || !modalMeta) return;
 
             previewSequence += 1;
             const currentSequence = previewSequence;
-            releaseModalObjectUrl();
+            activeDocumentPreview?.destroy();
+            activeDocumentPreview = null;
             previewReturnFocus = trigger;
             modalTitle.textContent = file.name;
             modalMeta.textContent = `${fileExtension(file).toUpperCase() || 'FILE'} - ${formatFileSize(file.size)}`;
@@ -362,29 +362,32 @@
             modal.hidden = false;
             document.body.classList.add('file-preview-open');
 
+            modal.querySelector('[data-preview-footer]').textContent = file.saved ? 'Previewing a saved document.' : 'Previewing on your device. Nothing is uploaded or saved until you choose Upload and link everything.';
             const kind = previewKind(file);
             try {
                 if (kind === 'image') {
-                    modalObjectUrl = URL.createObjectURL(file);
+                    const imageUrl = file.url || await fileDataUrl(file);
+                    if (currentSequence !== previewSequence || modal.hidden) return;
                     const image = document.createElement('img');
                     image.className = 'file-preview-image';
-                    image.src = modalObjectUrl;
+                    image.src = imageUrl;
                     image.alt = `Preview of ${file.name}`;
                     modalBody.appendChild(image);
-                } else if (kind === 'pdf') {
-                    modalObjectUrl = URL.createObjectURL(file);
-                    const frame = document.createElement('iframe');
-                    frame.className = 'file-preview-frame';
-                    frame.src = modalObjectUrl;
-                    frame.title = `Preview of ${file.name}`;
-                    modalBody.appendChild(frame);
+                } else if (kind === 'pdf' || kind === 'word') {
+                    const loading = document.createElement('div');
+                    loading.className = 'text-muted p-4';
+                    loading.textContent = 'Opening your document...';
+                    modalBody.replaceChildren(loading);
+                    const renderer = await import(previewModuleUrl);
+                    if (currentSequence !== previewSequence || modal.hidden) return;
+                    activeDocumentPreview = renderer.createPreview(modalBody, file);
                 } else if (kind === 'text') {
                     const loading = document.createElement('div');
                     loading.className = 'text-muted';
                     loading.textContent = 'Preparing local preview...';
                     modalBody.appendChild(loading);
 
-                    const contents = await file.slice(0, textPreviewBytes).text();
+                    const contents = file.url ? await fetch(file.url, { headers: { 'Accept': 'text/plain' } }).then(response => { if (!response.ok || response.redirected) throw new Error('Preview unavailable'); return response.text(); }).then(text => text.slice(0, textPreviewBytes)) : await file.slice(0, textPreviewBytes).text();
                     if (currentSequence !== previewSequence || modal.hidden) return;
 
                     const preview = document.createElement('pre');
@@ -394,10 +397,11 @@
                 } else {
                     showUnavailablePreview(
                         file,
-                        'This file is selected and ready. Your browser cannot display this format locally; check its name and size, or remove it before uploading.'
+                        'Your browser cannot display this format. For saved files, use Download to open it on your device.'
                     );
                 }
             } catch (error) {
+                if (currentSequence !== previewSequence || modal.hidden) return;
                 console.warn('The selected document could not be previewed.', error);
                 showUnavailablePreview(file, 'This file could not be rendered in the local preview. You can remove it or continue with the upload.');
             }
@@ -410,9 +414,10 @@
 
             previewSequence += 1;
             modal.hidden = true;
+            activeDocumentPreview?.destroy();
+            activeDocumentPreview = null;
             modalBody?.replaceChildren();
             document.body.classList.remove('file-preview-open');
-            releaseModalObjectUrl();
 
             const focusTarget = previewReturnFocus;
             previewReturnFocus = null;
@@ -420,7 +425,6 @@
         };
 
         const renderController = (controller) => {
-            revokeThumbnailUrls(controller);
             controller.list?.replaceChildren();
             const count = controller.files.length;
             const bytes = controller.files.reduce((total, file) => total + file.size, 0);
@@ -442,12 +446,10 @@
                 const thumbnail = document.createElement('div');
                 thumbnail.className = 'selected-file-thumb';
                 if (previewKind(file) === 'image') {
-                    const url = URL.createObjectURL(file);
-                    controller.thumbnailUrls.push(url);
                     const image = document.createElement('img');
-                    image.src = url;
                     image.alt = '';
                     thumbnail.appendChild(image);
+                    fileDataUrl(file).then(url => { if (image.isConnected) image.src = url; }).catch(() => {});
                 } else {
                     const icon = document.createElement('i');
                     icon.className = `feather-${fileIcon(file)}`;
@@ -509,15 +511,7 @@
         };
 
         const updateValidation = () => {
-            const files = selectedFiles();
-            const totalBytes = selectedByteCount();
             let globalMessage = '';
-
-            if (files.length > maxFiles) {
-                globalMessage = `Choose no more than ${maxFiles} documents in one upload.`;
-            } else if (totalBytes > maxCombinedBytes) {
-                globalMessage = `The selected files total ${formatFileSize(totalBytes)}. Remove files until the combined size is 60MB or less.`;
-            }
 
             controllers.forEach((controller) => {
                 const hasOversizedFile = controller.files.some((file) => file.size > maxFileBytes);
@@ -543,31 +537,36 @@
             controller.input.addEventListener('change', () => {
                 const incomingFiles = Array.from(controller.input.files || []);
                 const knownFiles = new Set(controller.files.map(fileKey));
-                let rejectedFiles = 0;
                 controller.notice = '';
 
                 incomingFiles.forEach((file) => {
                     const key = fileKey(file);
                     if (knownFiles.has(key)) return;
-                    if (selectedFileCount() >= maxFiles) {
-                        rejectedFiles += 1;
-                        return;
-                    }
-
                     controller.files.push(file);
                     knownFiles.add(key);
                 });
 
-                if (rejectedFiles > 0) {
-                    controller.notice = `${rejectedFiles} ${rejectedFiles === 1 ? 'file was' : 'files were'} not added because one upload can contain no more than ${maxFiles} documents.`;
-                }
-
                 if (!replaceInputFiles(controller)) {
-                    controller.files = incomingFiles.slice(0, maxFiles);
+                    controller.files = incomingFiles;
                     controller.notice = 'This browser cannot retain files from separate chooser actions. Select all required files together.';
                 }
 
                 renderAll();
+            });
+        });
+
+        document.querySelectorAll('[data-saved-preview]').forEach(button => {
+            button.addEventListener('click', () => openPreview({ name: button.dataset.name, size: Number(button.dataset.size), url: button.dataset.url, saved: true }, button));
+        });
+        controllers.forEach(controller => {
+            controller.box.addEventListener('dragover', event => { event.preventDefault(); controller.box.classList.add('has-files'); });
+            controller.box.addEventListener('drop', event => {
+                event.preventDefault();
+                if (uploading) return;
+                const transfer = new DataTransfer();
+                Array.from(event.dataTransfer.files).forEach(file => transfer.items.add(file));
+                controller.input.files = transfer.files;
+                controller.input.dispatchEvent(new Event('change'));
             });
         });
 
@@ -576,10 +575,18 @@
         });
 
         document.addEventListener('keydown', (event) => {
+            if (event.key === 'Tab' && modal && !modal.hidden) {
+                const targets = Array.from(modal.querySelectorAll('button, input, select, iframe, [tabindex]')).filter(node => !node.disabled && node.tabIndex >= 0 && node.getClientRects().length);
+                const first = targets[0], last = targets[targets.length - 1];
+                if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+                else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+            }
             if (event.key === 'Escape' && modal && !modal.hidden) closePreview();
         });
 
-        form.addEventListener('submit', (event) => {
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            if (uploading) return;
             updateValidation();
             if (selectedFileCount() === 0) {
                 event.preventDefault();
@@ -600,9 +607,53 @@
                 return;
             }
 
-            if (uploadButton) {
-                uploadButton.disabled = true;
-                uploadButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Uploading and linking...';
+            const fields = new FormData(form);
+            fields.delete('invoice_documents[]');
+            fields.delete('supporting_documents[]');
+            const total = selectedFileCount();
+            let completed = 0;
+            uploading = true;
+            const controls = Array.from(form.querySelectorAll('input, textarea, button'));
+            controls.forEach(control => control.disabled = true);
+            uploadFeedback.classList.remove('d-none');
+            try {
+                while (selectedFileCount()) {
+                    const batch = [];
+                    let bytes = 0;
+                    for (const controller of controllers) {
+                        for (const file of controller.files) {
+                            if (batch.length >= 10 || bytes + file.size > 40 * 1024 * 1024) break;
+                            batch.push({ controller, file });
+                            bytes += file.size;
+                        }
+                    }
+                    const body = new FormData();
+                    fields.forEach((value, key) => body.append(key, value));
+                    if (completed) body.delete('notes');
+                    batch.forEach(({ controller, file }) => body.append(controller.input.name, file));
+                    uploadButton.textContent = `Uploading ${completed + 1} to ${completed + batch.length} of ${total}...`;
+                    uploadFeedback.textContent = `${completed} of ${total} files saved. Keep this page open.`;
+                    const response = await fetch(form.action, { method: 'POST', body, headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+                    if (!response.ok || response.redirected) {
+                        const result = await response.json().catch(() => ({}));
+                        throw new Error(Object.values(result.errors || {}).flat().join(' ') || result.message || 'Upload could not be confirmed. Check the saved documents before retrying.');
+                    }
+                    const result = await response.json();
+                    if (result.documents_added !== batch.length) throw new Error('The server did not confirm all files. Check saved documents before retrying.');
+                    batch.forEach(({ controller, file }) => controller.files.splice(controller.files.indexOf(file), 1));
+                    completed += batch.length;
+                    controllers.forEach(replaceInputFiles);
+                }
+                window.location.reload();
+            } catch (error) {
+                renderAll();
+                uploadFeedback.classList.remove('d-none');
+                uploadFeedback.textContent = `${completed} of ${total} files saved. ${error.message} Remaining files stay selected.`;
+                uploadFeedback.focus();
+            } finally {
+                uploading = false;
+                controls.forEach(control => control.disabled = false);
+                uploadButton.innerHTML = uploadButtonLabel;
             }
         });
 
@@ -612,9 +663,9 @@
             uploadButton.innerHTML = uploadButtonLabel;
         });
 
-        window.addEventListener('beforeunload', () => {
-            releaseModalObjectUrl();
-            controllers.forEach(revokeThumbnailUrls);
+        window.addEventListener('beforeunload', (event) => {
+            if (uploading) { event.preventDefault(); event.returnValue = ''; return; }
+            activeDocumentPreview?.destroy();
         });
 
         renderAll();

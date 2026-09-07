@@ -129,6 +129,18 @@
             </div>
         @endif
 
+        <div class="d-flex flex-wrap justify-content-end gap-2 my-3 evr-no-print">
+            <a href="#eoiQualificationAppendix" class="btn btn-outline-secondary btn-sm"><i class="feather-arrow-down me-1" aria-hidden="true"></i> Qualification workflow &amp; communications</a>
+        </div>
+
+        @include('reports.evaluations.partials.management-report', ['management' => $management])
+
+        <header id="eoiQualificationAppendix" class="p-4 mb-4 rounded-3 border bg-white" style="scroll-margin-top:100px">
+            <span class="eoi-eyebrow">Operational appendix</span>
+            <h3 class="h5 fw-bold mb-2">Qualification results, communications and proposal workflow</h3>
+            <p class="text-muted mb-0">Use the established qualification decisions and authorized actions below to manage applicant communications and the next procurement stage.</p>
+        </header>
+
         <section class="eoi-communications" aria-labelledby="eoiCommunicationsTitle">
             <header class="eoi-communications__header">
                 <div>

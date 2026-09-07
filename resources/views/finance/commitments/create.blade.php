@@ -1,18 +1,21 @@
-@extends('layouts.app')
+@extends(($assistantMode ?? false) ? 'layouts.administrative-assistant' : 'layouts.app')
 
 @php
+    $assistantMode = $assistantMode ?? false;
     $isEdit = isset($commitment);
     $purchaseRequest = $purchaseRequest ?? ($isEdit ? $commitment->purchaseRequest : null);
     $items = $items ?? [];
     $defaults = $defaults ?? [];
     $existingAttachments = $purchaseRequest?->attachments ?? collect();
-    $isPurchaseRequestCreate = ($creationMode ?? null) === 'purchase_request';
+    $isPurchaseRequestCreate = $assistantMode || ($creationMode ?? null) === 'purchase_request';
     $assistantIntake = $purchaseRequestIntake ?? null;
     $showDeliverableColumn = false;
-    $submitButtonText = $isEdit
+    $submitButtonText = $assistantMode ? 'Submit for approval' : ($isEdit
         ? 'Update Purchase Request'
-        : ($assistantIntake ? 'Create PR from Intake' : ($isPurchaseRequestCreate ? 'Create Purchase Request' : 'Save Commitment'));
+        : ($assistantIntake ? 'Create PR from Intake' : ($isPurchaseRequestCreate ? 'Create Purchase Request' : 'Save Commitment')));
 @endphp
+
+@section('workspace-heading', 'Create a purchase request')
 
 @push('styles')
     <style>
@@ -68,6 +71,17 @@
                 {{ $isEdit ? 'Update draft purchase request details and yearly budget split' : ($assistantIntake ? 'Review the Assistant request, then complete its funding, allocation, resource coding, and required documents' : ($isPurchaseRequestCreate ? 'Create a purchase request using approved funding, allocation, line items, and required documents' : 'Commit approved allocations to specific resources')) }}
             </p>
         </div>
+
+        @if ($assistantMode)
+            <div class="alert alert-info border-0 d-flex gap-3 align-items-start my-4">
+                <i class="feather-shield fs-24 mt-1" aria-hidden="true"></i>
+                <div>
+                    <div class="fw-bold mb-1">Prepare your request for administrator approval.</div>
+                    <div>Complete the purchase request and attach its supporting documents. Your submission stays out of reports and budget commitments until an authorized administrator approves it.</div>
+                    <a href="{{ route('administrative-assistant.submissions.index') }}" class="d-inline-block mt-2 fw-semibold">View my submissions <i class="feather-arrow-right ms-1"></i></a>
+                </div>
+            </div>
+        @endif
 
         {{-- ===================== GLOBAL ERROR SUMMARY ===================== --}}
         @if ($errors->any())
@@ -149,7 +163,7 @@
         @endif
 
         <form method="POST"
-            action="{{ $isEdit ? route('finance.commitments.update', $commitment) : ($isPurchaseRequestCreate ? route('finance.purchase-requests.store') : route('finance.commitments.store')) }}"
+            action="{{ $assistantMode ? route('administrative-assistant.requests.store') : ($isEdit ? route('finance.commitments.update', $commitment) : ($isPurchaseRequestCreate ? route('finance.purchase-requests.store') : route('finance.commitments.store'))) }}"
             id="commitmentForm"
             enctype="multipart/form-data">
             @csrf
@@ -496,6 +510,8 @@
 	    {{-- ===================== SCRIPT ===================== --}}
         <script>
             document.addEventListener('DOMContentLoaded', () => {
+                const allocationAjaxBase = @json($assistantMode ? url('/administrative-assistant/requests/ajax') : url('/finance/commitments/ajax'));
+                const resourceAjaxBase = @json($assistantMode ? url('/administrative-assistant/requests/ajax/resources') : url('/finance/resources/ajax/resources'));
                 const referencePrefix = @json($isPurchaseRequestCreate || $isEdit ? 'PR' : 'COM');
                 const refInput = document.getElementById('commitment_ref');
                 if (refInput && !refInput.value) {
@@ -686,7 +702,7 @@
 
 	            function loadProjects() {
 	                show('projectWrap');
-	                fetch('/finance/commitments/ajax/projects')
+	                fetch(`${allocationAjaxBase}/projects`)
 	                    .then(r => r.json())
 	                    .then(d => {
 	                        fillSelect(projectSelect, d);
@@ -701,7 +717,7 @@
 
 	            function loadActivities(projectId) {
 	                show('activityWrap');
-	                fetch(`/finance/commitments/ajax/activities/${projectId}`)
+	                fetch(`${allocationAjaxBase}/activities/${projectId}`)
 	                    .then(r => r.json())
 	                    .then(d => {
 	                        fillSelect(activitySelect, d);
@@ -716,7 +732,7 @@
 
 	            function loadSubActivities(activityId) {
 	                show('subActivityWrap');
-	                fetch(`/finance/commitments/ajax/sub-activities/${activityId}`)
+	                fetch(`${allocationAjaxBase}/sub-activities/${activityId}`)
 	                    .then(r => r.json())
 	                    .then(d => {
 	                        fillSelect(subActivitySelect, d);
@@ -731,7 +747,7 @@
 
             function loadBreakdown(subActivityId) {
                 const level = allocationLevel.value || 'sub_activity';
-                const url = `/finance/commitments/ajax/allocation-breakdown/${level}/${subActivityId}` +
+                const url = `${allocationAjaxBase}/allocation-breakdown/${level}/${subActivityId}` +
                     (existingCommitmentId ? `?exclude=${existingCommitmentId}` : '');
                 fetch(url)
 	                    .then(r => r.json())
@@ -881,7 +897,7 @@
 		                }
 	
 		                resourceSelect.innerHTML = '<option value="">Loading...</option>';
-		                fetch(`/finance/resources/ajax/resources/${categoryId}`)
+		                fetch(`${resourceAjaxBase}/${categoryId}`)
 		                    .then(r => r.json())
 		                    .then(d => {
 		                        resourceSelect.innerHTML = '<option value="">Select Resource</option>';

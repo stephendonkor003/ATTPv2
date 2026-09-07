@@ -3186,9 +3186,20 @@ Route::middleware(['auth', 'administrative.assistant'])
     ->group(function (): void {
         Route::get('/', [AdministrativeAssistantEvidenceController::class, 'index'])
             ->name('dashboard');
-        Route::get('/purchase-requests/create', [AdministrativeAssistantPurchaseRequestController::class, 'create'])
+        Route::get('/requests/create', [\App\Http\Controllers\AssistantSubmissionController::class, 'createPurchaseRequest'])->name('requests.create');
+        Route::post('/requests', [\App\Http\Controllers\AssistantSubmissionController::class, 'storePurchaseRequest'])->name('requests.store');
+        Route::get('/disbursements/create', [\App\Http\Controllers\AssistantSubmissionController::class, 'createDisbursement'])->name('disbursements.create');
+        Route::post('/disbursements', [\App\Http\Controllers\AssistantSubmissionController::class, 'storeDisbursement'])->name('disbursements.store');
+        foreach (['projects' => 'projects', 'activities/{project}' => 'activities', 'sub-activities/{activity}' => 'subActivities', 'allocation-breakdown/{level}/{id}' => 'allocationBreakdown', 'resources/{category}' => 'resourcesByCategory'] as $path => $method) {
+            Route::get('/requests/ajax/'.$path, [BudgetCommitmentController::class, $method])->name('requests.ajax.'.$method);
+        }
+        Route::get('/submissions', [\App\Http\Controllers\AssistantSubmissionController::class, 'index'])->name('submissions.index');
+        Route::get('/submissions/{submission}', [\App\Http\Controllers\AssistantSubmissionController::class, 'show'])->name('submissions.show');
+        Route::get('/submissions/{submission}/pdf', [\App\Http\Controllers\AssistantSubmissionController::class, 'pdf'])->name('submissions.pdf');
+        Route::get('/submissions/{submission}/documents/{document}', [\App\Http\Controllers\AssistantSubmissionController::class, 'document'])->whereNumber('document')->name('submissions.document');
+        Route::get('/purchase-requests/create', fn () => redirect()->route('administrative-assistant.requests.create'))
             ->name('purchase-requests.create');
-        Route::post('/purchase-requests', [AdministrativeAssistantPurchaseRequestController::class, 'store'])
+        Route::post('/purchase-requests', [\App\Http\Controllers\AssistantSubmissionController::class, 'storePurchaseRequest'])
             ->name('purchase-requests.store');
         Route::get('/purchase-requests/{intake}', [AdministrativeAssistantPurchaseRequestController::class, 'show'])
             ->name('purchase-requests.show');
@@ -3202,6 +3213,15 @@ Route::middleware(['auth', 'administrative.assistant'])
             ->whereNumber('document')
             ->name('evidence.documents.download');
     });
+
+Route::middleware(['auth'])->prefix('assistant-approvals')->name('assistant-approvals.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\AssistantSubmissionController::class, 'index'])->name('index');
+    Route::get('/{submission}', [\App\Http\Controllers\AssistantSubmissionController::class, 'show'])->name('show');
+    Route::get('/{submission}/pdf', [\App\Http\Controllers\AssistantSubmissionController::class, 'pdf'])->name('pdf');
+    Route::get('/{submission}/documents/{document}', [\App\Http\Controllers\AssistantSubmissionController::class, 'document'])->whereNumber('document')->name('document');
+    Route::post('/{submission}/approve', [\App\Http\Controllers\AssistantSubmissionController::class, 'approve'])->name('approve');
+    Route::post('/{submission}/reject', [\App\Http\Controllers\AssistantSubmissionController::class, 'reject'])->name('reject');
+});
 
 Route::get('/', [LandingPageController::class, 'index'])->name('landing.index');
 Route::get('/gallery', [LandingPageController::class, 'gallery'])->name('gallery');

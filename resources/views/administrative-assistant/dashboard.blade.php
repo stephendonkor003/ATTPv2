@@ -1,6 +1,6 @@
 @extends('layouts.administrative-assistant')
 
-@section('title', 'Upload Centre')
+@section('title', 'Invoice upload center')
 
 @push('styles')
 <style>
@@ -96,7 +96,7 @@
                 @endif
             </div>
             <h1 class="aa-page-title mb-2">
-                @if (! $selectedYear) Upload centre
+                @if (! $selectedYear) Invoice upload center
                 @elseif (! $selectedMonth) {{ $selectedYear }} monthly folders
                 @else {{ $monthLabel }} {{ $selectedYear }} vendors
                 @endif
@@ -116,6 +116,44 @@
     </div>
 
     @if (! $selectedYear)
+        @php
+            $quickSearch = trim((string) request('find'));
+            $quickRows = $allRows->filter(function ($row) use ($quickSearch) {
+                if ($quickSearch === '') return ! $row->has_documents;
+                return str_contains(mb_strtolower(implode(' ', [$row->title, $row->vendor_name, $row->purchase_order->reference_no, $row->purchase_request->reference_no, $row->invoice?->reference_no])), mb_strtolower($quickSearch));
+            });
+            $completion = $allRows->count() ? (int) round($stats['uploaded'] / $allRows->count() * 100) : 0;
+        @endphp
+        <section class="aa-card p-4 mb-4" aria-labelledby="quickWorkTitle">
+            <div class="row g-4 align-items-center">
+                <div class="col-lg-5">
+                    <div class="aa-topbar-kicker mb-2">Your workspace at a glance</div>
+                    <h2 class="h4 fw-bold" id="quickWorkTitle">Find it. Upload it. Keep work moving.</h2>
+                    <p class="text-muted small">Search across every year, or open an outstanding deliverable below.</p>
+                    <div class="d-flex justify-content-between small mb-2"><span>Deliverables with documents</span><strong>{{ $stats['uploaded'] }} / {{ $allRows->count() }} ({{ $completion }}%)</strong></div>
+                    <div class="progress-thin" role="progressbar" aria-label="Deliverables with documents" aria-valuenow="{{ $completion }}" aria-valuemin="0" aria-valuemax="100"><span style="width: {{ $completion }}%"></span></div>
+                </div>
+                <div class="col-lg-7">
+                    <form method="GET" action="{{ route('administrative-assistant.dashboard') }}">
+                        <label for="workspaceSearch" class="form-label fw-bold">Search all years</label>
+                        <div class="input-group"><input id="workspaceSearch" type="search" name="find" value="{{ $quickSearch }}" class="form-control form-control-lg" placeholder="Vendor, deliverable, PR, PO or invoice"><button class="btn btn-aa" type="submit">Search</button></div>
+                        @if ($quickSearch !== '')<a href="{{ route('administrative-assistant.dashboard') }}" class="small d-inline-block mt-2">Clear search</a>@endif
+                    </form>
+                </div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mt-4 mb-2"><h3 class="h6 fw-bold mb-0">{{ $quickSearch !== '' ? 'Search results' : 'Next to upload' }}</h3><span class="small text-muted">{{ $quickRows->count() }} {{ $quickSearch !== '' ? 'matches' : 'outstanding' }}</span></div>
+            @forelse ($quickRows->take($quickSearch !== '' ? 50 : 5) as $row)
+                <div class="deliverable-row">
+                    <div class="due-tile"><strong>{{ $row->due_date?->format('d') ?? '--' }}</strong><span>{{ $row->due_date?->format('M Y') ?? 'No date' }}</span></div>
+                    <div class="min-w-0"><div class="deliverable-title">{{ $row->title }}</div><div class="small text-muted">{{ $row->vendor_name }}</div><div class="deliverable-ref">{{ $row->purchase_order->reference_no }}</div></div>
+                    <span class="badge badge-{{ $row->status }} rounded-pill">{{ match($row->status) { 'due_soon' => 'Due soon', 'uploaded' => 'Uploaded', 'overdue' => 'Overdue', default => 'Upcoming' } }}</span>
+                    <div class="deliverable-action"><a href="{{ route('administrative-assistant.evidence.show', [$row->purchase_order, $row->item, 'year' => $row->due_date?->year, 'month' => $row->due_date?->month]) }}" class="btn btn-aa-soft w-100">{{ $row->has_documents ? 'View / add files' : 'Upload documents' }} <i class="feather-arrow-right ms-1"></i></a></div>
+                </div>
+            @empty
+                <p class="text-muted py-3 mb-0">{{ $quickSearch !== '' ? 'No matching deliverables. Try a vendor name or purchase order reference.' : 'You are up to date. No deliverables are waiting for documents.' }}</p>
+            @endforelse
+            @if ($quickSearch !== '' && $quickRows->count() > 50)<p class="small text-muted mt-2">Showing the first 50 matches. Refine your search to find a specific deliverable.</p>@endif
+        </section>
         <div class="row g-3 mb-4">
             @foreach ([
                 ['label' => 'Waiting for upload', 'value' => $stats['outstanding'], 'icon' => 'upload-cloud'],
@@ -162,7 +200,7 @@
                                 <div class="folder-metric"><strong>{{ $year->task_count }}</strong><span>Items</span></div>
                             </div>
                             <div class="d-flex justify-content-between small mb-1"><span class="text-muted">Uploaded</span><strong>{{ $year->progress }}%</strong></div>
-                            <div class="progress-thin"><span style="width: {{ $year->progress }}%"></span></div>
+                            <div class="progress-thin" role="progressbar" aria-label="Uploaded deliverables" aria-valuenow="{{ $year->progress }}" aria-valuemin="0" aria-valuemax="100"><span style="width: {{ $year->progress }}%"></span></div>
                         </a>
                     </div>
                 @endforeach
