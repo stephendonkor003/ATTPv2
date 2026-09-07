@@ -29,7 +29,7 @@ class EoiQualificationService
     public function buildProcurementReport(Procurement $procurement): array
     {
         $assignments = $this->assignmentQuery($procurement)->get();
-        $submissionRecords = $this->submissionQuery($procurement)->get();
+        $submissionRecords = app(EvaluationReworkGuard::class)->excludePendingTasks($this->submissionQuery($procurement)->get());
         $linkedEvaluations = $procurement->evaluations()
             ->where('evaluations.type', Evaluation::TYPE_EOI)
             ->with($this->evaluationRelations())
@@ -357,6 +357,7 @@ class EoiQualificationService
         $submissionRecords = $this->submissionQuery($procurement)
             ->where('form_submission_id', $applicant->getKey())
             ->get();
+        $submissionRecords = app(EvaluationReworkGuard::class)->excludePendingTasks($submissionRecords);
 
         if ($assignments->isEmpty() && $submissionRecords->isEmpty()) {
             return null;

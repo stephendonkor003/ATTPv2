@@ -44,3 +44,35 @@ focus restoration, Escape inside Word,
 asynchronous close/reopen, mobile fitting, CSP violations, and network activity.
 The generated legacy `.doc` tests error recovery; the separately licensed
 `tools/document-preview/tests/fixtures/test15.doc` tests actual legacy extraction.
+
+## Evaluation report interactions
+
+`evaluation-report-interactions.cjs` uses the same Playwright/Edge setup and a
+temporary existing-administrator session. It checks live chart hover, keyboard
+navigation, tap details, accessible data tables, missing values, and pie counts.
+It also checks evaluator rework selection, correction instructions, independent
+draft forms, and the final form payload. Every mutating request is aborted before
+it reaches Laravel, including the valid rework request used to inspect that
+payload; no evaluation is reopened and no email is sent.
+
+```powershell
+$env:NODE_PATH = "$env:TEMP/aa-browser-check/node_modules"
+node tests/Browser/evaluation-report-interactions.cjs
+```
+
+The defaults use the existing scored ATTP application report and pending
+Endowment report. Override them with `EVALUATION_BROWSER_BASE_URL`,
+`EVALUATION_BROWSER_SCORED_PATH`, and `EVALUATION_BROWSER_PENDING_PATH` when
+testing another local database. If the scored procurement is already locked by
+award or contracting, the runner checks its restriction and discovers another
+existing eligible report for form testing. `EVALUATION_BROWSER_REWORK_PATH` can
+choose that report explicitly. `--charts-only` omits rework form testing;
+`--rework-only` omits chart interaction testing. If an existing eligible
+report-only account is available, the runner
+also verifies that it cannot see rework forms; otherwise this limitation is
+recorded and the backend rollback tests cover authorization.
+
+The session helper rejects non-local/testing environments and never changes
+account credentials, roles, or permissions. All test sessions are removed in
+`finally`. Temporary screenshots and JSON results include classification of the
+existing unrelated dashboard-plugin console errors, if present.

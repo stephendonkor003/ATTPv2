@@ -85,7 +85,7 @@ it('provides method-aware rankings, categorical outcomes, and every requested ex
         ->toContain('id="{{ $managementAnchor }}-details"')
         ->toContain('id="{{ $managementAnchor }}-consistency"')
         ->toContain('id="{{ $managementAnchor }}-governance"')
-        ->toContain('<img class="eval-chart" src="{{ $chart[\'src\'] }}" alt="{{ $chart[\'alt\'] }}">')
+        ->toContain("@include('reports.evaluations.partials.interactive-chart'")
         ->toContain('@if($numericGroup || $qualificationGroup)')
         ->toContain('Qualification position')
         ->toContain('Numeric scores and numeric ranks do not apply.')

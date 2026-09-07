@@ -157,7 +157,7 @@ class EvaluationManagementReportService
 
     public function build(Procurement $procurement, Collection $submissions, Collection $assignments, ?array $applicantScope = null, bool $anonymised = false, array $evaluatorColors = []): array
     {
-        $submissions = new \Illuminate\Database\Eloquent\Collection($submissions->all());
+        $submissions = new \Illuminate\Database\Eloquent\Collection(app(EvaluationReworkGuard::class)->excludePendingTasks($submissions)->all());
         $assignments = new \Illuminate\Database\Eloquent\Collection($assignments->all());
         $submissions->loadMissing(['evaluation.sections.criteria', 'assignment', 'technicalProposalCandidate', 'applicant.submitter', 'applicant.values', 'criteriaScores.criteria.section', 'sectionScores.section', 'evaluator']);
         $assignments->loadMissing(['evaluation.sections.criteria', 'evaluator', 'technicalProposalRound']);

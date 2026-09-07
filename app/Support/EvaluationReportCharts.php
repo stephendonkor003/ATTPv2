@@ -19,7 +19,7 @@ final class EvaluationReportCharts
     /**
      * @param  array<int, string>  $labels  Applicant names in the intended display order.
      * @param  array<int, array{name:string, color?:string, values:array<int, int|float|null>}>  $series
-     * @return array<int, array{title:string, src:string, alt:string, note:string, data:array}>
+     * @return array<int, array{title:string, src:string, alt:string, note:string, data:array, interaction:array}>
      */
     public static function grouped(
         string $title,
@@ -151,7 +151,8 @@ final class EvaluationReportCharts
                 }
             }
             $body .= self::text(570, $bottom + $labelHeight + 44, 'Applicants', 12, '#60738b', 'middle');
-            $charts[] = self::chart($chartTitle, $body, $height, $alt, $note) + ['data' => [
+            $interaction = self::groupedInteraction($chunk, $series, $offset, $kind, $axis, $left, $plotWidth, $zeroY, $y);
+            $charts[] = self::chart($chartTitle, $body, $height, $alt, $note, $interaction) + ['data' => [
                 'kind' => $kind,
                 'labels' => $chunk,
                 'series' => array_map(fn ($row) => [
@@ -167,7 +168,7 @@ final class EvaluationReportCharts
 
     /**
      * @param  array<int, array{name:string, value:int|float|null, color?:string}>  $slices
-     * @return array{title:string, src:string, alt:string, note:string, data:array}
+     * @return array{title:string, src:string, alt:string, note:string, data:array, interaction:array}
      */
     public static function pie(string $title, array $slices): array
     {
@@ -188,11 +189,25 @@ final class EvaluationReportCharts
         $centerX = 266;
         $centerY = $top + 177;
         $body = self::title($titleLines);
+        $interaction = ['kind' => 'pie', 'records' => [], 'targets' => []];
+        foreach ($rows as $index => &$row) {
+            $row['record'] = $index;
+            $percentage = $total > 0 && $row['value'] !== null ? $row['value'] / $total * 100 : null;
+            $count = $row['value'] === null ? 'Not recorded' : self::number($row['value']);
+            $share = $percentage === null ? 'Not available' : number_format($percentage, 1).'%';
+            $interaction['records'][] = [
+                'name' => $row['name'], 'color' => $row['color'], 'value' => $row['value'],
+                'percentage' => $percentage, 'display_value' => $count, 'display_percentage' => $share,
+                'label' => $row['name'].'. Count: '.$count.'. Share of recorded total: '.$share.'.',
+            ];
+        }
+        unset($row);
         $angle = -M_PI / 2;
         $positiveRows = array_values(array_filter($rows, fn ($row) => ($row['value'] ?? 0) > 0));
         if ($total > 0) {
             if (count($positiveRows) === 1) {
                 $body .= '<circle cx="'.$centerX.'" cy="'.$centerY.'" r="'.$radius.'" fill="'.$positiveRows[0]['color'].'"/>';
+                $interaction['targets'][] = ['record' => $positiveRows[0]['record'], 'shape' => 'circle', 'cx' => $centerX, 'cy' => $centerY, 'r' => $radius];
             } else {
                 foreach ($positiveRows as $row) {
                     $span = $row['value'] / $total * 2 * M_PI;
@@ -206,6 +221,7 @@ final class EvaluationReportCharts
                         $points[] = self::number($centerX + $radius * cos($pointAngle)).','.self::number($centerY + $radius * sin($pointAngle));
                     }
                     $body .= '<polygon points="'.implode(' ', $points).'" fill="'.$row['color'].'" stroke="#ffffff" stroke-width="2"/>';
+                    $interaction['targets'][] = ['record' => $row['record'], 'shape' => 'polygon', 'points' => implode(' ', $points)];
                     $angle = $nextAngle;
                 }
             }
@@ -218,6 +234,7 @@ final class EvaluationReportCharts
         $legendY = $top + 34;
         $altRows = [];
         foreach ($rows as $row) {
+            $legendTop = $legendY - 16;
             $body .= '<rect x="525" y="'.($legendY - 11).'" width="14" height="14" rx="2" fill="'.$row['color'].'"/>';
             $wrapped = self::wrap($row['name'], 43);
             foreach ($wrapped as $index => $line) {
@@ -228,6 +245,9 @@ final class EvaluationReportCharts
             $legendY += count($wrapped) * 18;
             $body .= self::text(552, $legendY + 2, $count.'  |  '.$share, 12, '#60738b');
             $legendY += 32;
+            // Legend targets keep zero and missing categories inspectable even
+            // though neither has a visible slice in the distribution.
+            $interaction['targets'][] = ['record' => $row['record'], 'shape' => 'rect', 'x' => 520, 'y' => $legendTop, 'width' => 548, 'height' => $legendY - $legendTop - 8];
             $altRows[] = $row['name'].': '.$count.($share !== '—' ? ' ('.$share.')' : '');
         }
         if ($rows === []) {
@@ -239,7 +259,7 @@ final class EvaluationReportCharts
             : 'There are no positive recorded counts, so no outcome distribution is drawn.';
         $alt = self::plain($title).'. '.($altRows ? implode('; ', $altRows).'. ' : '').self::number($total).' total recorded.';
 
-        return self::chart($title, $body, $height, $alt, $note) + ['data' => [
+        return self::chart($title, $body, $height, $alt, $note, $interaction) + ['data' => [
             'kind' => 'pie',
             'slices' => array_map(fn ($row) => [
                 'name' => $row['name'], 'value' => $row['value'], 'color' => $row['color'],
@@ -314,14 +334,61 @@ final class EvaluationReportCharts
         return $body;
     }
 
-    private static function chart(string $title, string $body, int $height, string $alt, string $note): array
+    private static function chart(string $title, string $body, int $height, string $alt, string $note, array $interaction): array
     {
         $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'.self::WIDTH.'" height="'.$height.'" viewBox="0 0 '.self::WIDTH.' '.$height.'">'
             .'<title>'.self::escape($title).'</title><desc>'.self::escape($alt).'</desc>'
             .'<rect x="0" y="0" width="'.self::WIDTH.'" height="'.$height.'" fill="#ffffff"/>'
             .'<g font-family="DejaVu Sans, Arial, sans-serif">'.$body.'</g></svg>';
 
-        return ['title' => self::plain($title), 'src' => 'data:image/svg+xml;base64,'.base64_encode($svg), 'alt' => $alt, 'note' => $note];
+        return ['title' => self::plain($title), 'src' => 'data:image/svg+xml;base64,'.base64_encode($svg), 'alt' => $alt, 'note' => $note,
+            'interaction' => ['width' => self::WIDTH, 'height' => $height] + $interaction];
+    }
+
+    /** Separate hit geometry preserves the identical static SVG for exports. */
+    private static function groupedInteraction(array $labels, array $series, int $offset, string $kind, string $axis, float $left, float $plotWidth, float $zeroY, callable $y): array
+    {
+        $interaction = ['kind' => $kind, 'records' => [], 'targets' => []];
+        $slot = $plotWidth / max(1, count($labels));
+        $unit = str_contains($axis, '%') ? '%' : (str_contains(strtolower($axis), 'points') ? 'points' : '');
+        foreach ($labels as $index => $applicant) {
+            foreach ($series as $seriesIndex => $row) {
+                $value = $row['values'][$offset + $index] ?? null;
+                $display = $value === null ? 'Not recorded' : self::number($value).($unit === '%' ? '%' : ($unit === '' ? '' : ' '.$unit));
+                $record = count($interaction['records']);
+                $interaction['records'][] = [
+                    'applicant' => $applicant, 'evaluator' => $row['name'], 'color' => $row['color'],
+                    'value' => $value, 'unit' => $unit, 'metric' => self::plain($axis), 'display_value' => $display,
+                    'label' => $applicant.'. Evaluator: '.$row['name'].'. '.$axis.': '.$display.'.',
+                ];
+                $x = $left + $slot * ($index + 0.5);
+                $valueY = $value === null ? $zeroY : $y($value);
+                if ($kind === 'bar') {
+                    $groupWidth = $slot * 0.78;
+                    $barSlot = $groupWidth / max(1, count($series));
+                    $width = max(0.6, $barSlot * 0.82);
+                    $barX = $x - $groupWidth / 2 + $seriesIndex * $barSlot + ($barSlot - $width) / 2;
+                    $hitWidth = max($width, min(12, $barSlot));
+                    $height = max(16, abs($valueY - $zeroY));
+                    $interaction['targets'][] = ['record' => $record, 'shape' => 'rect',
+                        'x' => $barX - ($hitWidth - $width) / 2, 'y' => min($valueY, $zeroY) - ($height - abs($valueY - $zeroY)) / 2,
+                        'width' => $hitWidth, 'height' => $height];
+                } else {
+                    // Missing observations have only an invisible baseline hit
+                    // area; the source image continues to display a true gap.
+                    $interaction['targets'][] = ['record' => $record, 'shape' => 'circle', 'cx' => $x, 'cy' => $valueY, 'r' => 12];
+                }
+            }
+        }
+        if ($kind === 'line') {
+            // Put recorded points above missing-value baseline hit areas. A
+            // genuine zero must remain the pointer target when both coincide.
+            usort($interaction['targets'], fn ($leftTarget, $rightTarget) =>
+                ($interaction['records'][$leftTarget['record']]['value'] === null ? 0 : 1)
+                <=> ($interaction['records'][$rightTarget['record']]['value'] === null ? 0 : 1));
+        }
+
+        return $interaction;
     }
 
     private static function line(float $x1, float $y1, float $x2, float $y2, string $color, float $width): string

@@ -13,6 +13,9 @@
 @endphp
 
 <div class="eval-management">
+    @if(!empty($reworkPanel) && auth()->user()?->can('evaluations.manage') && auth()->user()?->can('evaluations.view_all'))
+        @include('reports.evaluations.partials.rework-panel', ['reworkPanel' => $reworkPanel])
+    @endif
     <nav class="eval-nav" aria-label="Evaluation report sections">
         <a href="#{{ $managementAnchor }}-summary"><span class="eval-nav-number">1</span>Summary overview</a>
         <a href="#{{ $managementAnchor }}-results"><span class="eval-nav-number">2</span>Results and rankings</a>
@@ -58,7 +61,7 @@
                 </table>
             </div>
             @foreach($management['overview_charts'] ?? [] as $chart)
-                <figure class="eval-chart-card"><h4>{{ $chart['title'] }}</h4><div class="eval-chart-scroll" tabindex="0" role="region" aria-label="{{ $chart['title'] }}"><img class="eval-chart" src="{{ $chart['src'] }}" alt="{{ $chart['alt'] }}"></div>@if(!empty($chart['note']))<figcaption>{{ $chart['note'] }}</figcaption>@endif</figure>
+                @include('reports.evaluations.partials.interactive-chart', ['chart' => $chart])
             @endforeach
         </div>
     </section>
@@ -92,7 +95,7 @@
                     </div>
                     @if($qualificationGroup)<p class="eval-note">Qualification positions follow the authoritative EOI qualification precedence and shortlist rules. These positions represent categorical qualification order; numeric merit scores do not apply.</p>@elseif(!$numericGroup)<p class="eval-note">This evaluation records categorical decisions. Numeric scores and numeric ranks do not apply.</p>@endif
                     @foreach($group['charts'] ?? [] as $chart)
-                        <figure class="eval-chart-card"><h4>{{ $chart['title'] }}</h4><div class="eval-chart-scroll" tabindex="0" role="region" aria-label="{{ $chart['title'] }}"><img class="eval-chart" src="{{ $chart['src'] }}" alt="{{ $chart['alt'] }}"></div>@if(!empty($chart['note']))<figcaption>{{ $chart['note'] }}</figcaption>@endif</figure>
+                        @include('reports.evaluations.partials.interactive-chart', ['chart' => $chart])
                     @endforeach
                 </article>
             @empty
@@ -127,7 +130,7 @@
                         </table>
                     </div>
                     @foreach($section['charts'] ?? [] as $chart)
-                        <figure class="eval-chart-card"><h4>{{ $chart['title'] }}</h4><div class="eval-chart-scroll" tabindex="0" role="region" aria-label="{{ $chart['title'] }}"><img class="eval-chart" src="{{ $chart['src'] }}" alt="{{ $chart['alt'] }}"></div>@if(!empty($chart['note']))<figcaption>{{ $chart['note'] }}</figcaption>@endif</figure>
+                        @include('reports.evaluations.partials.interactive-chart', ['chart' => $chart])
                     @endforeach
                 </article>
             @endforeach

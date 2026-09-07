@@ -13,6 +13,7 @@ use App\Models\FormSubmission;
 use App\Models\Procurement;
 use App\Models\ReworkRequest;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -25,6 +26,48 @@ class EvaluationReworkService
         private readonly EoiQualificationService $qualificationService,
         private readonly EvaluationAssignmentTargetResolver $targetResolver
     ) {}
+
+    /** All records reopen together; each retains the existing independent audit cycle. */
+    public function requestBatch(
+        Procurement $procurement,
+        array $submissionIds,
+        string $evaluatorId,
+        User $requester,
+        string $reason,
+        bool $overrideProposalRoundLock = false
+    ): Collection {
+        abort_unless($requester->can('evaluations.manage'), 403);
+        if (count($submissionIds) < 1 || count($submissionIds) > 50
+            || count(array_unique($submissionIds)) !== count($submissionIds)) {
+            throw ValidationException::withMessages(['submission_ids' => 'Select between 1 and 50 different evaluations.']);
+        }
+        $reason = trim($reason);
+        if (mb_strlen($reason) < 10 || mb_strlen($reason) > 5000) {
+            throw ValidationException::withMessages(['reason' => 'Provide between 10 and 5,000 characters of clear rework guidance.']);
+        }
+
+        return DB::transaction(function () use ($procurement, $submissionIds, $evaluatorId, $requester, $reason, $overrideProposalRoundLock): Collection {
+            $selected = EvaluationSubmission::query()->whereIn('id', $submissionIds)->orderBy('id')->get();
+            if ($selected->count() !== count($submissionIds)
+                || $selected->contains(fn ($s) => (string) $s->procurement_id !== (string) $procurement->id
+                    || (string) $s->evaluator_id !== $evaluatorId)) {
+                throw ValidationException::withMessages(['submission_ids' => 'Select current evaluations for one evaluator within this procurement.']);
+            }
+            // Preserve the single-record lock order before taking the procurement lock.
+            foreach ($selected as $submission) {
+                $this->lockWorkItem($submission);
+            }
+            Procurement::query()->whereKey($procurement->id)->lockForUpdate()->firstOrFail();
+            $current = app(EvaluationReportReworkPanel::class)->currentSubmissions($procurement, $evaluatorId, true)->keyBy('id');
+            foreach ($selected as $submission) {
+                if (! $current->has($submission->id) || ! $current[$submission->id]->isSubmitted()) {
+                    throw ValidationException::withMessages(['submission_ids' => 'A selected evaluation is no longer the current submitted record. Refresh the report before requesting rework.']);
+                }
+            }
+
+            return $selected->map(fn ($submission) => $this->request($submission, $requester, $reason, $overrideProposalRoundLock));
+        }, 3);
+    }
 
     public function request(
         EvaluationSubmission $submission,

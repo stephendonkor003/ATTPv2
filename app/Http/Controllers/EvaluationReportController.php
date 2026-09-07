@@ -14,6 +14,7 @@ use App\Models\Procurement;
 use App\Models\ProcurementPlan;
 use App\Services\EoiQualificationService;
 use App\Services\EvaluationManagementReportService;
+use App\Services\EvaluationReportReworkPanel;
 use App\Support\EvaluationManagementExportData;
 use App\Support\EvaluationReportPdf;
 use App\Services\EoiReportCommunicationService;
@@ -551,7 +552,9 @@ class EvaluationReportController extends Controller
 
         return view(
             'reports.evaluations.method-procurement',
-            $this->buildMethodProcurementReport($method, $procurement)
+            $this->buildMethodProcurementReport($method, $procurement) + [
+                'reworkPanel' => app(EvaluationReportReworkPanel::class)->forProcurements([$procurement], $method),
+            ]
         );
     }
 
@@ -631,8 +634,9 @@ class EvaluationReportController extends Controller
         $overallMax = $this->overallMax($submission);
 
         $management = app(EvaluationManagementReportService::class)->forSubmission($submission);
+        $reworkPanel = app(EvaluationReportReworkPanel::class)->forProcurements([$submission->procurement], null, $submission);
 
-        return view('reports.evaluations.submission', compact('submission', 'overallMax', 'management'));
+        return view('reports.evaluations.submission', compact('submission', 'overallMax', 'management', 'reworkPanel'));
     }
 
     public function submissionPdf(EvaluationSubmission $submission)
@@ -716,9 +720,12 @@ class EvaluationReportController extends Controller
             ->limit(5)
             ->get();
 
+        $reworkPanel = app(EvaluationReportReworkPanel::class)->forProcurements([$procurement], Evaluation::TYPE_EOI);
+
         return view('reports.evaluations.eoi-procurement', compact(
             'report',
             'management',
+            'reworkPanel',
             'communications',
             'communicationPreview',
             'technicalProposalRounds'
@@ -887,9 +894,11 @@ class EvaluationReportController extends Controller
         $evaluationStats = $this->buildEvaluationStats($submissions);
 
         $management = app(EvaluationManagementReportService::class)->forProcurement($procurement);
+        $reworkPanel = app(EvaluationReportReworkPanel::class)->forProcurements([$procurement]);
 
         return view('reports.evaluations.procurement', compact(
             'management',
+            'reworkPanel',
             'procurement',
             'submissions',
             'summary',
@@ -929,9 +938,20 @@ class EvaluationReportController extends Controller
         $procurementStats = $this->buildProcurementStats($submissions);
 
         $management = app(EvaluationManagementReportService::class)->consolidated($submissions);
+        $reworkPanel = [];
+        if (auth()->user()?->can('evaluations.manage')) {
+            $panelProcurements = Procurement::query()->where(function ($query) use ($submissions): void {
+                $query->whereIn('id', $submissions->pluck('procurement_id')->unique())
+                    ->orWhereHas('evaluationSubmissions.reworkRequests', fn ($rework) => $rework
+                        ->where('status', \App\Models\ReworkRequest::STATUS_PENDING));
+            });
+            $this->applyEvaluationReportProcurementScope($panelProcurements);
+            $reworkPanel = app(EvaluationReportReworkPanel::class)->forProcurements($panelProcurements->get());
+        }
 
         return view('reports.evaluations.consolidated', compact(
             'management',
+            'reworkPanel',
             'submissions',
             'summary',
             'evaluatorBreakdown',
@@ -1034,7 +1054,7 @@ class EvaluationReportController extends Controller
 
     private function activeReportSubmissions(iterable $submissions): Collection
     {
-        $submissions = collect($submissions);
+        $submissions = app(\App\Services\EvaluationReworkGuard::class)->excludePendingTasks($submissions);
         $eoiSubmissions = $submissions
             ->filter(fn (EvaluationSubmission $submission): bool => $submission->evaluation?->isEoi() ?? false);
 
@@ -1098,6 +1118,7 @@ class EvaluationReportController extends Controller
             ->whereHas('evaluation', fn ($evaluation) => $evaluation->where('type', $method))
             ->orderByDesc('submitted_at')
             ->get();
+        $submissions = $this->activeReportSubmissions($submissions);
 
         $summary = $this->buildSummary($submissions);
         $summary['applicants'] = $submissions->pluck('form_submission_id')->filter()->unique()->count();

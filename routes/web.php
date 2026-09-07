@@ -2971,6 +2971,9 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.view_a
         Route::post('/procurements/{procurement}/submissions/{submission}/rework', [\App\Http\Controllers\EvaluationReworkController::class, 'store'])
             ->middleware('permission:evaluations.manage')
             ->name('rework');
+        Route::post('/procurements/{procurement}/rework', [\App\Http\Controllers\EvaluationReworkController::class, 'batch'])
+            ->middleware('permission:evaluations.manage')
+            ->name('rework.batch');
 });
 
 
