@@ -28,6 +28,8 @@ return [
         '$2y$12$IsdzQWyVSSHhdASAL3eTxOB.hnP7iF0GTKlF0SQpRImnWCEaUE8QO'
     ),
     'require_mfa' => env('THINK_TANK_PORTAL_REQUIRE_MFA', true),
+    // Requires both APP_ENV=local and this explicit opt-in. Never enable it on a server.
+    'show_local_otp' => env('THINK_TANK_PORTAL_SHOW_LOCAL_OTP', false),
     'mfa_verification_hours' => 24,
     'mfa_resend_seconds' => 60,
     'mfa_issue_max_per_hour' => 5,

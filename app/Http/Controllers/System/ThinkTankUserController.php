@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Throwable;
 
 class ThinkTankUserController extends Controller
@@ -225,6 +226,36 @@ class ThinkTankUserController extends Controller
                 : 'The previous password and active sessions were revoked, but the reset link could not be delivered. Retry or ask the user to use Forgot password.');
     }
 
+    public function setTemporaryPassword(Request $request, User $user)
+    {
+        $this->assertThinkTankUser($user);
+        $data = $request->validate([
+            'administrator_password' => ['required', 'string', 'max:4096', 'current_password:web'],
+            'password' => ['required', 'string', 'max:4096', 'confirmed', Password::min(12)->mixedCase()->letters()->numbers()->symbols()],
+        ], [
+            'administrator_password.current_password' => 'Your administrator password is incorrect.',
+            'password.confirmed' => 'The temporary-password confirmation does not match.',
+        ]);
+
+        $member = $user->assignedThinkTankMembership()->first();
+        abort_unless($member, 422, 'This user is not assigned to a Think Tank.');
+
+        $this->userManagement->setTemporaryPasswordForSystemOversight(
+            $request,
+            $request->user(),
+            $member,
+            $user,
+            $data['password'],
+        );
+
+        $this->audit($request, 'think_tank_user_temporary_password_set', 'Think Tank portal temporary password set; sessions revoked and change required', [
+            'staff_user_id' => $user->id,
+            'think_tank_member_id' => $member->id,
+        ]);
+
+        return back()->with('success', 'Temporary password set. Existing sessions were revoked and the user must change it at the next login. Share it through a secure channel; it cannot be viewed again here.');
+    }
+
     private function thinkTankUsersQuery()
     {
         return User::query()
@@ -260,6 +291,7 @@ class ThinkTankUserController extends Controller
             User::THINK_TANK_ACCESS_PROCUREMENT => 'Procurement Officer',
             User::THINK_TANK_ACCESS_ME => 'M&E Officer',
             User::THINK_TANK_ACCESS_FINANCE => 'Finance Officer',
+            User::THINK_TANK_ACCESS_EVALUATOR => 'Evaluator',
         ];
     }
 

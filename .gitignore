@@ -1,4 +1,8 @@
 *.log
+*.pem
+*.key
+*.pfx
+*.p12
 .DS_Store
 .env
 env
@@ -35,7 +39,6 @@ env
 !/storage/framework/views/.gitignore
 /storage/logs/*
 !/storage/logs/.gitignore
-/storage/*.key
 /storage/pail
 /vendor
 Homestead.json

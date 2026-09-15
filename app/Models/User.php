@@ -6,6 +6,8 @@ use App\Notifications\ThinkTankPortalPasswordResetNotification;
 use App\Services\ThinkTank\ThinkTankMailSecurityService;
 use App\Support\DiscussionAccountEmailPolicy;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Auth\MustVerifyEmail as MustVerifyEmailTrait;
+use Illuminate\Contracts\Auth\MustVerifyEmail as MustVerifyEmailContract;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,9 +18,9 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Validation\ValidationException;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmailContract
 {
-    use HasFactory, HasUuids, Notifiable;
+    use HasFactory, HasUuids, MustVerifyEmailTrait, Notifiable;
 
     public const THINK_TANK_ACCESS_ADMIN = 'think_tank_admin';
 
@@ -27,6 +29,8 @@ class User extends Authenticatable
     public const THINK_TANK_ACCESS_ME = 'me_officer';
 
     public const THINK_TANK_ACCESS_FINANCE = 'finance_officer';
+
+    public const THINK_TANK_ACCESS_EVALUATOR = 'evaluator';
 
     public const DEFAULT_THINK_TANK_PORTAL_PREFERENCES = [
         'theme_mode' => 'system',
@@ -46,6 +50,7 @@ class User extends Authenticatable
         self::THINK_TANK_ACCESS_PROCUREMENT => 'Procurement Officer',
         self::THINK_TANK_ACCESS_ME => 'M&E Officer',
         self::THINK_TANK_ACCESS_FINANCE => 'Finance Officer',
+        self::THINK_TANK_ACCESS_EVALUATOR => 'Evaluator',
     ];
 
     private const THINK_TANK_AREA_ACCESS = [
@@ -54,6 +59,7 @@ class User extends Authenticatable
             self::THINK_TANK_ACCESS_PROCUREMENT,
             self::THINK_TANK_ACCESS_ME,
             self::THINK_TANK_ACCESS_FINANCE,
+            self::THINK_TANK_ACCESS_EVALUATOR,
         ],
         'me' => [self::THINK_TANK_ACCESS_ADMIN, self::THINK_TANK_ACCESS_ME],
         'reports' => [self::THINK_TANK_ACCESS_ADMIN, self::THINK_TANK_ACCESS_ME],
@@ -104,6 +110,10 @@ class User extends Authenticatable
             'think_tank.dashboard.download',
             'think_tank.finance.view',
             'think_tank.finance.manage',
+        ],
+        self::THINK_TANK_ACCESS_EVALUATOR => [
+            'think_tank.portal.access',
+            'evaluations.evaluate',
         ],
     ];
 

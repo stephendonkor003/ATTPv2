@@ -213,6 +213,7 @@ it('normalizes user DTO email and viewer resources whitelist capabilities withou
     expect($data->name)->toBe('Portal Admin')
         ->and($data->email)->toBe('admin@example.com')
         ->and(User::THINK_TANK_ACCESS_LEVELS)->toHaveKey(User::THINK_TANK_ACCESS_FINANCE, 'Finance Officer')
+        ->and(User::THINK_TANK_ACCESS_LEVELS)->toHaveKey(User::THINK_TANK_ACCESS_EVALUATOR, 'Evaluator')
         ->and($resource)->not->toHaveKeys(['password', 'remember_token', 'payment_account_number'])
         ->and($resource['access']['permissions'])->toContain('think_tank.portal.access')
         ->toContain('think_tank.team.manage')
@@ -326,6 +327,9 @@ it('fails closed on debug credential mail transports in production', function ()
             ->toThrow(\App\Exceptions\ThinkTankApiException::class);
 
         config(['mail.default' => 'smtp']);
+        expect(fn () => $mailSecurity->assertCredentialDeliveryIsSecure())->not->toThrow(Throwable::class);
+
+        config(['mail.default' => 'graph']);
         expect(fn () => $mailSecurity->assertCredentialDeliveryIsSecure())->not->toThrow(Throwable::class);
 
         config(['queue.default' => 'sync']);

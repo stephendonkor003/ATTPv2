@@ -27,7 +27,16 @@ it('removes plaintext credentials from every active legacy Think Tank account wr
     ];
     $sources = collect($paths)->mapWithKeys(fn (string $path): array => [$path => projectSource($path)]);
 
-    foreach ($sources as $source) {
+    foreach ($sources as $path => $source) {
+        if (in_array($path, [
+            'app/Http/Controllers/System/ThinkTankUserController.php',
+            'resources/views/think-tank-users/show.blade.php',
+        ], true)) {
+            expect($source)->not->toContain('Temporary password:');
+
+            continue;
+        }
+
         expect($source)
             ->not->toContain('temporary_password')
             ->not->toContain('$temporaryPassword')
@@ -87,7 +96,7 @@ it('rechecks locked mutation authority and protects administrator identity chang
         ->toContain("->whereKey(\$tenant->getKey())\n            ->lockForUpdate()")
         ->toContain("->whereKey(\$actor->getKey())\n            ->lockForUpdate()")
         ->toContain("\$lockedTenant->status === 'active'")
-        ->toContain('! $lockedActor->is_blacklisted && ! $lockedActor->is_disabled')
+        ->toContain('! $lockedActor->is_blacklisted && ! $lockedActor->hasActiveLoginBlock()')
         ->toContain("\$lockedActor->user_type === 'think_tank'")
         ->toContain('$lockedActor->think_tank_access_level === User::THINK_TANK_ACCESS_ADMIN')
         ->toContain("\$lockedActor->hasPermission('think_tank.users.manage')")

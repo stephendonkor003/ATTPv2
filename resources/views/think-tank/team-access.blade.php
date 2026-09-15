@@ -4,6 +4,7 @@
         \App\Models\User::THINK_TANK_ACCESS_PROCUREMENT => 'Dashboard and procurement plans only.',
         \App\Models\User::THINK_TANK_ACCESS_ME => 'Dashboard, M&E data, and report uploads.',
         \App\Models\User::THINK_TANK_ACCESS_FINANCE => 'Dashboard and finance only.',
+        \App\Models\User::THINK_TANK_ACCESS_EVALUATOR => 'Dashboard and assigned procurement evaluations only.',
     ];
 @endphp
 

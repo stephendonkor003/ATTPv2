@@ -18,7 +18,7 @@ class ThinkTankMfaService
 {
     public function __construct(private readonly ThinkTankMailSecurityService $mailSecurity) {}
 
-    /** @return array{sent: true, expires_at: string, resend_available_at: string, masked_destination: string} */
+    /** @return array{sent: true, expires_at: string, resend_available_at: string, masked_destination: string, local_code?: string} */
     public function send(Request $request, User $user, bool $force = false): array
     {
         $this->mailSecurity->assertCredentialDeliveryIsSecure();
@@ -41,7 +41,7 @@ class ThinkTankMfaService
         }
     }
 
-    /** @return array{sent: true, expires_at: string, resend_available_at: string, masked_destination: string} */
+    /** @return array{sent: true, expires_at: string, resend_available_at: string, masked_destination: string, local_code?: string} */
     private function issue(Request $request, User $user, bool $force): array
     {
         $resendSeconds = (int) config('think_tank_portal.mfa_resend_seconds', 60);
@@ -97,9 +97,10 @@ class ThinkTankMfaService
         }
 
         $challenge = UserLoginOtp::generateFor($user, $request->session()->getId());
+        $plaintextCode = $challenge->releasePlaintextCode();
 
         try {
-            Mail::to($user->email)->send(new LoginOtpMail($user, $challenge->releasePlaintextCode()));
+            Mail::to($user->email)->send(new LoginOtpMail($user, $plaintextCode));
         } catch (Throwable $exception) {
             $challenge->delete();
             report($exception);
@@ -120,17 +121,32 @@ class ThinkTankMfaService
             'think_tank_mfa_user_id' => (string) $user->getKey(),
         ]);
 
-        return [
+        $response = [
             'sent' => true,
             'expires_at' => $challenge->expires_at->toIso8601String(),
             'resend_available_at' => $now->copy()->addSeconds($resendSeconds)->toIso8601String(),
             'masked_destination' => $this->maskedEmail((string) $user->email),
         ];
+
+        if ($this->mayRevealLocalCode()) {
+            $response['local_code'] = $plaintextCode;
+            $request->session()->put('think_tank_mfa_local_challenge', $response);
+        }
+
+        unset($plaintextCode);
+
+        return $response;
     }
 
     public function verify(Request $request, User $user, string $code): bool
     {
         return UserLoginOtp::verifyCode($user, $code, $request->session()->getId());
+    }
+
+    public function mayRevealLocalCode(): bool
+    {
+        return app()->environment('local')
+            && (bool) config('think_tank_portal.show_local_otp', false);
     }
 
     private function maskedEmail(string $email): string

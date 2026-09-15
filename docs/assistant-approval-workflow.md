@@ -9,7 +9,7 @@ Assistants see their own submissions at `/administrative-assistant/submissions`.
 ## Deployment
 
 1. Run `php artisan migrate --path=database/migrations/2026_09_07_000001_create_assistant_submissions_table.php --force`.
-2. Configure an authenticated delivery mailer, set `ASSISTANT_APPROVAL_MAILER=smtp` (or the configured mailer name), and set the public `APP_URL` using the server's secret/configuration management. The log/array mailers do not deliver email; the submission explicitly shows that delivery is not configured.
+2. Configure the application-wide Microsoft Graph transport with `MAIL_MAILER=graph`, and set the public `APP_URL` using the server's secret/configuration management. Do not configure a feature-specific SMTP override. The log/array mailers do not deliver email; the submission explicitly shows that delivery is not configured.
 3. Refresh configuration with `php artisan config:cache`.
 4. Run a supervised worker: `php artisan queue:work database --queue=assistant-approvals --tries=4 --timeout=60`.
 5. After enabling mail or resolving delivery failures, run `php artisan assistant-submissions:notify-pending` to queue undelivered pending alerts. This command sends real notifications through the worker.

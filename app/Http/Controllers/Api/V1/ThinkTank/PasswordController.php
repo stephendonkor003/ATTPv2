@@ -17,6 +17,7 @@ use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Auth\Passwords\PasswordBroker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
@@ -204,6 +205,12 @@ class PasswordController extends ThinkTankApiController
             return $lockedUser;
         });
 
+        // The transaction loaded a separate model. Sanctum must observe the
+        // updated password on both the guard and this session, including when
+        // MFA delivery fails before its response middleware can refresh it.
+        $guard = Auth::guard('web');
+        $guard->setUser($user);
+        $request->session()->put('password_hash_web', $guard->hashPasswordForCookie($user->getAuthPassword()));
         $this->sessions->bindCurrentSession($user, $request);
         $this->states->clearMfaSession($request);
         $state = $this->states->state($request, $user);

@@ -83,6 +83,7 @@ class ThinkTankMailSecurityService
         }
 
         return in_array($transport, [
+            'graph',
             'smtp',
             'sendmail',
             'mailgun',

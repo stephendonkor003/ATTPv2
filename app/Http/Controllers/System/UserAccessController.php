@@ -33,12 +33,13 @@ class UserAccessController extends Controller
         $scopedNodeIds = $this->scopedNodeIds();
 
         return view('system.users.index', [
-            'users' => User::with(['role.permissions', 'governanceNode', 'memberState'])
-                ->where(fn ($query) => $query
-                    ->whereNull('user_type')
-                    ->orWhere('user_type', '!=', 'think_tank'))
-                ->whereNull('think_tank_member_id')
-                ->whereDoesntHave('thinkTankMembership')
+            'users' => User::with([
+                'role.permissions',
+                'governanceNode',
+                'memberState',
+                'assignedThinkTankMembership.consortium',
+                'thinkTankMembership.consortium',
+            ])
                 ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                     $query->whereIn('governance_node_id', $scopedNodeIds);
                 })

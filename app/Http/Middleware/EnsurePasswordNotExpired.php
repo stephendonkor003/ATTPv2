@@ -13,6 +13,9 @@ class EnsurePasswordNotExpired
      * Routes that should be excluded from this middleware
      */
     protected array $except = [
+        // Refreshing the CSRF cookie must remain possible while password
+        // change is pending; this endpoint grants no account access.
+        'sanctum.csrf-cookie',
         'security.password.change',
         'security.password.submit',
         'security.otp.show',

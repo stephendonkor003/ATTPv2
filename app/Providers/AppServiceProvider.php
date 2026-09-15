@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Mail\Transport\MicrosoftGraphTransport;
 use App\Models\ApiSyncEvent;
 use App\Models\ApiSyncInvitation;
 use App\Models\ApiSyncInvitationEvent;
@@ -13,6 +14,7 @@ use App\Models\SystemAuditLog;
 use App\Models\UserLoginOtp;
 use App\Support\IpGeo;
 use App\Support\UserImpersonation;
+use App\Services\Mail\MicrosoftGraphMailService;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
@@ -20,6 +22,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 
@@ -30,11 +33,20 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(MicrosoftGraphMailService::class, fn ($app) => new MicrosoftGraphMailService(
+            $app->make(\Illuminate\Http\Client\Factory::class),
+            $app->make('cache.store'),
+            $app->make(\Psr\Log\LoggerInterface::class),
+            (array) config('services.microsoft_graph', []),
+        ));
     }
 
     public function boot()
     {
+        Mail::extend('graph', fn (array $config = []) => new MicrosoftGraphTransport(
+            $this->app->make(MicrosoftGraphMailService::class)
+        ));
+
         // Align paginator HTML with the app's Bootstrap UI.
         Paginator::useBootstrapFive();
 
@@ -212,6 +224,7 @@ class AppServiceProvider extends ServiceProvider
             'password',
             'remember_token',
             'current_password',
+            'administrator_password',
             'password_confirmation',
             'otp_code',
             'token',

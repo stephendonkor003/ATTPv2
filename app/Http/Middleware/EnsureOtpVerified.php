@@ -14,6 +14,9 @@ class EnsureOtpVerified
      * Routes that should be excluded from this middleware
      */
     protected array $except = [
+        // MFA submissions after a page reload need a fresh CSRF cookie.
+        // Issuing that cookie does not mark the session as verified.
+        'sanctum.csrf-cookie',
         'security.otp.show',
         'security.otp.verify',
         'security.otp.resend',

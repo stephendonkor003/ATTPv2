@@ -440,6 +440,9 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])
                 Route::get('/{user}', 'show')->name('show');
                 Route::put('/{user}', 'update')->name('update');
                 Route::post('/{user}/reset-password', 'resetPassword')->name('reset-password');
+                Route::post('/{user}/set-temporary-password', 'setTemporaryPassword')
+                    ->middleware('throttle:5,1,think-tank-system-password')
+                    ->name('set-temporary-password');
             });
 
 

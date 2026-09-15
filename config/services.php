@@ -28,6 +28,17 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'microsoft_graph' => [
+        'tenant_id' => env('MICROSOFT_TENANT_ID'),
+        'client_id' => env('MICROSOFT_CLIENT_ID'),
+        'certificate_path' => env('MICROSOFT_CERT_PATH'),
+        'private_key_path' => env('MICROSOFT_PRIVATE_KEY_PATH'),
+        'from_address' => env('MICROSOFT_GRAPH_FROM_ADDRESS'),
+        'scope' => 'https://graph.microsoft.com/.default',
+        'base_url' => 'https://graph.microsoft.com/v1.0',
+        'timeout' => (int) env('MICROSOFT_GRAPH_TIMEOUT', 30),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

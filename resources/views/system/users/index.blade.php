@@ -77,6 +77,10 @@
                     <tbody>
                         @foreach($users as $user)
                             @php
+                                $isThinkTankUser = $user->user_type === 'think_tank'
+                                    || filled($user->think_tank_member_id)
+                                    || $user->thinkTankMembership;
+                                $thinkTankMembership = $user->assignedThinkTankMembership ?: $user->thinkTankMembership;
                                 $canBulkManageLogin = !($user->id === auth()->id() || $user->isAdmin() || $user->isSuperAdmin());
                                 $canLoginAsUser = $canLoginAsUsers
                                     && (string) $user->id !== (string) $currentUser->id
@@ -96,7 +100,14 @@
 
                                 <td>
                                     <div class="fw-semibold">{{ $user->name }}</div>
-                                    <small class="text-muted">{{ ucfirst(str_replace('_', ' ', (string) $user->user_type)) }}</small>
+                                    <small class="text-muted">{{ $isThinkTankUser ? 'Think Tank' : ucfirst(str_replace('_', ' ', (string) $user->user_type)) }}</small>
+                                    @if ($thinkTankMembership)
+                                        <div class="mt-1">
+                                            <span class="badge bg-info-subtle text-info">
+                                                <i class="feather-users me-1"></i>{{ $thinkTankMembership->name }}
+                                            </span>
+                                        </div>
+                                    @endif
                                     @if ($user->memberState)
                                         <div class="mt-1 d-flex align-items-center gap-2">
                                             @if ($user->memberState->flag_url)
@@ -127,6 +138,11 @@
                                             <i class="feather-shield me-1"></i>
                                             Super Admin
                                         </span>
+                                    @elseif ($isThinkTankUser)
+                                        <span class="badge bg-info-subtle text-info px-3 py-1">
+                                            <i class="feather-shield me-1"></i>
+                                            {{ \App\Models\User::THINK_TANK_ACCESS_LEVELS[$user->resolvedThinkTankAccessLevel()] ?? 'Think Tank User' }}
+                                        </span>
                                     @elseif ($user->user_type === 'vendor')
                                         <span class="badge bg-primary-subtle text-primary px-3 py-1">
                                             <i class="feather-briefcase me-1"></i>
@@ -154,7 +170,9 @@
 
                                 {{-- PERMISSIONS --}}
                                 <td class="text-center">
-                                    @if ($user->role && $user->role->permissions->count())
+                                    @if ($isThinkTankUser)
+                                        <span class="badge bg-info px-3 py-1">Tenant scoped</span>
+                                    @elseif ($user->role && $user->role->permissions->count())
                                         <span class="badge bg-info px-3 py-1">
                                             {{ $user->role->permissions->count() }}
                                         </span>
@@ -194,10 +212,17 @@
                                 {{-- ACTIONS --}}
                                 <td class="text-center">
                                     <div class="d-inline-flex flex-wrap justify-content-center gap-1">
-                                        <a href="{{ route('system.users.edit', $user->id) }}"
-                                            class="btn btn-sm btn-outline-success" title="Edit User">
-                                            <i class="feather-edit"></i>
-                                        </a>
+                                        @if ($isThinkTankUser)
+                                            <a href="{{ route('system.think-tank-users.show', $user->id) }}"
+                                                class="btn btn-sm btn-outline-success" title="Manage Think Tank user">
+                                                <i class="feather-settings me-1"></i> Manage
+                                            </a>
+                                        @else
+                                            <a href="{{ route('system.users.edit', $user->id) }}"
+                                                class="btn btn-sm btn-outline-success" title="Edit User">
+                                                <i class="feather-edit"></i>
+                                            </a>
+                                        @endif
 
                                         @if (!($user->isAdmin() || $user->isSuperAdmin()))
                                             @if ($canLoginAsUser)
@@ -213,11 +238,13 @@
                                                 </form>
                                             @endif
 
+                                            @if (! $isThinkTankUser)
                                             <a href="{{ route('system.users.permissions', $user->id) }}"
                                                 class="btn btn-sm btn-outline-primary"
                                                 title="Assign Direct Permissions">
                                                 <i class="feather-lock"></i>
                                             </a>
+                                            @endif
 
                                             <button type="button"
                                                 class="btn btn-sm btn-outline-dark open-block-modal"
@@ -243,6 +270,7 @@
                                                 </form>
                                             @endif
 
+                                            @if (! $isThinkTankUser)
                                             <form action="{{ route('system.users.reset-password', $user->id) }}"
                                                 method="POST" class="d-inline"
                                                 onsubmit="return confirm('Reset password and email user?');">
@@ -261,6 +289,7 @@
                                                     <i class="feather-trash-2"></i>
                                                 </button>
                                             </form>
+                                            @endif
                                         @endif
                                     </div>
                                 </td>

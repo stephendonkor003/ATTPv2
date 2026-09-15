@@ -204,6 +204,13 @@ class AuthenticationController extends ThinkTankApiController
      */
     private function authPayload(Request $request, string $state, ?User $user = null, ?array $challenge = null): array
     {
+        if ($challenge === null
+            && $state === ThinkTankAuthenticationStateService::MFA_REQUIRED
+            && $this->mfa->mayRevealLocalCode()) {
+            $localChallenge = $request->session()->get('think_tank_mfa_local_challenge');
+            $challenge = is_array($localChallenge) ? $localChallenge : null;
+        }
+
         return [
             ...$this->states->summary($state),
             // Tenant identity and capabilities are released only after the

@@ -31,6 +31,7 @@ class SystemAuditLogger
                 'password',
                 'password_confirmation',
                 'current_password',
+                'administrator_password',
                 'authorization_code',
                 'pairing_code',
                 'code',

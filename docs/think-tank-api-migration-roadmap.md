@@ -106,3 +106,36 @@ Each phase is complete only when all of the following are true:
 - A case-insensitive duplicate email group exists outside the Think Tank account set. It must be repaired before a database-wide normalized email uniqueness constraint is applied.
 - Dependency security advisories must be resolved and `composer audit` must pass before production cutover.
 - Current live-like Think Tank accounts are blocked; testing must use isolated fixtures rather than silently reactivating them.
+
+## Local integration checkpoint - 2026-09-11
+
+The separate Next.js portal already contains the Phase 1 authentication and user-management screens. It now connects to Laravel at `http://127.0.0.1:8000` from `http://localhost:3000` through narrowly scoped runtime forwarding. The API origin is server-only; cookies, CSRF protection, password-change requirements, MFA, and tenant authorization remain owned by Laravel.
+
+The existing PostgreSQL database was inspected before applying only these two pending migrations:
+
+- `2026_09_01_212423_harden_user_login_otp_storage`: expanded OTP storage to 64-character digests and retired historical plaintext values. No active OTP challenges existed at migration time.
+- `2026_09_01_220000_enforce_unique_think_tank_portal_user_assignment`: added the uniqueness constraint after verifying zero duplicate primary assignments.
+
+All 15 existing Think Tank accounts were effectively login-blocked, and one primary membership link did not match its explicit account assignment. Those account settings and links were left for explicit administrator review. Local mail uses the log transport, so OTP/invitation/reset messages are not inbox deliveries.
+
+Confirmed integration fixes include expired temporary login blocks being respected consistently during staff mutations, correct blacklisted-user invitation controls, visible invitation delivery outcomes after email changes, and runtime API forwarding using the same upstream as server-side authentication checks.
+
+The real HTTP harness also exposed two authentication handoff gaps: the legacy password/OTP middleware redirected Sanctum's CSRF bootstrap after a page refresh, and password changes left Sanctum's current session bound to the previous password hash. The CSRF bootstrap is now exempt from those legacy page redirects; protected pages and API readiness checks still enforce password changes and MFA. Password updates refresh the authenticated session identity before the next MFA step.
+
+Pending authentication forms retain validation messages and typed retry codes while the session is rechecked. Authenticated workspace content remains hidden during revalidation, including access-revocation checks.
+
+Fresh invitation/reset pages keep their document-level `no-referrer` policy. Only API and CSRF fetches send an origin-only referrer, providing Sanctum's required first-party context without disclosing the reset-token path or email query.
+
+The focused backend checks pass 32 tests / 251 assertions. The final frontend production build, TypeScript, lint, and all 17 mocked browser tests pass, including natural MFA retry, delayed session revocation, and fresh reset-link referrer privacy.
+
+The complete real HTTP/browser harness also passes: real session/CSRF checks, forced password change, invalid-to-valid OTP retry, tenant isolation, invitation creation/edit/resend, fresh one-use password setup, restricted officer access, active-session revocation, logout, and responsive user management. It reports zero browser exceptions and zero HTTP 5xx responses. The normal running applications separately pass browser checks at ports 3000 and 8000.
+
+Start both local applications from the backend directory with:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\start-think-tank-local.ps1
+```
+
+The authenticated integration harness is documented in the sibling portal's `tests/live/README.md`. It uses a separate SQLite database, database sessions and rate limits, real CSRF/MFA, captured local-only test mail, and synthetic `example.test` accounts. It never loads the application's `.env` or alters the normal PostgreSQL accounts.
+
+This checkpoint connects and validates authentication and user management. Tenant roles, budgets, procurement, M&E, payments, reports, audit screens, and dashboard business records remain subsequent migration phases; their sample screens are not API-complete. The existing Blade workflows remain available.

@@ -53,6 +53,7 @@ class ThinkTankAuthenticationStateService
             'otp_verified_user_id',
             'think_tank_mfa_sent_at',
             'think_tank_mfa_user_id',
+            'think_tank_mfa_local_challenge',
         ]);
     }
 
@@ -63,7 +64,11 @@ class ThinkTankAuthenticationStateService
             'otp_verified_at' => now()->toIso8601String(),
             'otp_verified_user_id' => (string) $user->getKey(),
         ]);
-        $request->session()->forget(['think_tank_mfa_sent_at', 'think_tank_mfa_user_id']);
+        $request->session()->forget([
+            'think_tank_mfa_sent_at',
+            'think_tank_mfa_user_id',
+            'think_tank_mfa_local_challenge',
+        ]);
     }
 
     private function hasValidMfaSession(Request $request, User $user): bool

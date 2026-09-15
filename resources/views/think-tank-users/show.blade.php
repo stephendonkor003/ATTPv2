@@ -19,6 +19,8 @@
         \App\Models\User::THINK_TANK_ACCESS_ADMIN => 'Full portal access, including administration of the Think Tank team.',
         \App\Models\User::THINK_TANK_ACCESS_PROCUREMENT => 'Procurement plans, items, documents, evaluation and execution access.',
         \App\Models\User::THINK_TANK_ACCESS_ME => 'M&E data collection, indicators and performance-reporting access.',
+        \App\Models\User::THINK_TANK_ACCESS_FINANCE => 'Finance and budget management for Think Tank spending and disbursements.',
+        \App\Models\User::THINK_TANK_ACCESS_EVALUATOR => 'Assigned procurement evaluations only; no plan, finance, M&E, or user administration access.',
     ];
     $eventIcons = [
         'think_tank_user_created' => 'feather-user-plus',
@@ -72,16 +74,40 @@
 
             <aside class="ttud-side">
                 <section class="ttud-panel">
-                    <header class="ttud-panel-head"><div><div class="ttud-kicker">Security</div><h2>Password access</h2><p>Passwords cannot be viewed or sent. Issue a secure, single-use reset link when access must be recovered.</p></div><span class="ttud-panel-icon"><i class="feather-lock"></i></span></header>
+                    <header class="ttud-panel-head"><div><div class="ttud-kicker">Security</div><h2>Password access</h2><p>Send a single-use reset link or set a temporary password. Existing passwords are never displayed.</p></div><span class="ttud-panel-icon"><i class="feather-lock"></i></span></header>
                     <div class="ttud-security-body">
                         <div class="ttud-security-item"><span><i class="feather-key"></i></span><div><strong>{{ $user->must_change_password ? 'Password change required' : 'Password established' }}</strong><small>{{ $user->password_changed_at ? 'Last changed '.$user->password_changed_at->diffForHumans() : 'No password-change date is recorded.' }}</small></div></div>
                         <div class="ttud-security-item"><span><i class="feather-mail"></i></span><div><strong>Secure reset link</strong><small>An administrator reset immediately revokes the current password, MFA challenge and active sessions, then sends a single-use setup link.</small></div></div>
                         <form class="ttud-reset" method="POST" action="{{ route('system.think-tank-users.reset-password', $user) }}" onsubmit="return confirm('Revoke this user’s current password and sessions, then send a secure reset link?')">@csrf<button class="ttud-btn warn" type="submit"><i class="feather-refresh-cw"></i> Revoke access and send reset link</button></form>
+                        <div class="ttud-security-item"><span><i class="feather-edit-2"></i></span><div><strong>Set a temporary password directly</strong><small>The user must replace it at the next login. All current sessions and MFA state are revoked immediately.</small></div></div>
+                        <form class="ttud-reset" method="POST" action="{{ route('system.think-tank-users.set-temporary-password', $user) }}" autocomplete="off" onsubmit="return confirm('Set this temporary password and revoke every active session for this user?')">
+                            @csrf
+                            <div class="ttud-field">
+                                <label for="administrator_password">Your administrator password</label>
+                                <input id="administrator_password" name="administrator_password" type="password" required autocomplete="current-password">
+                                @error('administrator_password')<span class="ttud-error">{{ $message }}</span>@enderror
+                            </div>
+                            <div class="ttud-field">
+                                <label for="temporary_password">Temporary password</label>
+                                <input id="temporary_password" name="password" type="password" required minlength="12" autocomplete="new-password">
+                                <small>At least 12 characters with uppercase, lowercase, number, and symbol.</small>
+                                @error('password')<span class="ttud-error">{{ $message }}</span>@enderror
+                            </div>
+                            <div class="ttud-field">
+                                <label for="temporary_password_confirmation">Confirm temporary password</label>
+                                <input id="temporary_password_confirmation" name="password_confirmation" type="password" required minlength="12" autocomplete="new-password">
+                            </div>
+                            <button class="ttud-btn primary" type="submit"><i class="feather-key"></i> Set temporary password</button>
+                        </form>
                     </div>
                 </section>
                 <section class="ttud-panel">
                     <header class="ttud-panel-head"><div><div class="ttud-kicker">Access guide</div><h2>Officer permissions</h2></div><span class="ttud-panel-icon"><i class="feather-info"></i></span></header>
-                    <div class="ttud-role-guide">@foreach($accessLevels as $value => $label)<div class="ttud-role"><strong>{{ $label }}</strong><span>{{ $roleDetails[$value] }}</span></div>@endforeach</div>
+                    <div class="ttud-role-guide">
+                        @foreach($accessLevels as $value => $label)
+                            <div class="ttud-role"><strong>{{ $label }}</strong><span>{{ $roleDetails[$value] ?? 'Officer permissions and module access for this role.' }}</span></div>
+                        @endforeach
+                    </div>
                 </section>
             </aside>
         </section>

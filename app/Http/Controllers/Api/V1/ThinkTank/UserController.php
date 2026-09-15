@@ -61,9 +61,9 @@ class UserController extends ThinkTankApiController
             (new ThinkTankUserResource($result['user']))->resolve($request),
             201,
             $result['invitation_sent']
-                ? 'User created and invitation sent.'
-                : 'User created, but the invitation could not be delivered.',
-            ['invitation_sent' => $result['invitation_sent']],
+                ? 'User created and temporary login credentials sent.'
+                : 'User created, but temporary login credentials could not be delivered.',
+            ['credentials_sent' => $result['invitation_sent']],
         );
     }
 
@@ -120,12 +120,12 @@ class UserController extends ThinkTankApiController
         $this->validateOnly($request, []);
         $tenant = $this->tenant($request);
         $target = $this->users->findForTenant($tenant, $user);
-        $sent = $this->users->resendInvitation($request, $request->user(), $tenant, $target);
+        $sent = $this->users->resendTemporaryPassword($request, $request->user(), $tenant, $target);
 
         return ThinkTankApiResponse::success(
-            ['invitation_sent' => $sent],
+            ['credentials_sent' => $sent],
             202,
-            $sent ? 'Invitation sent.' : 'The invitation could not be delivered.',
+            $sent ? 'New temporary login credentials sent.' : 'Temporary login credentials could not be delivered.',
         );
     }
 

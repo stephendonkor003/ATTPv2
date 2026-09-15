@@ -26,6 +26,14 @@
             'icon' => 'feather-activity',
             'description' => 'M&E data collection, indicators and performance reporting.',
         ],
+        \App\Models\User::THINK_TANK_ACCESS_FINANCE => [
+            'icon' => 'feather-dollar-sign',
+            'description' => 'Finance planning, budgets and disbursement tracking.',
+        ],
+        \App\Models\User::THINK_TANK_ACCESS_EVALUATOR => [
+            'icon' => 'feather-check-square',
+            'description' => 'Assigned procurement evaluations only, with tenant and assignment boundaries.',
+        ],
     ];
 @endphp
 
@@ -46,7 +54,7 @@
                 <strong>Role-based portal access</strong>
                 <p>Every account is tied to one Think Tank. Users cannot see another organization’s records.</p>
                 <div class="ttu-role-mini">
-                    <span>Administrator</span><span>Procurement</span><span>M&amp;E</span>
+                    <span>Administrator</span><span>Procurement</span><span>M&amp;E</span><span>Finance</span><span>Evaluator</span>
                 </div>
             </aside>
         </section>
@@ -97,10 +105,16 @@
                         <span class="ttu-role-label">Portal role</span>
                         <div class="ttu-role-options">
                             @foreach($accessLevels as $value => $label)
+                                @php
+                                    $details = $roleDetails[$value] ?? [
+                                        'icon' => 'feather-shield',
+                                        'description' => 'This role has Think Tank access.',
+                                    ];
+                                @endphp
                                 <label class="ttu-role-option">
                                     <input type="radio" name="access_level" value="{{ $value }}" @checked(old('access_level', \App\Models\User::THINK_TANK_ACCESS_PROCUREMENT) === $value) required>
-                                    <span><i class="{{ $roleDetails[$value]['icon'] }}"></i></span>
-                                    <span><strong>{{ $label }}</strong><small>{{ $roleDetails[$value]['description'] }}</small></span>
+                                    <span><i class="{{ $details['icon'] }}"></i></span>
+                                    <span><strong>{{ $label }}</strong><small>{{ $details['description'] }}</small></span>
                                 </label>
                             @endforeach
                         </div>
