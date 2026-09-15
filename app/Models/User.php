@@ -2,10 +2,11 @@
 
 namespace App\Models;
 
+use App\Notifications\ApplicationPasswordResetNotification;
+use App\Notifications\ApplicationVerifyEmailNotification;
 use App\Notifications\ThinkTankPortalPasswordResetNotification;
 use App\Services\ThinkTank\ThinkTankMailSecurityService;
 use App\Support\DiscussionAccountEmailPolicy;
-use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Auth\MustVerifyEmail as MustVerifyEmailTrait;
 use Illuminate\Contracts\Auth\MustVerifyEmail as MustVerifyEmailContract;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -616,13 +617,17 @@ class User extends Authenticatable implements MustVerifyEmailContract
         if ($this->isThinkTankUser()) {
             $security = app(ThinkTankMailSecurityService::class);
             $security->assertCredentialDeliveryIsSecure();
-            $security->assertEncryptedResetQueueIsDurable();
             $this->notify(new ThinkTankPortalPasswordResetNotification($token));
 
             return;
         }
 
-        $this->notify(new ResetPassword($token));
+        $this->notify(new ApplicationPasswordResetNotification($token));
+    }
+
+    public function sendEmailVerificationNotification(): void
+    {
+        $this->notify(new ApplicationVerifyEmailNotification);
     }
 
     /**

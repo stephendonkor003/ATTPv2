@@ -5,7 +5,6 @@ namespace App\Services\ThinkTank;
 use App\Data\ThinkTank\CreateThinkTankUserData;
 use App\Data\ThinkTank\UpdateThinkTankUserData;
 use App\Exceptions\ThinkTankApiException;
-use App\Mail\ThinkTankTemporaryPasswordMail;
 use App\Models\ConsortiumThinkTank;
 use App\Models\Role;
 use App\Models\User;
@@ -15,7 +14,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -25,7 +23,6 @@ class ThinkTankUserManagementService
         private readonly ThinkTankApiAuditService $audit,
         private readonly ThinkTankInvitationService $invitations,
         private readonly ThinkTankSessionService $sessions,
-        private readonly ThinkTankMailSecurityService $mailSecurity,
     ) {}
 
     /** @param array<string, mixed> $filters */
@@ -76,7 +73,7 @@ class ThinkTankUserManagementService
     /** @return array{user: User, invitation_sent: bool} */
     public function create(Request $request, User $actor, ConsortiumThinkTank $tenant, CreateThinkTankUserData $data): array
     {
-        return $this->createAuthorized($request, $actor, $tenant, $data, false, true);
+        return $this->createAuthorized($request, $actor, $tenant, $data, false);
     }
 
     /** @return array{user: User, invitation_sent: bool} */
@@ -96,11 +93,9 @@ class ThinkTankUserManagementService
         ConsortiumThinkTank $tenant,
         CreateThinkTankUserData $data,
         bool $systemOversight,
-        bool $sendTemporaryPassword = false,
     ): array {
-        $temporaryPassword = $sendTemporaryPassword ? Str::password(20) : null;
-        $user = $this->withEmailLock($data->email, function () use ($request, $actor, $tenant, $data, $systemOversight, $temporaryPassword): User {
-            return DB::transaction(function () use ($request, $actor, $tenant, $data, $systemOversight, $temporaryPassword): User {
+        $user = $this->withEmailLock($data->email, function () use ($request, $actor, $tenant, $data, $systemOversight): User {
+            return DB::transaction(function () use ($request, $actor, $tenant, $data, $systemOversight): User {
                 [$lockedTenant, $lockedActor] = $this->lockMutationAuthority(
                     $tenant,
                     $actor,
@@ -116,7 +111,7 @@ class ThinkTankUserManagementService
                 $user = User::query()->create([
                     'name' => $data->name,
                     'email' => $data->email,
-                    'password' => $temporaryPassword ?? Str::password(64),
+                    'password' => Str::password(64),
                     'user_type' => 'think_tank',
                     'role_id' => $role->getKey(),
                     'think_tank_member_id' => $lockedTenant->getKey(),
@@ -139,10 +134,7 @@ class ThinkTankUserManagementService
             });
         });
 
-        $sent = $sendTemporaryPassword
-            ? $this->sendTemporaryPassword($user, $tenant, (string) $temporaryPassword)
-            : $this->invitations->send($user, true);
-        unset($temporaryPassword);
+        $sent = $this->invitations->send($user, true);
         $this->audit->bestEffort($request, 'think_tank.user.credentials_sent', 'Think tank portal account credentials processed.', [
             'tenant_id' => (string) $tenant->getKey(),
             'target_user_id' => (string) $user->getKey(),
@@ -150,21 +142,6 @@ class ThinkTankUserManagementService
         ], $actor);
 
         return ['user' => $user, 'invitation_sent' => $sent];
-    }
-
-    private function sendTemporaryPassword(User $user, ConsortiumThinkTank $tenant, string $temporaryPassword): bool
-    {
-        try {
-            $this->mailSecurity->assertCredentialDeliveryIsSecure();
-            Mail::to($user->email)->send(new ThinkTankTemporaryPasswordMail($user, $tenant, $temporaryPassword));
-
-            return true;
-        } catch (\Throwable $exception) {
-            report($exception);
-            $user->forceFill(['password' => Str::password(64)])->save();
-
-            return false;
-        }
     }
 
     /** @return array{user: User, invitation_sent: ?bool} */
@@ -357,30 +334,20 @@ class ThinkTankUserManagementService
 
     public function resendTemporaryPassword(Request $request, User $actor, ConsortiumThinkTank $tenant, User $target): bool
     {
-        $temporaryPassword = Str::password(20);
-        $lockedTarget = DB::transaction(function () use ($request, $actor, $tenant, $target, $temporaryPassword): User {
-            [$lockedTenant, $lockedActor] = $this->lockMutationAuthority($tenant, $actor);
+        $deliveryTarget = DB::transaction(function () use ($actor, $tenant, $target): User {
+            [$lockedTenant] = $this->lockMutationAuthority($tenant, $actor);
             $lockedTarget = $this->tenantQuery($lockedTenant)->whereKey($target->getKey())->lockForUpdate()->firstOrFail();
             abort_if($lockedTarget->is_blacklisted || $lockedTarget->hasActiveLoginBlock(), 422, 'Enable this account before issuing new credentials.');
-            $lockedTarget->forceFill([
-                'password' => $temporaryPassword,
-                'must_change_password' => true,
-                'password_changed_at' => null,
-                'otp_verified_at' => null,
-                'remember_token' => null,
-            ])->save();
-            $this->sessions->invalidateMfa($lockedTarget);
-            $this->sessions->revokeAllSessions($lockedTarget);
-            $this->audit->required($request, 'think_tank.user.credentials_reissued', 'Temporary portal credentials reissued.', [
-                'tenant_id' => (string) $lockedTenant->getKey(),
-                'target_user_id' => (string) $lockedTarget->getKey(),
-            ], $lockedActor);
 
             return $lockedTarget->fresh();
         });
 
-        $sent = $this->sendTemporaryPassword($lockedTarget, $tenant, $temporaryPassword);
-        unset($temporaryPassword);
+        $sent = $this->invitations->send($deliveryTarget, false);
+        $this->audit->bestEffort($request, 'think_tank.user.credentials_reissued', 'Secure portal password-reset link reissued.', [
+            'tenant_id' => (string) $tenant->getKey(),
+            'target_user_id' => (string) $target->getKey(),
+            'delivered' => $sent,
+        ], $actor);
 
         return $sent;
     }
@@ -391,7 +358,20 @@ class ThinkTankUserManagementService
         ConsortiumThinkTank $tenant,
         User $target,
     ): bool {
-        $lockedTarget = DB::transaction(function () use ($request, $actor, $tenant, $target): User {
+        $deliveryTarget = DB::transaction(function () use ($actor, $tenant, $target): User {
+            [$lockedTenant] = $this->lockMutationAuthority($tenant, $actor, true);
+
+            return $this->tenantQuery($lockedTenant)
+                ->whereKey($target->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+        });
+
+        if (! $this->invitations->send($deliveryTarget, false)) {
+            return false;
+        }
+
+        DB::transaction(function () use ($request, $actor, $tenant, $target): void {
             [$lockedTenant, $lockedActor] = $this->lockMutationAuthority($tenant, $actor, true);
             $lockedTarget = $this->tenantQuery($lockedTenant)
                 ->whereKey($target->getKey())
@@ -409,18 +389,16 @@ class ThinkTankUserManagementService
             $this->audit->required(
                 $request,
                 'think_tank.user.password_reset_initiated',
-                'Think tank portal password invalidated by system oversight.',
+                'Think tank portal password invalidated after secure reset-link delivery was accepted.',
                 [
                     'tenant_id' => (string) $lockedTenant->getKey(),
                     'target_user_id' => (string) $lockedTarget->getKey(),
                 ],
                 $lockedActor,
             );
-
-            return $lockedTarget->fresh();
         });
 
-        return $this->invitations->send($lockedTarget, false);
+        return true;
     }
 
     public function setTemporaryPasswordForSystemOversight(

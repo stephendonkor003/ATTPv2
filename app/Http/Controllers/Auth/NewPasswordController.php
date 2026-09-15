@@ -69,7 +69,7 @@ class NewPasswordController extends Controller
 
         $submittedEmail = trim($request->string('email')->toString());
         $email = mb_strtolower($submittedEmail);
-        $request->merge(['email' => $submittedEmail]);
+        $request->merge(['email' => $email]);
         $attemptKey = 'legacy-password-reset:'.hash('sha256', $email).'|'.$request->ip();
 
         if (RateLimiter::tooManyAttempts($attemptKey, 5)) {

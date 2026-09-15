@@ -37,7 +37,7 @@ class PasswordResetLinkController extends Controller
 
         $submittedEmail = trim($request->string('email')->toString());
         $normalizedEmail = mb_strtolower($submittedEmail);
-        $request->merge(['email' => $submittedEmail]);
+        $request->merge(['email' => $normalizedEmail]);
 
         if (! $this->passwordResetTokensTableExists()) {
             $this->logPasswordResetFailure('Password reset token table is missing.');

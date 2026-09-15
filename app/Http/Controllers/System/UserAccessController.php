@@ -4,7 +4,6 @@ namespace App\Http\Controllers\System;
 
 use App\Http\Controllers\Controller;
 use App\Mail\UserAccountCreated;
-use App\Mail\UserPasswordReset;
 use App\Mail\VendorAccountCreated;
 use App\Models\AuMemberState;
 use App\Models\GovernanceNode;
@@ -12,6 +11,7 @@ use App\Models\GovernanceReportingLine;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
+use App\Notifications\ApplicationPasswordResetNotification;
 use App\Models\VendorCategory;
 use App\Services\ThinkTank\ThinkTankUserManagementService;
 use Illuminate\Http\Request;
@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Throwable;
@@ -317,23 +318,26 @@ class UserAccessController extends Controller
 
         $this->assertUserInScope($user);
 
-        $plainPassword = str()->random(10);
+        $broker = Password::broker();
+        $broker->deleteToken($user);
+        $token = $broker->createToken($user);
 
-        $user->update([
-            'password' => Hash::make($plainPassword),
-            'must_change_password' => true,
-        ]);
+        try {
+            $user->notify(new ApplicationPasswordResetNotification($token, true));
+        } catch (Throwable $exception) {
+            $broker->deleteToken($user);
+            Log::warning('Administrator-initiated password reset email could not be sent.', [
+                'user_id' => $user->id,
+                'mailer' => config('mail.default'),
+                'exception' => $exception::class,
+            ]);
 
-        $mailSent = $this->sendUserMailSafely(
-            $user,
-            new UserPasswordReset($user, $plainPassword),
-            'User password reset email could not be sent.',
-            $plainPassword
-        );
+            return back()->with('error', 'The reset link could not be delivered. The current password remains unchanged; verify the mail configuration and try again.');
+        } finally {
+            unset($token);
+        }
 
-        return back()->with('success', $mailSent
-            ? 'Password reset and emailed successfully.'
-            : "Password reset successfully, but email delivery failed. Temporary password: {$plainPassword}");
+        return back()->with('success', 'A secure single-use password reset link was sent. The current password remains valid until the user completes the reset.');
     }
 
     public function blockLogin(Request $request, User $user)

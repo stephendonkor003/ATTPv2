@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
     <meta name="referrer" content="strict-origin-when-cross-origin">
-    <title>Reset Password – ATTP Portal</title>
+    <title>Reset Password - ATTP Portal</title>
     <link rel="icon" href="{{ asset('assets/images/au.png') }}" type="image/png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -367,7 +367,7 @@
     document.getElementById('resetForm').addEventListener('submit', function() {
         var btn = document.getElementById('submitBtn');
         btn.disabled = true;
-        btn.textContent = 'Sending…';
+        btn.textContent = 'Sending...';
     });
 </script>
 </body>

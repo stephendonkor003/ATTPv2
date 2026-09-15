@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
     <meta name="referrer" content="strict-origin-when-cross-origin">
-    <title>Set New Password – ATTP Portal</title>
+    <title>Set New Password - ATTP Portal</title>
     <link rel="icon" href="{{ asset('assets/images/au.png') }}" type="image/png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -281,7 +281,7 @@
         <ul class="brand-tips">
             <li>
                 <span class="tip-icon">✓</span>
-                At least 8 characters long
+                At least 12 characters long
             </li>
             <li>
                 <span class="tip-icon">✓</span>
@@ -345,7 +345,8 @@
                         required
                         maxlength="255"
                         autocomplete="new-password"
-                        placeholder="Min. 8 characters"
+                        minlength="12"
+                        placeholder="Min. 12 characters"
                         oninput="checkStrength(this.value)"
                     >
                     <button type="button" class="toggle-pw" onclick="togglePw('password', 'eyeIcon1')" aria-label="Show password">
@@ -415,8 +416,8 @@
         var label = document.getElementById('strengthLabel');
         if (!val) { fill.style.width = '0'; label.textContent = ''; return; }
         var score = 0;
-        if (val.length >= 8)  score++;
         if (val.length >= 12) score++;
+        if (val.length >= 16) score++;
         if (/[A-Z]/.test(val) && /[a-z]/.test(val)) score++;
         if (/[0-9]/.test(val)) score++;
         if (/[^A-Za-z0-9]/.test(val)) score++;
@@ -437,7 +438,7 @@
     document.getElementById('resetForm').addEventListener('submit', function() {
         var btn = document.getElementById('submitBtn');
         btn.disabled = true;
-        btn.textContent = 'Resetting…';
+        btn.textContent = 'Resetting...';
     });
 </script>
 </body>

@@ -36,7 +36,7 @@ it('supports secure email and direct temporary-password recovery without auditin
         ->toContain("'password' => \$temporaryPassword");
     expect($routes)->toContain("set-temporary-password");
     expect($view)
-        ->toContain('Revoke access and send reset link')
+        ->toContain('Send secure reset link')
         ->toContain('Set temporary password');
     expect($auditMiddleware)->toContain("'administrator_password'");
 });

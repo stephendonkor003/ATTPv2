@@ -61,8 +61,8 @@ class UserController extends ThinkTankApiController
             (new ThinkTankUserResource($result['user']))->resolve($request),
             201,
             $result['invitation_sent']
-                ? 'User created and temporary login credentials sent.'
-                : 'User created, but temporary login credentials could not be delivered.',
+                ? 'User created and a secure account setup link was sent.'
+                : 'User created, but the secure account setup link could not be delivered.',
             ['credentials_sent' => $result['invitation_sent']],
         );
     }
@@ -125,7 +125,7 @@ class UserController extends ThinkTankApiController
         return ThinkTankApiResponse::success(
             ['credentials_sent' => $sent],
             202,
-            $sent ? 'New temporary login credentials sent.' : 'Temporary login credentials could not be delivered.',
+            $sent ? 'A secure password reset link was sent.' : 'The secure password reset link could not be delivered.',
         );
     }
 

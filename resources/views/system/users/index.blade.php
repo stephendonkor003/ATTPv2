@@ -273,7 +273,7 @@
                                             @if (! $isThinkTankUser)
                                             <form action="{{ route('system.users.reset-password', $user->id) }}"
                                                 method="POST" class="d-inline"
-                                                onsubmit="return confirm('Reset password and email user?');">
+                                                onsubmit="return confirm('Send a secure, single-use password reset link? The current password remains unchanged until the user completes the reset.');">
                                                 @csrf
                                                 <button class="btn btn-sm btn-outline-warning" title="Reset Password">
                                                     <i class="feather-key"></i>

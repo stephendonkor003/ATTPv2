@@ -16,7 +16,6 @@ class ThinkTankInvitationService
     {
         try {
             $this->mailSecurity->assertCredentialDeliveryIsSecure();
-            $this->mailSecurity->assertEncryptedResetQueueIsDurable();
         } catch (Throwable $exception) {
             report($exception);
 

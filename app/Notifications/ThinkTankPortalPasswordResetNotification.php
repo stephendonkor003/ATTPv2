@@ -3,22 +3,11 @@
 namespace App\Notifications;
 
 use Illuminate\Auth\Notifications\ResetPassword;
-use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
-use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Notifications\Messages\MailMessage;
 
-class ThinkTankPortalPasswordResetNotification extends ResetPassword implements ShouldBeEncrypted, ShouldQueueAfterCommit
+class ThinkTankPortalPasswordResetNotification extends ResetPassword implements ShouldBeEncrypted
 {
-    use Queueable;
-
-    public int $tries = 3;
-
-    public int $timeout = 30;
-
-    /** @var array<int, int> */
-    public array $backoff = [10, 30, 60];
-
     public function __construct(
         #[\SensitiveParameter] string $token,
         private readonly bool $invitation = false,
@@ -38,15 +27,19 @@ class ThinkTankPortalPasswordResetNotification extends ResetPassword implements 
                 ->line('A Think Tank Portal account has been created for you.')
                 ->line('Use the secure, single-use link below to choose your password. No temporary password has been created or sent.')
                 ->action('Set my password', $url)
-                ->line("This link expires in {$minutes} minutes. If you were not expecting this invitation, please contact your organization administrator.");
+                ->line("This link expires in {$minutes} minutes. If you were not expecting this invitation, please contact your organization administrator.")
+                ->salutation('ATTP Platform Support');
         }
 
         return (new MailMessage)
             ->subject('Reset your Think Tank Portal password')
+            ->greeting('Hello '.trim((string) ($notifiable->name ?: 'there')).',')
             ->line('We received a request to reset your Think Tank Portal password.')
-            ->action('Reset password', $url)
+            ->line('Use the secure button below to choose a new private password. Your password is never included in this email.')
+            ->action('Choose a new password', $url)
             ->line("This single-use link expires in {$minutes} minutes.")
-            ->line('If you did not request this reset, you can ignore this message.');
+            ->line('If you did not request this reset, you can safely ignore this message.')
+            ->salutation('ATTP Platform Support');
     }
 
     protected function resetUrl($notifiable): string

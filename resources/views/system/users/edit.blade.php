@@ -350,7 +350,7 @@
 
                         @if (!$user->role || $user->role->name !== 'Super Admin')
                             <form action="{{ route('system.users.reset-password', $user->id) }}"
-                                method="POST" onsubmit="return confirm('Reset password and email user?');">
+                                method="POST" onsubmit="return confirm('Send a secure, single-use password reset link? The current password remains unchanged until the user completes the reset.');">
                                 @csrf
                                 <button type="submit" class="btn btn-outline-warning">
                                     <i class="bi bi-key me-1"></i>

@@ -413,6 +413,7 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])
             ->name('role.update');
 
         Route::post('/{user}/reset-password', [UserAccessController::class, 'resetPassword'])
+            ->middleware('throttle:5,1,system-user-password-reset')
             ->name('reset-password');
 
         Route::post('/{user}/block-login', [UserAccessController::class, 'blockLogin'])
