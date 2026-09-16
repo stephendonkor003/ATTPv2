@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>{{ ($anonymised ?? false) ? 'Anonymised ' : '' }}Evaluation Submission Report</title>
+    <title>{{ ($anonymised ?? false) ? 'Anonymised ' : '' }}{{ $documentLabel ?? 'Evaluation Submission Report' }}</title>
     <style>
         @page {
             margin: 112px 34px 76px;
@@ -316,7 +316,9 @@
                 return $count.' '.$label;
             })
             ->implode(' / ');
-        $modeLabel = $anonymised ? 'Anonymised Applicant' : 'Internal Report';
+        $modeLabel = $anonymised
+            ? 'Anonymised Applicant'
+            : (($documentLabel ?? null) === 'Individual Evaluator Score Sheet' ? 'Individual Score Sheet' : 'Internal Report');
         $applicantIdentifiers = collect([
             $rawApplicantName !== 'Applicant' ? $rawApplicantName : null,
             $rawApplicantEmail,
@@ -349,7 +351,7 @@
                 </td>
                 <td class="header-title">
                     <span class="mode-pill">{{ $modeLabel }}</span>
-                    <h1>Evaluation Submission Report</h1>
+                    <h1>{{ $documentLabel ?? 'Evaluation Submission Report' }}</h1>
                     <p>{{ $submissionCode }} | {{ $submission->procurement?->title ?? 'N/A' }}</p>
                 </td>
             </tr>
@@ -486,7 +488,7 @@
                                 <tr>
                                     <td>{{ $criteria->name }}</td>
                                     <td class="text-right">{{ number_format($criteria->max_score ?? 0, 2) }}</td>
-                                    <td class="text-right">{{ number_format($criteriaScore->score ?? 0, 2) }}</td>
+                                    <td class="text-right">{{ $criteriaScore?->score !== null ? number_format($criteriaScore->score, 2) : 'Not recorded' }}</td>
                                     <td class="comments">{{ $redact($criteriaScore->comment ?? 'N/A') }}</td>
                                 </tr>
                             @endforeach

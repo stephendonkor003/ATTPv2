@@ -34,7 +34,13 @@ class SecurityHeaders
             );
         }
 
-        if ($request->routeIs('login', 'security.*')) {
+        if ($request->routeIs(
+            'login',
+            'register',
+            'password.*',
+            'verification.*',
+            'security.*',
+        )) {
             $response->headers->set(
                 'Cache-Control',
                 'no-store, no-cache, must-revalidate, max-age=0'

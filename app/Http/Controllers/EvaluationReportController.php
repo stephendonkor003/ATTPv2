@@ -646,6 +646,34 @@ class EvaluationReportController extends Controller
         return $this->downloadSubmissionReport($submission);
     }
 
+    public function submissionScoreSheetPdf(EvaluationSubmission $submission)
+    {
+        $this->assertEvaluationSubmissionScope($submission);
+        $submission->load([
+            'procurement',
+            'applicant.submitter',
+            'applicant.values',
+            'evaluation.sections.criteria',
+            'criteriaScores.criteria',
+            'sectionScores.section',
+            'evaluator',
+        ]);
+
+        EvaluationReportPdf::prepare();
+        $pdf = Pdf::loadView('reports.evaluations.pdf.submission', array_merge([
+            'submission' => $submission,
+            'overallMax' => $this->overallMax($submission),
+            'anonymised' => false,
+            'documentLabel' => 'Individual Evaluator Score Sheet',
+        ], PdfBranding::viewData()))->setPaper('a4', 'portrait');
+
+        $applicant = Str::slug($submission->applicant?->display_name ?: 'applicant');
+        $evaluator = Str::slug($submission->evaluator?->name ?: 'evaluator');
+        $filename = 'evaluator-score-sheet-'.trim($applicant.'-'.$evaluator, '-').'.pdf';
+
+        return $this->securePdfDownload($pdf->download($filename));
+    }
+
     public function submissionAnonymisedPdf(EvaluationSubmission $submission)
     {
         $this->assertEvaluationSubmissionScope($submission);
@@ -868,7 +896,19 @@ class EvaluationReportController extends Controller
             'methodDefinition' => ['label' => $anonymised ? 'Anonymised individual evaluation' : 'Individual evaluation', 'mode' => $anonymised ? 'Applicant identity and narrative withheld' : 'Individual evaluator record'],
         ], PdfBranding::viewData()))->setPaper('a4', 'landscape');
 
-        return PdfPageNumbering::stamp($pdf)->download($prefix.trim($name.'-'.$code, '-').'.pdf');
+        return $this->securePdfDownload(
+            PdfPageNumbering::stamp($pdf)->download($prefix.trim($name.'-'.$code, '-').'.pdf')
+        );
+    }
+
+    private function securePdfDownload($response)
+    {
+        $response->headers->set('Cache-Control', 'private, no-store, no-cache, must-revalidate, max-age=0');
+        $response->headers->set('Pragma', 'no-cache');
+        $response->headers->set('Expires', '0');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+
+        return $response;
     }
 
     public function procurement(Procurement $procurement)

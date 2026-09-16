@@ -36,6 +36,18 @@ Route::middleware('guest')->group(function () {
     Route::post('reset-password', [NewPasswordController::class, 'store'])
         ->middleware('throttle:10,1,legacy-password-reset')
         ->name('password.store');
+
+    // Keep previously issued Laravel-style links and cached reset forms
+    // functional while redirecting users to the canonical recovery URLs.
+    Route::get('password/reset/{token}', [NewPasswordController::class, 'redirectLegacy'])
+        ->name('password.reset.legacy');
+
+    Route::get('password/reset', [NewPasswordController::class, 'redirectLegacyRequest'])
+        ->name('password.request.legacy');
+
+    Route::post('password/reset', [NewPasswordController::class, 'store'])
+        ->middleware('throttle:10,1,legacy-password-reset')
+        ->name('password.store.legacy');
 });
 
 Route::middleware('auth')->group(function () {

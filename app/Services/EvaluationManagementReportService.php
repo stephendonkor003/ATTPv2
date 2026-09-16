@@ -330,7 +330,7 @@ class EvaluationManagementReportService
                         'value' => $numeric ? $score?->score : $this->decision($score?->decision, $evaluation), 'max' => $numeric ? $criterion->max_score : null, 'comment' => $score?->comment ?: 'No comment recorded'];
                 })->all();
                 $value = $numeric ? $this->score($entry, $criteria) : null;
-                $details[] = ['applicant' => $entry->applicant?->display_name ?: 'Applicant unavailable', 'code' => $entry->applicant?->procurement_submission_code,
+                $details[] = ['submission_id' => (string) $entry->getKey(), 'applicant' => $entry->applicant?->display_name ?: 'Applicant unavailable', 'code' => $entry->applicant?->procurement_submission_code,
                     'evaluation' => $title, 'phase' => $phase, 'evaluator' => $entry->evaluator?->name ?: 'Evaluator unavailable',
                     'result' => $numeric ? ($value !== null ? number_format($value, 2).' / '.number_format($maximum, 2) : 'Score validation required') : $this->decisions($entry->criteriaScores, $evaluation),
                     'submitted_at' => $this->date($entry->submitted_at), 'comments' => $entry->comments ?: 'No overall comment recorded', 'criteria' => $criterionRows,

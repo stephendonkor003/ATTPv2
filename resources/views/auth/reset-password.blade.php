@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta name="referrer" content="no-referrer">
     <title>Set New Password - ATTP Portal</title>
     <link rel="icon" href="{{ asset('assets/images/au.png') }}" type="image/png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -157,6 +157,20 @@
             gap: 4px;
         }
 
+        .reset-alert {
+            margin: 0 0 1.4rem;
+            padding: 14px 16px;
+            border: 1px solid #fecaca;
+            border-radius: 10px;
+            background: var(--red-bg);
+            color: #991b1b;
+            font-size: .88rem;
+            line-height: 1.55;
+        }
+
+        .reset-alert strong { display: block; margin-bottom: 3px; }
+        .reset-alert a { color: #7f1d1d; font-weight: 700; }
+
         .field-group { margin-bottom: 1.2rem; }
 
         label {
@@ -306,6 +320,14 @@
         <h1>Set new password</h1>
         <p class="subtitle">Enter and confirm your new password below.</p>
 
+        @error('token')
+            <div class="reset-alert" role="alert">
+                <strong>This reset link can no longer be used.</strong>
+                {{ $message }}
+                <a href="{{ route('password.request') }}">Request a fresh password-reset link</a> and try again.
+            </div>
+        @enderror
+
         <form method="POST" action="{{ route('password.store') }}" id="resetForm" novalidate>
             @csrf
             <input type="hidden" name="token" value="{{ $request->route('token') }}">
@@ -374,7 +396,7 @@
                 <div class="field-wrap">
                     <input
                         id="password_confirmation"
-                        class="field-input"
+                        class="field-input {{ $errors->has('password_confirmation') ? 'has-error' : '' }}"
                         type="password"
                         name="password_confirmation"
                         required
@@ -389,6 +411,14 @@
                         </svg>
                     </button>
                 </div>
+                @error('password_confirmation')
+                    <div class="field-error">
+                        <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                        </svg>
+                        {{ $message }}
+                    </div>
+                @enderror
             </div>
 
             <button class="submit-btn" type="submit" id="submitBtn">

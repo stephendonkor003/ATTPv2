@@ -3386,6 +3386,7 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.view_a
             ->middleware('permission:evaluations.manage')
             ->name('eoi.technical-proposals.documents.download');
         Route::get('/submission/{submission}', [EvaluationReportController::class, 'submission'])->name('submission');
+        Route::get('/submission/{submission}/score-sheet.pdf', [EvaluationReportController::class, 'submissionScoreSheetPdf'])->name('submission.score-sheet.pdf');
         Route::get('/submission/{submission}/pdf', [EvaluationReportController::class, 'submissionPdf'])->name('submission.pdf');
         Route::get('/submission/{submission}/anonymised-pdf', [EvaluationReportController::class, 'submissionAnonymisedPdf'])->name('submission.anonymised-pdf');
         Route::get('/procurement/{procurement}', [EvaluationReportController::class, 'procurement'])->withTrashed()->name('procurement');

@@ -37,6 +37,7 @@ env
 !/storage/framework/sessions/.gitignore
 /storage/framework/views/*
 !/storage/framework/views/.gitignore
+/storage/framework/lsp-*.php
 /storage/logs/*
 !/storage/logs/.gitignore
 /storage/pail

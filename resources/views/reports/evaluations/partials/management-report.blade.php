@@ -135,6 +135,44 @@
                 </article>
             @endforeach
 
+            <section class="eval-download-panel" aria-labelledby="{{ $managementAnchor }}-individual-downloads-title">
+                <div class="eval-download-panel__head">
+                    <div>
+                        <span class="eval-kicker">Application-level records</span>
+                        <h3 id="{{ $managementAnchor }}-individual-downloads-title">Individual evaluator downloads</h3>
+                        <p>Download a concise score or decision sheet, or the evaluator's complete submitted record, for each application.</p>
+                    </div>
+                    <span class="eval-download-panel__badge"><i class="feather-lock" aria-hidden="true"></i> Authorized report access</span>
+                </div>
+                <div class="eval-table-scroll" tabindex="0" role="region" aria-label="Individual evaluator report downloads">
+                    <table class="eval-table eval-download-table">
+                        <thead><tr><th scope="col">Application</th><th scope="col">Evaluator</th><th scope="col">Recorded result</th><th scope="col">Submitted</th><th scope="col">Downloads</th></tr></thead>
+                        <tbody>
+                            @forelse($management['details'] ?? [] as $detail)
+                                <tr>
+                                    <td class="eval-person"><strong>{{ $managementText($detail['applicant'] ?? null) }}</strong><small>{{ $managementText($detail['code'] ?? null) }} &middot; {{ $managementText($detail['evaluation'] ?? null) }}</small></td>
+                                    <td>{{ $managementText($detail['evaluator'] ?? null) }}</td>
+                                    <td><span class="eval-status">{{ $managementText($detail['result'] ?? null) }}</span></td>
+                                    <td>{{ $managementText($detail['submitted_at'] ?? null) }}</td>
+                                    <td>
+                                        @if(!empty($detail['submission_id']))
+                                            <div class="eval-record-actions evr-no-print">
+                                                <a href="{{ route('reports.evaluations.submission.score-sheet.pdf', $detail['submission_id']) }}" class="eval-record-action"><i class="feather-download" aria-hidden="true"></i> Score sheet</a>
+                                                <a href="{{ route('reports.evaluations.submission.pdf', $detail['submission_id']) }}" class="eval-record-action eval-record-action--primary"><i class="feather-file-text" aria-hidden="true"></i> Complete submission</a>
+                                            </div>
+                                        @else
+                                            <span class="eval-label">Download unavailable</span>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="5">No finalized evaluator submissions are available for individual download.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
             <h3 class="eval-subtitle">Complete evaluator submission records</h3>
             <p class="eval-note">Each record below preserves the submitted result and the available criterion-level evidence. Missing scores remain marked as not recorded.</p>
             @forelse($management['details'] ?? [] as $detail)

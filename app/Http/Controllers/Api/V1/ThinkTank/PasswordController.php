@@ -160,7 +160,9 @@ class PasswordController extends ThinkTankApiController
         });
 
         RateLimiter::clear($attemptKey);
-        RateLimiter::clear('think-tank-login-account:'.hash('sha256', $email));
+        $emailHash = hash('sha256', $email);
+        RateLimiter::clear('think-tank-login-account:'.$emailHash);
+        RateLimiter::clear('think-tank-login:'.$emailHash.'|'.$request->ip());
         Event::dispatch(new PasswordReset($user));
 
         return ThinkTankApiResponse::success([

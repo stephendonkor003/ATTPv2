@@ -42,6 +42,7 @@ it('provides method-aware rankings, categorical outcomes, and every requested ex
     $routes = file_get_contents($root.'/routes/web.php');
     $detail = file_get_contents($root.'/resources/views/reports/evaluations/method-procurement.blade.php');
     $managementDetail = file_get_contents($root.'/resources/views/reports/evaluations/partials/management-report.blade.php');
+    $managementService = file_get_contents($root.'/app/Services/EvaluationManagementReportService.php');
     $eoiDetail = file_get_contents($root.'/resources/views/reports/evaluations/eoi-procurement.blade.php');
     $eoiPdf = file_get_contents($root.'/resources/views/reports/evaluations/pdf/eoi-procurement.blade.php');
     $eoiSheet = file_get_contents($root.'/app/Exports/EvaluationReportSheet.php');
@@ -65,6 +66,7 @@ it('provides method-aware rankings, categorical outcomes, and every requested ex
         ->toContain("->name('method.procurement.excel')")
         ->toContain("->name('method.procurement.csv')")
         ->toContain("->name('method.procurement.pdf')")
+        ->toContain("->name('submission.score-sheet.pdf')")
         ->toContain("->name('eoi.procurement.excel')")
         ->toContain("->name('eoi.procurement.csv')")
         ->and($detail)
@@ -90,6 +92,11 @@ it('provides method-aware rankings, categorical outcomes, and every requested ex
         ->toContain('Qualification position')
         ->toContain('Numeric scores and numeric ranks do not apply.')
         ->toContain('Not recorded')
+        ->toContain('Individual evaluator downloads')
+        ->toContain("route('reports.evaluations.submission.score-sheet.pdf'")
+        ->toContain("route('reports.evaluations.submission.pdf'")
+        ->and($managementService)
+        ->toContain("'submission_id' => (string) \$entry->getKey()")
         ->and($eoiDetail)
         ->toContain("route('reports.evaluations.eoi.procurement.excel'")
         ->toContain("route('reports.evaluations.eoi.procurement.csv'")

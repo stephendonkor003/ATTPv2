@@ -67,6 +67,10 @@ $normalDisposition = $assertPdf(
     $controller->submissionPdf($submission),
     'Standard evaluation submission PDF'
 );
+$scoreSheetDisposition = $assertPdf(
+    $controller->submissionScoreSheetPdf($submission),
+    'Individual evaluator score sheet PDF'
+);
 $anonymisedDisposition = $assertPdf(
     $controller->submissionAnonymisedPdf($submission),
     'Anonymised evaluation submission PDF'
@@ -82,6 +86,10 @@ $assertPdf(
 
 if (! str_contains($normalDisposition, 'evaluation-submission-')) {
     throw new RuntimeException('The standard PDF filename is invalid.');
+}
+
+if (! str_contains($scoreSheetDisposition, 'evaluator-score-sheet-')) {
+    throw new RuntimeException('The individual score sheet filename is invalid.');
 }
 
 $applicantSlug = Str::slug($submission->applicant?->display_name ?: '');

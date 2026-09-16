@@ -37,6 +37,27 @@ class NewPasswordController extends Controller
     }
 
     /**
+     * Redirect password-reset URLs issued by older Laravel deployments while
+     * retaining only the email address needed by the canonical reset form.
+     */
+    public function redirectLegacy(Request $request, string $token): RedirectResponse
+    {
+        $parameters = ['token' => $token];
+        $email = $request->query('email');
+
+        if (is_string($email) && strlen($email) <= 255 && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $parameters['email'] = $email;
+        }
+
+        return redirect()->route('password.reset', $parameters);
+    }
+
+    public function redirectLegacyRequest(): RedirectResponse
+    {
+        return redirect()->route('password.request');
+    }
+
+    /**
      * Handle an incoming new password request.
      *
      * @throws \Illuminate\Validation\ValidationException
@@ -143,10 +164,7 @@ class NewPasswordController extends Controller
                             );
                         });
                     } else {
-                        $user->forceFill([
-                            'password' => $password,
-                            'remember_token' => Str::random(60),
-                        ])->save();
+                        $this->completeStandardPasswordReset($user, $password);
                     }
 
                     event(new PasswordReset($user));
@@ -169,6 +187,7 @@ class NewPasswordController extends Controller
         // redirect them back to where they came from with their error message.
         if ($status === Password::PASSWORD_RESET) {
             RateLimiter::clear($attemptKey);
+            $this->clearLoginThrottles($email, $request->ip());
 
             return redirect()->route('login')->with('status', __($status));
         }
@@ -196,6 +215,26 @@ class NewPasswordController extends Controller
             ->withErrors([
                 'email' => 'Password reset is temporarily unavailable. Please request a new link shortly or contact ATTP support.',
             ]);
+    }
+
+    private function completeStandardPasswordReset(User $user, string $password): void
+    {
+        $user->forceFill([
+            'password' => $password,
+            'remember_token' => Str::random(60),
+            // A valid, single-use token delivered to this mailbox proves the
+            // same ownership as the separate verification-email ceremony.
+            'email_verified_at' => $user->email_verified_at ?: now(),
+        ])->save();
+    }
+
+    private function clearLoginThrottles(string $email, ?string $ip): void
+    {
+        $emailHash = hash('sha256', $email);
+
+        RateLimiter::clear('think-tank-login-account:'.$emailHash);
+        RateLimiter::clear('think-tank-login:'.$emailHash.'|'.$ip);
+        RateLimiter::clear(Str::transliterate(Str::lower($email).'|'.$ip));
     }
 
     private function logPasswordResetFailure(string $message, ?Throwable $exception = null): void

@@ -14,7 +14,13 @@ $trustedProxies = array_values(array_filter(array_map(
 )));
 
 return [
-    'frontend_url' => rtrim((string) env('THINK_TANK_PORTAL_URL', 'http://localhost:3000'), '/'),
+    // Falling back to APP_URL keeps password-reset links on a route shipped
+    // with this Laravel deployment instead of sending production users to a
+    // localhost address when the separate portal origin was not configured.
+    'frontend_url' => rtrim((string) env(
+        'THINK_TANK_PORTAL_URL',
+        env('APP_URL', 'http://localhost')
+    ), '/'),
     'allowed_origins' => $origins,
     // Exact Next/reverse-proxy addresses or CIDRs only. Never use *.
     'trusted_proxies' => $trustedProxies,
