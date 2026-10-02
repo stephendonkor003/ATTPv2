@@ -87,6 +87,7 @@ class User extends Authenticatable implements MustVerifyEmailContract
             'think_tank.finance.manage',
             'think_tank.procurement_plans.view',
             'think_tank.procurement_plans.manage',
+            'think_tank.procurement.evaluate',
             'think_tank.team.manage',
         ],
         self::THINK_TANK_ACCESS_PROCUREMENT => [
@@ -94,6 +95,7 @@ class User extends Authenticatable implements MustVerifyEmailContract
             'think_tank.dashboard.download',
             'think_tank.procurement_plans.view',
             'think_tank.procurement_plans.manage',
+            'think_tank.procurement.evaluate',
         ],
         self::THINK_TANK_ACCESS_ME => [
             'think_tank.portal.access',
@@ -384,6 +386,30 @@ class User extends Authenticatable implements MustVerifyEmailContract
         return $this->hasOne(ConsortiumThinkTank::class, 'vendor_user_id');
     }
 
+    /**
+     * Tenant-owned vendor categories. These are deliberately separate from
+     * the Secretariat-wide legacy vendor category directory.
+     */
+    public function thinkTankVendorCategories(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            ThinkTankVendorCategory::class,
+            'attp_think_tank_vendor_category_user',
+            'vendor_user_id',
+            'think_tank_vendor_category_id',
+        )->withPivot('think_tank_member_id')->withTimestamps();
+    }
+
+    public function vendorDirectoryThinkTanks(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            ConsortiumThinkTank::class,
+            'attp_think_tank_vendor_user',
+            'vendor_user_id',
+            'think_tank_member_id',
+        )->withPivot(['status', 'can_manage_setup', 'invited_by'])->withTimestamps();
+    }
+
     public function responsibleDataEntryForms(): HasMany
     {
         return $this->hasMany(MeDataEntryForm::class, 'responsible_user_id');
@@ -668,16 +694,6 @@ class User extends Authenticatable implements MustVerifyEmailContract
     public function requiresOtpVerification(): bool
     {
         if (app()->environment(['local', 'testing']) && ! (bool) config('security.require_login_otp_locally', false)) {
-            return false;
-        }
-
-        // Admin users are exempt from OTP
-        if ($this->isSuperAdmin()) {
-            return false;
-        }
-
-        // Funding partners are exempt (they have their own flow)
-        if ($this->isFundingPartner()) {
             return false;
         }
 

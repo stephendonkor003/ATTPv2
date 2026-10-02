@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\User;
 use App\Models\UserLoginOtp;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel;
@@ -87,4 +88,73 @@ it('keeps storage hashed and verification atomic without opening a database conn
         ->toContain("'expires_at' => \$now")
         ->toContain("hash('sha256', random_bytes(32)")
         ->toContain('dropIndex(self::PLAINTEXT_INDEX)');
+});
+
+it('requires otp for administrators and funding partners whenever local otp is enabled', function () {
+    [, $bootedHere] = bootUserLoginOtpSecurityApplication();
+    $original = config('security.require_login_otp_locally');
+    config(['security.require_login_otp_locally' => true]);
+
+    try {
+        $administrator = (new User)->forceFill(['user_type' => 'admin']);
+        $fundingPartner = (new User)->forceFill(['user_type' => 'funding_partner']);
+
+        expect($administrator->requiresOtpVerification())->toBeTrue()
+            ->and($fundingPartner->requiresOtpVerification())->toBeTrue();
+
+        $login = file_get_contents(dirname(__DIR__, 2).'/app/Http/Controllers/Auth/AuthenticatedSessionController.php');
+        $middleware = file_get_contents(dirname(__DIR__, 2).'/app/Http/Middleware/EnsureOtpVerified.php');
+        $routes = file_get_contents(dirname(__DIR__, 2).'/routes/web.php');
+
+        expect($login)
+            ->not->toContain('bypass all security checks')
+            ->not->toContain('if ($user->isSuperAdmin())')
+            ->not->toContain('$request->authenticate();')
+            ->toContain('$request->credentialUser()')
+            ->toContain('app(PendingLoginService::class)->begin(')
+            ->toContain('No session was created; please try again.')
+            ->not->toContain('use the verification code shown below')
+            ->and($middleware)
+            ->not->toContain('Skip for super admins')
+            ->not->toContain('if ($user->isSuperAdmin())')
+            ->not->toContain("'security.password.change',")
+            ->not->toContain("'security.password.submit',")
+            ->and($routes)
+            ->not->toContain("Route::middleware(['auth'])->prefix('security')");
+    } finally {
+        config(['security.require_login_otp_locally' => $original]);
+
+        if ($bootedHere) {
+            restore_error_handler();
+            restore_exception_handler();
+        }
+    }
+});
+
+it('fails closed on stale pending identities and handles incompatible API hashes generically', function () {
+    $root = dirname(__DIR__, 2);
+    $webSecurity = file_get_contents($root.'/app/Http/Controllers/Auth/SecurityController.php');
+    $apiAuthentication = file_get_contents($root.'/app/Http/Controllers/Api/V1/ThinkTank/AuthenticationController.php');
+    $loginRequest = file_get_contents($root.'/app/Http/Requests/Auth/LoginRequest.php');
+
+    $pendingBranch = substr(
+        $webSecurity,
+        strpos($webSecurity, '$pendingLogin = ! $request->user();'),
+        strpos($webSecurity, '// Mark OTP as verified only after both factors have succeeded')
+            - strpos($webSecurity, '$pendingLogin = ! $request->user();'),
+    );
+
+    expect($pendingBranch)
+        ->toContain('$freshUser = app(PendingLoginService::class)->user(')
+        ->toContain('$user = $freshUser;')
+        ->toContain('$request->session()->invalidate();')
+        ->and(strpos($pendingBranch, '$freshUser = app(PendingLoginService::class)->user('))
+        ->toBeLessThan(strpos($pendingBranch, "Auth::guard('web')->login("))
+        ->and($apiAuthentication)
+        ->toContain('catch (RuntimeException $exception)')
+        ->toContain("config('think_tank_portal.dummy_password_hash')")
+        ->toContain('if (! $passwordIsValid || ! $user)')
+        ->and($loginRequest)
+        ->toContain("config('hashing.rehash_on_login', true)")
+        ->not->toContain("config('auth.rehash_on_login', true)");
 });

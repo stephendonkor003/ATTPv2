@@ -10,10 +10,10 @@ use Throwable;
 
 class PortfolioLeaderAssignmentNotificationService
 {
-    public function notify(User $user, Sector $portfolio, string $roleName, ?string $plainPassword = null): bool
+    public function notify(User $user, Sector $portfolio, string $roleName): bool
     {
         try {
-            NotifyPortfolioLeaderAssigned::dispatch($portfolio->id, $user->id, $roleName, $plainPassword);
+            NotifyPortfolioLeaderAssigned::dispatch($portfolio->id, $user->id, $roleName);
 
             return true;
         } catch (Throwable $exception) {
@@ -25,7 +25,7 @@ class PortfolioLeaderAssignmentNotificationService
         }
 
         try {
-            NotifyPortfolioLeaderAssigned::dispatchSync($portfolio->id, $user->id, $roleName, $plainPassword);
+            NotifyPortfolioLeaderAssigned::dispatchSync($portfolio->id, $user->id, $roleName);
 
             return true;
         } catch (Throwable $exception) {

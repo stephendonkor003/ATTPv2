@@ -8,12 +8,14 @@ use App\Models\ProcurementPurchaseOrder;
 use App\Models\Role;
 use App\Models\ThinkTankProcurementPlan;
 use App\Models\User;
+use App\Notifications\ThinkTankPortalPasswordResetNotification;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Testing\Concerns\InteractsWithAuthentication;
 use Illuminate\Foundation\Testing\Concerns\InteractsWithSession;
 use Illuminate\Foundation\Testing\Concerns\MakesHttpRequests;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -47,6 +49,7 @@ class ThinkTankPortalWorkflowsSmoke
 
         $disk = (string) config('filesystems.default', 'local');
         Storage::fake($disk);
+        Notification::fake();
         DB::beginTransaction();
 
         try {
@@ -271,7 +274,8 @@ class ThinkTankPortalWorkflowsSmoke
             ])
             ->assertRedirect()
             ->assertSessionHasNoErrors()
-            ->assertSessionHas('temporary_password', fn ($value): bool => is_string($value) && strlen($value) >= 12);
+            ->assertSessionMissing('temporary_password')
+            ->assertSessionHas('success', fn ($value): bool => is_string($value) && str_contains($value, 'secure'));
 
         $staff = User::query()->where('email', $email)->first();
         $this->assertTrue((bool) $staff, 'The think tank administrator did not create the staff account.');
@@ -287,7 +291,8 @@ class ThinkTankPortalWorkflowsSmoke
             'Created staff has the wrong portal access level.'
         );
         $this->assertSame('Think Tank User', $staff->role?->name, 'Created staff has the wrong system role.');
-        $this->assertTrue($staff->must_change_password, 'Created staff must change the temporary password.');
+        $this->assertTrue($staff->must_change_password, 'Created staff must complete secure password setup.');
+        Notification::assertSentTo($staff, ThinkTankPortalPasswordResetNotification::class);
 
         // Simulate completion of the mandatory first-login password change so
         // this newly created officer can exercise the canonical write route.

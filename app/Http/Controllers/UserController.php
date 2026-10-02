@@ -2,14 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
 use App\Models\Role;
+use App\Models\User;
+use App\Services\AccountSetupInvitationService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
-use App\Mail\UserAccountCreated;
-use Throwable;
 
 class UserController extends Controller
 {
@@ -49,25 +45,24 @@ class UserController extends Controller
             'role_id'  => 'required|exists:roles,id',
         ]);
 
-        // Generate secure password
-        $plainPassword = str()->random(10);
+        $invitations = app(AccountSetupInvitationService::class);
 
         $user = User::create([
             'name'                 => $request->name,
             'email'                => $request->email,
-            'password'             => Hash::make($plainPassword),
+            'password'             => $invitations->unknownPasswordHash(),
             'role_id'              => $request->role_id,
             'user_type'            => 'staff', // legacy support
             'must_change_password' => true,
         ]);
 
-        $mailSent = $this->sendUserMailSafely($user, new UserAccountCreated($user, $plainPassword), $plainPassword);
+        $invitationSent = $invitations->send($user, AccountSetupInvitationService::PURPOSE_STAFF);
 
         return redirect()
             ->route('system.users.index')
-            ->with('success', $mailSent
-                ? 'User account created successfully.'
-                : "User account created successfully, but email delivery failed. Temporary password: {$plainPassword}");
+            ->with('success', $invitationSent
+                ? 'User account created successfully. A secure account setup link was sent.'
+                : 'User account created successfully, but the secure setup link could not be delivered. Verify mail delivery and resend a password link.');
     }
 
     /**
@@ -125,29 +120,4 @@ class UserController extends Controller
             ->with('success', 'User deleted successfully.');
     }
 
-    private function sendUserMailSafely(User $user, $mail, string $plainPassword): bool
-    {
-        try {
-            Mail::to($user->email)->send($mail);
-
-            return true;
-        } catch (Throwable $exception) {
-            Log::warning('User account created email could not be sent.', [
-                'user_id' => $user->id,
-                'email' => $user->email,
-                'mailer' => config('mail.default'),
-                'error' => $exception->getMessage(),
-            ]);
-
-            if (app()->environment(['local', 'testing'])) {
-                Log::info('Local development temporary user password fallback.', [
-                    'user_id' => $user->id,
-                    'email' => $user->email,
-                    'temporary_password' => $plainPassword,
-                ]);
-            }
-
-            return false;
-        }
-    }
 }

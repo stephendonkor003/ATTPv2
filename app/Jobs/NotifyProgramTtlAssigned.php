@@ -22,8 +22,7 @@ class NotifyProgramTtlAssigned implements ShouldQueue
 
     public function __construct(
         public string $programId,
-        public string $userId,
-        public ?string $plainPassword = null
+        public string $userId
     ) {
     }
 
@@ -55,7 +54,6 @@ class NotifyProgramTtlAssigned implements ShouldQueue
             Mail::to($user->email, $user->name)->send(new ProgramTtlAssignedMail(
                 user: $user,
                 program: $program,
-                plainPassword: $this->plainPassword,
                 loginUrl: route('login'),
                 programUrl: route('ttl.programs.show', $program)
             ));

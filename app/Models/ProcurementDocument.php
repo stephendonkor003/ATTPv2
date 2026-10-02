@@ -6,6 +6,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProcurementDocument extends BaseModel
 {
+    public const AUDIENCE_BIDDER = 'bidder';
+
+    public const AUDIENCE_INTERNAL = 'internal';
+
     protected $fillable = [
         'procurement_id',
         'document_name',
@@ -13,6 +17,7 @@ class ProcurementDocument extends BaseModel
         'file_path',
         'mime_type',
         'file_size',
+        'audience',
         'uploaded_by',
     ];
 
@@ -28,6 +33,11 @@ class ProcurementDocument extends BaseModel
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    public function scopeBidderFacing($query)
+    {
+        return $query->where('audience', self::AUDIENCE_BIDDER);
     }
 
     public function getFormattedSizeAttribute(): string

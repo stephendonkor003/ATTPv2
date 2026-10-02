@@ -334,6 +334,7 @@
 
                                         {{-- CHECKBOX --}}
                                         @case('checkbox')
+                                        @case('multiselect')
                                             @php
                                                 $items = is_array($value) ? $value : json_decode($value, true);
                                             @endphp
@@ -351,6 +352,7 @@
 
                                         {{-- FILE --}}
                                         @case('file')
+                                        @case('image')
                                             @if ($valueObj && $value)
                                                 @php
                                                     $isDocumentPackage = Str::lower(pathinfo((string) $value, PATHINFO_EXTENSION)) === 'zip';
@@ -364,7 +366,7 @@
                                                     @unless ($isDocumentPackage) target="_blank" rel="noopener" @endunless
                                                     class="btn btn-sm btn-outline-primary">
                                                     <i class="{{ $isDocumentPackage ? 'feather-download' : 'feather-external-link' }} me-1"></i>
-                                                    {{ $isDocumentPackage ? 'Download document package' : 'View document' }}
+                                                    {{ $isDocumentPackage ? 'Download document package' : ($field->field_type === 'image' ? 'View image' : 'View document') }}
                                                 </a>
                                                 @if ($isDocumentPackage)
                                                     <small class="d-block mt-2 text-muted">
@@ -373,6 +375,14 @@
                                                 @endif
                                             @else
                                                 —
+                                            @endif
+                                        @break
+
+                                        @case('boolean')
+                                            @if ($value === null || $value === '')
+                                                Not provided
+                                            @else
+                                                {{ filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'Yes' : 'No' }}
                                             @endif
                                         @break
 

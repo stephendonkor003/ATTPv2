@@ -10,10 +10,10 @@ use App\Models\ProgramFunding;
 use App\Models\GovernanceNode;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\AccountSetupInvitationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
@@ -206,7 +206,7 @@ class ProgramController extends Controller
             $mailSent = $this->sendProgramTtlMailSafely(
                 $program,
                 $ttlAssignment['user'],
-                $ttlAssignment['plain_password']
+                $ttlAssignment['created'],
             );
 
             return redirect()
@@ -371,7 +371,7 @@ class ProgramController extends Controller
             $mailSent = $this->sendProgramTtlMailSafely(
                 $program->fresh(['sector', 'governanceNode.level', 'ttlUser']),
                 $ttlAssignment['user'],
-                $ttlAssignment['plain_password']
+                $ttlAssignment['created'],
             );
         }
 
@@ -688,17 +688,16 @@ class ProgramController extends Controller
 
             return [
                 'user' => $user->fresh(['role']),
-                'plain_password' => null,
                 'created' => false,
             ];
         }
 
-        $plainPassword = Str::password(12);
+        $invitations = app(AccountSetupInvitationService::class);
 
         $user = User::create([
             'name' => $name,
             'email' => $email,
-            'password' => Hash::make($plainPassword),
+            'password' => $invitations->unknownPasswordHash(),
             'role_id' => $ttlRole->id,
             'governance_node_id' => $validated['governance_node_id'] ?? null,
             'member_state_id' => null,
@@ -708,17 +707,21 @@ class ProgramController extends Controller
 
         return [
             'user' => $user->fresh(['role']),
-            'plain_password' => $plainPassword,
             'created' => true,
         ];
     }
 
-    private function sendProgramTtlMailSafely(Program $program, User $user, ?string $plainPassword): bool
+    private function sendProgramTtlMailSafely(Program $program, User $user, bool $newAccount): bool
     {
         try {
-            NotifyProgramTtlAssigned::dispatchSync($program->id, $user->id, $plainPassword);
+            $setupSent = ! $newAccount
+                || app(AccountSetupInvitationService::class)->send(
+                    $user,
+                    AccountSetupInvitationService::PURPOSE_PROGRAM_TTL,
+                );
+            NotifyProgramTtlAssigned::dispatchSync($program->id, $user->id);
 
-            return true;
+            return $setupSent;
         } catch (Throwable $e) {
             Log::warning('Program TTL assignment notification could not be sent.', [
                 'program_id' => $program->id,

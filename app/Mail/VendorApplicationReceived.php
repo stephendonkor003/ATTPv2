@@ -17,19 +17,16 @@ class VendorApplicationReceived extends Mailable implements ShouldQueue
     public Procurement $procurement;
     public FormSubmission $submission;
     public User $vendor;
-    public ?string $temporaryPassword;
     public string $portalUrl;
 
     public function __construct(
         Procurement $procurement,
         FormSubmission $submission,
-        User $vendor,
-        ?string $temporaryPassword
+        User $vendor
     ) {
         $this->procurement = $procurement;
         $this->submission = $submission;
         $this->vendor = $vendor;
-        $this->temporaryPassword = $temporaryPassword;
         $this->portalUrl = route('login');
         $this->afterCommit();
     }

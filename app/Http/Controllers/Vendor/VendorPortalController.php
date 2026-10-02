@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Vendor;
 
 use App\Http\Controllers\Controller;
 use App\Models\ConsortiumThinkTank;
+use App\Models\DynamicForm;
 use App\Models\EoiReportCommunicationRecipient;
 use App\Models\FormSubmission;
 use App\Models\FormSubmissionValue;
@@ -17,6 +18,8 @@ use App\Models\VendorInformationRequest;
 use App\Models\VendorMessage;
 use App\Models\VendorReport;
 use App\Notifications\VendorRequestCreatedNotification;
+use App\Services\DynamicProcurementSubmissionFileService;
+use App\Services\DynamicProcurementSubmissionValidation;
 use App\Services\EvaluationReworkGuard;
 use App\Services\ProcurementSubmissionScreeningAutomation;
 use Carbon\Carbon;
@@ -310,6 +313,8 @@ class VendorPortalController extends Controller
         Request $request,
         FormSubmission $submission,
         ProcurementSubmissionScreeningAutomation $screeningAutomation,
+        DynamicProcurementSubmissionValidation $submissionValidation,
+        DynamicProcurementSubmissionFileService $submissionFiles,
     ) {
         $user = $request->user();
         $this->assertVendor($user);
@@ -321,9 +326,18 @@ class VendorPortalController extends Controller
         $form->load('fields');
         $submission->load('values');
 
+        $fieldKeys = $form->fields->pluck('field_key')->all();
+        if (in_array('official_name', $fieldKeys, true)) {
+            $request->merge(['official_name' => $user->name ?: $user->email]);
+        }
+        if (in_array('official_email', $fieldKeys, true)) {
+            $request->merge(['official_email' => $user->email]);
+        }
+
         $existingValues = $submission->values->keyBy('field_key');
 
         $isRecallResponse = $submission->status === FormSubmission::STATUS_REVISION_REQUESTED;
+        $submissionValidation->assertUploadEnvelope($request, $form, $existingValues);
         $rules = [
             'vendor_response' => [
                 $isRecallResponse ? 'required' : 'nullable',
@@ -331,134 +345,120 @@ class VendorPortalController extends Controller
                 'min:5',
                 'max:2000',
             ],
+            ...$submissionValidation->rules($form, $existingValues),
         ];
-        foreach ($form->fields as $field) {
-            $key = $field->field_key;
-            $required = $field->is_required ? 'required' : 'nullable';
-            $configuration = (array) $field->validation_rules;
-            $options = $field->optionValues();
-            $maxLength = min(20000, max(1, (int) ($configuration['max_length'] ?? ($field->field_type === 'textarea' ? 20000 : 255))));
 
-            if (in_array($field->field_type, ['file', 'image'], true) && $field->is_required && $existingValues->get($key)) {
-                $required = 'nullable';
-            }
+        $request->validate($rules);
 
-            switch ($field->field_type) {
-                case 'email':
-                    $rules[$key] = [$required, 'email:rfc', 'max:'.$maxLength];
-                    break;
-                case 'file':
-                case 'image':
-                    $defaultExtensions = $field->field_type === 'image'
-                        ? ['jpg', 'jpeg', 'png', 'webp']
-                        : ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'csv', 'txt', 'zip'];
-                    $extensions = array_values(array_intersect((array) ($configuration['allowed_extensions'] ?? $defaultExtensions), $defaultExtensions));
-                    $maxKilobytes = min(20480, max(1024, (int) ($configuration['max_file_size_mb'] ?? 10) * 1024));
-                    $rules[$key] = [
-                        $required,
-                        'file',
-                        ...($field->field_type === 'image' ? ['image'] : []),
-                        'mimes:'.implode(',', $extensions ?: $defaultExtensions),
-                        'max:'.$maxKilobytes,
-                    ];
-                    break;
-                case 'checkbox':
-                case 'multiselect':
-                    $rules[$key] = [$required, 'array', ...($field->is_required ? ['min:1'] : [])];
-                    $rules[$key.'.*'] = ['string', Rule::in($options)];
-                    break;
-                case 'number':
-                    $rules[$key] = [
-                        $required,
-                        'numeric',
-                        ...(array_key_exists('min', $configuration) ? ['min:'.$configuration['min']] : []),
-                        ...(array_key_exists('max', $configuration) ? ['max:'.$configuration['max']] : []),
-                    ];
-                    break;
-                case 'url':
-                    $rules[$key] = [$required, 'url:http,https', 'max:'.$maxLength];
-                    break;
-                case 'tel':
-                    $rules[$key] = [$required, 'string', 'max:'.$maxLength];
-                    break;
-                case 'date':
-                    $rules[$key] = [$required, 'date_format:Y-m-d'];
-                    break;
-                case 'time':
-                    $rules[$key] = [$required, 'date_format:H:i'];
-                    break;
-                case 'datetime-local':
-                    $rules[$key] = [$required, 'date_format:Y-m-d\\TH:i'];
-                    break;
-                case 'select':
-                case 'radio':
-                    $rules[$key] = [$required, 'string', Rule::in($options)];
-                    break;
-                case 'boolean':
-                    $rules[$key] = [$required, 'accepted'];
-                    break;
-                case 'textarea':
-                case 'text':
-                    $rules[$key] = [$required, 'string', 'max:'.$maxLength];
-                    break;
-                default:
-                    $rules[$key] = $required;
-            }
-        }
+        $newPaths = [];
+        $replacedOldPaths = [];
+        try {
+            DB::transaction(function () use (
+                $request,
+                $submission,
+                $form,
+                $user,
+                $screeningAutomation,
+                $submissionFiles,
+                $submissionValidation,
+                &$newPaths,
+                &$replacedOldPaths,
+            ): void {
+                $lockedProcurement = Procurement::query()
+                    ->whereKey($submission->procurement_id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                abort_unless($lockedProcurement->isApplicationOpen(), 409, 'This procurement is no longer open for application updates.');
+                $lockedSubmission = FormSubmission::query()
+                    ->whereKey($submission->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                abort_unless((string) $lockedSubmission->submitted_by === (string) $user->id, 403);
+                abort_unless(
+                    (string) $lockedSubmission->form_id === (string) $form->id
+                        && (string) $lockedSubmission->status === (string) $submission->status,
+                    409,
+                    'This application changed while it was open. Reload it before saving.',
+                );
+                $lockedSubmission->load('values');
+                $currentValues = $lockedSubmission->values->keyBy('field_key');
+                $lockedForm = DynamicForm::query()
+                    ->whereKey($lockedSubmission->form_id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                abort_unless((string) $lockedForm->id === (string) $form->id, 409, 'The application form changed while it was open. Reload it before saving.');
+                $lockedForm->load('fields');
+                $lockedFieldKeys = $lockedForm->fields->pluck('field_key')->all();
+                if (in_array('official_name', $lockedFieldKeys, true)) {
+                    $request->merge(['official_name' => $user->name ?: $user->email]);
+                }
+                if (in_array('official_email', $lockedFieldKeys, true)) {
+                    $request->merge(['official_email' => $user->email]);
+                }
+                $submissionValidation->assertUploadEnvelope($request, $lockedForm, $currentValues);
+                $lockedValidated = $request->validate([
+                    'vendor_response' => [
+                        $lockedSubmission->status === FormSubmission::STATUS_REVISION_REQUESTED ? 'required' : 'nullable',
+                        'string',
+                        'min:5',
+                        'max:2000',
+                    ],
+                    ...$submissionValidation->rules($lockedForm, $currentValues),
+                ]);
 
-        $validated = $request->validate($rules);
+                foreach ($lockedForm->fields as $field) {
+                    $key = $field->field_key;
+                    $value = null;
 
-        DB::transaction(function () use (
-            $request,
-            $submission,
-            $form,
-            $existingValues,
-            $validated,
-            $screeningAutomation,
-        ): void {
-            foreach ($form->fields as $field) {
-                $key = $field->field_key;
-                $value = null;
-
-                if (in_array($field->field_type, ['file', 'image'], true)) {
-                    if ($request->hasFile($key)) {
-                        $value = $request->file($key)->store('procurement_submissions');
+                    if (in_array($field->field_type, ['file', 'image'], true)) {
+                        if ($request->hasFile($key)) {
+                            $value = $submissionFiles->store($request->file($key));
+                            $newPaths[] = $value;
+                            $oldPath = $currentValues->get($key)?->value;
+                            if ($submissionFiles->isAllowedPath($oldPath)) {
+                                $replacedOldPaths[] = $oldPath;
+                            }
+                        } else {
+                            $value = $currentValues->get($key)?->value;
+                        }
+                    } elseif (is_array($request->input($key))) {
+                        $value = json_encode(array_values($request->input($key)));
                     } else {
-                        $value = $existingValues->get($key)?->value;
+                        $value = $request->input($key);
                     }
-                } elseif (is_array($request->input($key))) {
-                    $value = json_encode(array_values($request->input($key)));
-                } else {
-                    $value = $request->input($key);
+
+                    FormSubmissionValue::updateOrCreate(
+                        [
+                            'submission_id' => $lockedSubmission->id,
+                            'field_key' => $key,
+                        ],
+                        [
+                            'value' => $value,
+                        ]
+                    );
                 }
 
-                FormSubmissionValue::updateOrCreate(
-                    [
-                        'submission_id' => $submission->id,
-                        'field_key' => $key,
-                    ],
-                    [
-                        'value' => $value,
-                    ]
+                $lockedSubmission->update([
+                    'status' => FormSubmission::STATUS_SUBMITTED,
+                    'vendor_response' => trim((string) ($lockedValidated['vendor_response'] ?? '')) ?: null,
+                    'publication_version' => max(1, (int) $lockedProcurement->publication_version),
+                    'submitted_at' => now(),
+                    'resubmitted_at' => now(),
+                    'withdrawn_at' => null,
+                    'withdrawal_reason' => null,
+                ]);
+
+                $screeningAutomation->queueSubmission(
+                    $lockedSubmission->id,
+                    checkedVia: 'auto',
+                    force: true,
                 );
-            }
-
-            $submission->update([
-                'status' => FormSubmission::STATUS_SUBMITTED,
-                'vendor_response' => trim((string) ($validated['vendor_response'] ?? '')) ?: null,
-                'publication_version' => max(1, (int) $submission->procurement?->publication_version),
-                'submitted_at' => now(),
-                'resubmitted_at' => now(),
-                'withdrawn_at' => null,
-                'withdrawal_reason' => null,
-            ]);
-
-            $screeningAutomation->queueSubmission(
-                $submission->id,
-                checkedVia: 'auto',
-                force: true,
-            );
-        });
+            });
+        } catch (\Throwable $exception) {
+            $submissionFiles->deleteMany($newPaths);
+            throw $exception;
+        }
+        $submissionFiles->deleteMany($replacedOldPaths);
 
         return redirect()
             ->route('vendor.submissions')

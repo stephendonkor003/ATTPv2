@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ThinkTankProcurementEvent extends BaseModel
 {
@@ -33,5 +34,10 @@ class ThinkTankProcurementEvent extends BaseModel
     public function actor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'actor_id');
+    }
+
+    public function statusNotifications(): HasMany
+    {
+        return $this->hasMany(ThinkTankProcurementStatusNotification::class, 'event_id');
     }
 }

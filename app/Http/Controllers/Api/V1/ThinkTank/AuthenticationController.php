@@ -6,6 +6,7 @@ use App\Exceptions\ThinkTankApiException;
 use App\Http\Resources\ThinkTankViewerResource;
 use App\Models\User;
 use App\Models\UserLoginOtp;
+use App\Services\PendingLoginService;
 use App\Services\ThinkTank\ThinkTankAccountAccessService;
 use App\Services\ThinkTank\ThinkTankApiAuditService;
 use App\Services\ThinkTank\ThinkTankAuthenticationStateService;
@@ -18,6 +19,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
+use RuntimeException;
 use Throwable;
 
 class AuthenticationController extends ThinkTankApiController
@@ -28,6 +30,7 @@ class AuthenticationController extends ThinkTankApiController
         private readonly ThinkTankMfaService $mfa,
         private readonly ThinkTankSessionService $sessions,
         private readonly ThinkTankApiAuditService $audit,
+        private readonly PendingLoginService $pendingLogins,
     ) {}
 
     public function session(Request $request): JsonResponse
@@ -36,6 +39,35 @@ class AuthenticationController extends ThinkTankApiController
         $user = $request->user();
 
         if (! $user) {
+            $pendingUser = $this->pendingLogins->user(
+                $request,
+                PendingLoginService::PURPOSE_THINK_TANK_API,
+            );
+            if ($pendingUser) {
+                try {
+                    $membership = $this->accounts->membership($pendingUser);
+                } catch (ThinkTankApiException) {
+                    $this->pendingLogins->clear($request, PendingLoginService::PURPOSE_THINK_TANK_API);
+
+                    return ThinkTankApiResponse::success($this->authPayload(
+                        $request,
+                        ThinkTankAuthenticationStateService::UNAUTHENTICATED,
+                    ));
+                }
+
+                $request->attributes->set('think_tank.membership', $membership);
+
+                return ThinkTankApiResponse::success($this->authPayload(
+                    $request,
+                    ThinkTankAuthenticationStateService::MFA_REQUIRED,
+                    $pendingUser,
+                    $this->pendingLogins->challenge(
+                        $request,
+                        PendingLoginService::PURPOSE_THINK_TANK_API,
+                    ),
+                ));
+            }
+
             return ThinkTankApiResponse::success($this->authPayload(
                 $request,
                 ThinkTankAuthenticationStateService::UNAUTHENTICATED,
@@ -67,6 +99,15 @@ class AuthenticationController extends ThinkTankApiController
 
     public function login(Request $request): JsonResponse
     {
+        if ($request->user() instanceof User) {
+            throw new ThinkTankApiException(
+                'ALREADY_AUTHENTICATED',
+                'Sign out before starting a different sign-in attempt.',
+                409,
+                $this->states->summary($this->states->state($request, $request->user())),
+            );
+        }
+
         $data = $this->validateOnly($request, [
             'email' => ['required', 'string', 'email:rfc', 'max:255'],
             'password' => ['bail', 'required', 'string', 'max:4096', $this->passwordByteRule()],
@@ -99,7 +140,24 @@ class AuthenticationController extends ThinkTankApiController
         $candidateHash = $user?->getAuthPassword()
             ?: (string) config('think_tank_portal.dummy_password_hash');
 
-        if (! Hash::check($data['password'], $candidateHash) || ! $user) {
+        try {
+            $passwordIsValid = Hash::check($data['password'], $candidateHash);
+        } catch (RuntimeException $exception) {
+            if (! str_contains($exception->getMessage(), 'does not use the Bcrypt algorithm')) {
+                throw $exception;
+            }
+
+            // Keep legacy or corrupt account hashes observationally equivalent
+            // to an unknown account while still paying the configured dummy
+            // hash cost. Never expose the affected account in the audit event.
+            Hash::check(
+                $data['password'],
+                (string) config('think_tank_portal.dummy_password_hash'),
+            );
+            $passwordIsValid = false;
+        }
+
+        if (! $passwordIsValid || ! $user) {
             RateLimiter::hit($rateKey, 60);
             RateLimiter::hit(
                 $accountRateKey,
@@ -118,7 +176,7 @@ class AuthenticationController extends ThinkTankApiController
         }
 
         try {
-            $membership = $this->accounts->membership($user);
+            $this->accounts->membership($user);
         } catch (ThinkTankApiException $exception) {
             RateLimiter::hit($rateKey, 60);
             $this->audit->bestEffort($request, 'think_tank.auth.denied', 'Think tank portal authentication denied.', [
@@ -134,32 +192,45 @@ class AuthenticationController extends ThinkTankApiController
         }
 
         RateLimiter::clear($rateKey);
-        Auth::guard('web')->login($user, false);
         $request->session()->regenerate();
         $this->states->clearMfaSession($request);
-        $this->sessions->bindCurrentSession($user, $request);
-        $request->attributes->set('think_tank.membership', $membership);
+        $this->pendingLogins->clear($request);
 
-        $state = $this->states->state($request, $user);
-        $challenge = $state === ThinkTankAuthenticationStateService::MFA_REQUIRED
-            ? $this->mfa->send($request, $user, true)
-            : null;
+        try {
+            // A password is only the first factor. Keep the guard unauthenticated
+            // until the session-bound email challenge has been consumed.
+            $challenge = $this->mfa->send($request, $user, true);
+        } catch (Throwable $exception) {
+            $this->pendingLogins->clear($request);
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
 
-        if ($state === ThinkTankAuthenticationStateService::READY) {
-            RateLimiter::clear($accountRateKey);
+            throw $exception;
         }
 
-        $this->audit->bestEffort($request, 'think_tank.auth.signed_in', 'Think tank portal password accepted.', [
+        $this->pendingLogins->begin(
+            $request,
+            $user,
+            false,
+            $challenge['expires_at'],
+            PendingLoginService::PURPOSE_THINK_TANK_API,
+            $challenge,
+        );
+
+        $this->audit->bestEffort($request, 'think_tank.auth.password_accepted', 'Think tank portal password accepted.', [
             'target_user_id' => (string) $user->getKey(),
-            'state' => $state,
+            'state' => ThinkTankAuthenticationStateService::MFA_REQUIRED,
         ], $user);
 
         return ThinkTankApiResponse::success(
-            $this->authPayload($request, $state, $user, $challenge),
+            $this->authPayload(
+                $request,
+                ThinkTankAuthenticationStateService::MFA_REQUIRED,
+                $user,
+                $challenge,
+            ),
             200,
-            $state === ThinkTankAuthenticationStateService::READY
-                ? 'Signed in successfully.'
-                : 'Additional security action is required.',
+            'Additional security action is required.',
         );
     }
 
@@ -167,16 +238,26 @@ class AuthenticationController extends ThinkTankApiController
     {
         $this->validateOnly($request, []);
         $user = $request->user();
+        $pendingUser = $user instanceof User
+            ? null
+            : $this->pendingLogins->user($request, PendingLoginService::PURPOSE_THINK_TANK_API);
+        $challengeUser = $user instanceof User ? $user : $pendingUser;
         $sessionId = $request->session()->getId();
 
-        $this->audit->bestEffort($request, 'think_tank.auth.signed_out', 'Think tank portal user signed out.', [
-            'target_user_id' => (string) $user->getKey(),
-        ], $user);
+        if ($challengeUser) {
+            $this->audit->bestEffort($request, 'think_tank.auth.signed_out', 'Think tank portal sign-in session ended.', [
+                'target_user_id' => (string) $challengeUser->getKey(),
+                'authenticated' => $user instanceof User,
+            ], $challengeUser);
+        }
+
         try {
-            UserLoginOtp::query()
-                ->where('user_id', $user->getKey())
-                ->where('session_id', $sessionId)
-                ->delete();
+            if ($challengeUser) {
+                UserLoginOtp::query()
+                    ->where('user_id', $challengeUser->getKey())
+                    ->where('session_id', $sessionId)
+                    ->delete();
+            }
         } catch (Throwable $exception) {
             // Challenge cleanup must never keep an authenticated session alive.
             report($exception);
@@ -184,11 +265,14 @@ class AuthenticationController extends ThinkTankApiController
 
         try {
             $this->states->clearMfaSession($request);
+            $this->pendingLogins->clear($request, PendingLoginService::PURPOSE_THINK_TANK_API);
         } catch (Throwable $exception) {
             report($exception);
         }
 
-        Auth::guard('web')->logout();
+        if ($user instanceof User) {
+            Auth::guard('web')->logout();
+        }
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 

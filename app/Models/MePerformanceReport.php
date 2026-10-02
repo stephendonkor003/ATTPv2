@@ -103,6 +103,7 @@ class MePerformanceReport extends BaseModel
 
     protected $casts = [
         'reporting_year' => 'integer',
+        'portal_lock_version' => 'integer',
         'reporting_scope' => 'array',
         'submitted_at' => 'datetime',
         'reviewed_at' => 'datetime',

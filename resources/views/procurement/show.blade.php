@@ -88,7 +88,7 @@
 
                         <div class="border rounded p-3 bg-light" style="line-height:1.75;">
                             @if ($procurement->description)
-                                {!! nl2br(e(strip_tags($procurement->description))) !!}
+                                {!! app(\App\Services\ProcurementRichTextService::class)->render($procurement->description) !!}
                             @else
                                 <span class="text-muted">No description provided.</span>
                             @endif

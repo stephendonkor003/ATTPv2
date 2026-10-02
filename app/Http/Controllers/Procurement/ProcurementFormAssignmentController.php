@@ -20,7 +20,10 @@ class ProcurementFormAssignmentController extends Controller
     public function create(Procurement $procurement)
     {
         $this->assertProcurementInScope($procurement);
+        $this->assertLegacyManagedProcurement($procurement);
         $forms = DynamicForm::approved()
+            ->whereNull('procurement_id')
+            ->whereDoesntHave('procurement', fn ($query) => $query->where('procurement_owner_type', 'think_tank'))
             ->when($procurement->governance_node_id, function ($query) use ($procurement) {
                 $query->whereHas('resource', function ($res) use ($procurement) {
                     $res->where('governance_node_id', $procurement->governance_node_id);
@@ -41,13 +44,15 @@ class ProcurementFormAssignmentController extends Controller
     public function store(Request $request, Procurement $procurement)
     {
         $this->assertProcurementInScope($procurement);
+        $this->assertLegacyManagedProcurement($procurement);
         $data = $request->validate([
             'form_id' => 'required|exists:dynamic_forms,id',
             'stage'   => 'required|in:submission,prescreening,technical,financial',
         ]);
 
         // Ensure form is approved
-        $form = DynamicForm::approved()->findOrFail($data['form_id']);
+        $form = DynamicForm::approved()->whereNull('procurement_id')->findOrFail($data['form_id']);
+        abort_if($form->isThinkTankExecutionForm(), 403, 'Think Tank execution forms cannot be assigned through legacy form routes.');
         if ($procurement->governance_node_id && $form->resource?->governance_node_id !== $procurement->governance_node_id) {
             abort(403, 'You do not have access to attach this form to the selected procurement.');
         }
@@ -82,7 +87,9 @@ class ProcurementFormAssignmentController extends Controller
 
         $procurement = Procurement::findOrFail($request->procurement_id);
         $this->assertProcurementInScope($procurement);
-        $form = DynamicForm::findOrFail($request->form_id);
+        $this->assertLegacyManagedProcurement($procurement);
+        $form = DynamicForm::query()->whereNull('procurement_id')->findOrFail($request->form_id);
+        abort_if($form->isThinkTankExecutionForm(), 403, 'Think Tank execution forms cannot be assigned through legacy form routes.');
         if ($procurement->governance_node_id && $form->resource?->governance_node_id !== $procurement->governance_node_id) {
             abort(403, 'You do not have access to attach this form to the selected procurement.');
         }
@@ -102,5 +109,14 @@ class ProcurementFormAssignmentController extends Controller
         ]);
 
         return back()->with('success', 'Form attached to procurement successfully.');
+    }
+
+    private function assertLegacyManagedProcurement(Procurement $procurement): void
+    {
+        abort_if(
+            $procurement->procurement_owner_type === 'think_tank',
+            403,
+            'Think Tank procurement forms must be managed through the tenant procurement API.',
+        );
     }
 }

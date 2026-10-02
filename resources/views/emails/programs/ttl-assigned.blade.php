@@ -60,23 +60,11 @@
                     </tr>
                 </table>
 
-                @if ($plainPassword)
-                    <div style="border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;padding:14px;margin:20px 0;">
-                        <div style="font-weight:700;color:#064e3b;margin-bottom:6px;">Your login details</div>
-                        <div>Email: <strong>{{ $user->email }}</strong></div>
-                        <div>Temporary password: <strong>{{ $plainPassword }}</strong></div>
-                        <div style="color:#64748b;font-size:13px;margin-top:8px;">
-                            You may be asked to change this password after your first login.
-                        </div>
-                    </div>
-                @else
-                    <div style="border:1px solid #dbeafe;background:#eff6ff;border-radius:10px;padding:14px;margin:20px 0;">
-                        <div style="font-weight:700;color:#1e3a8a;margin-bottom:6px;">Use your existing ATTP account</div>
-                        <div style="color:#334155;">
-                            Sign in with your existing email address: <strong>{{ $user->email }}</strong>
-                        </div>
-                    </div>
-                @endif
+                <div style="border:1px solid #dbeafe;background:#eff6ff;border-radius:10px;padding:14px;margin:20px 0;">
+                    <div style="font-weight:700;color:#1e3a8a;margin-bottom:6px;">Your ATTP account</div>
+                    <div style="color:#334155;">Email: <strong>{{ $user->email }}</strong></div>
+                    <div style="color:#64748b;font-size:13px;margin-top:8px;">If this is a new account, use the separate secure setup email to choose your password. Existing users should sign in with their current password.</div>
+                </div>
 
                 <p style="margin:26px 0;">
                     <a href="{{ $loginUrl }}" style="display:inline-block;background:#006B3F;color:#ffffff;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:700;">

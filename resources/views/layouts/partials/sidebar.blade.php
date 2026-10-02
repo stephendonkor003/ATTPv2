@@ -908,6 +908,16 @@
                                 @endif
                             @endcanany
 
+                            @canany(['think_tank.procurement.review', 'think_tank.procurement.step', 'procurement.view_all', 'procurement.manage_all'])
+                                @if (Route::has('think-tank-procurement.worksheet.index'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('think-tank-procurement.worksheet.index') }}" class="nxl-link">
+                                            <i class="feather-check-square me-2"></i> Item Review Worksheet
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcanany
+
                             @canany(['think_tank.procurement.reports', 'think_tank.procurement.step', 'procurement.view_all', 'procurement.manage_all'])
                                 @if (Route::has('think-tank-procurement.reports'))
                                     <li class="nxl-item">

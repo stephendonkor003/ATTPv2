@@ -6,12 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Models\FormSubmissionValue;
 use App\Models\User;
 use App\Models\VendorDocument;
+use App\Services\DynamicProcurementSubmissionFileService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class VendorKnowledgeController extends Controller
 {
+    public function __construct(private readonly DynamicProcurementSubmissionFileService $submissionFiles) {}
+
     public function index(Request $request)
     {
         $user = $this->vendor($request);
@@ -102,29 +105,34 @@ class VendorKnowledgeController extends Controller
     public function downloadSubmissionFile(Request $request, FormSubmissionValue $value)
     {
         $user = $this->vendor($request);
-        $value->load('submission');
+        $value->load('submission.form.fields');
 
         abort_unless($value->submission && (string) $value->submission->submitted_by === (string) $user->id, 403);
+        abort_unless($this->isUploadValue($value), 404);
 
-        $path = trim((string) $value->value);
-        abort_unless(Str::startsWith($path, ['procurement_submissions/', 'public/procurement_submissions/']), 404);
+        $path = $this->submissionFiles->normalizedAllowedPath($value->value);
+        abort_unless($path !== null, 404);
 
         $location = $this->resolveStoredLocation($path);
         abort_unless($location, 404);
 
         [$disk, $storedPath] = $location;
 
-        return Storage::disk($disk)->download($storedPath, basename($storedPath));
+        return Storage::disk($disk)->download($storedPath, basename($storedPath), [
+            'Cache-Control' => 'private, no-store, max-age=0',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     private function submissionFiles(User $user, string $search, string $type)
     {
-        return FormSubmissionValue::with('submission.procurement')
+        return FormSubmissionValue::with(['submission.procurement', 'submission.form.fields'])
             ->whereHas('submission', fn ($query) => $query->where('submitted_by', $user->id))
             ->whereNotNull('value')
             ->latest()
             ->get()
-            ->filter(fn (FormSubmissionValue $value) => Str::startsWith(trim((string) $value->value), ['procurement_submissions/', 'public/procurement_submissions/']))
+            ->filter(fn (FormSubmissionValue $value): bool => $this->isUploadValue($value)
+                && $this->submissionFiles->isAllowedPath($value->value))
             ->map(function (FormSubmissionValue $value) {
                 $path = trim((string) $value->value);
                 $location = $this->resolveStoredLocation($path);
@@ -163,6 +171,13 @@ class VendorKnowledgeController extends Controller
         abort_if($user->is_disabled || $user->is_blacklisted, 403);
 
         return $user;
+    }
+
+    private function isUploadValue(FormSubmissionValue $value): bool
+    {
+        $field = $value->submission?->form?->fields?->firstWhere('field_key', $value->field_key);
+
+        return $field && in_array($field->field_type, ['file', 'image'], true);
     }
 
     private function resolveStoredLocation(string $path): ?array

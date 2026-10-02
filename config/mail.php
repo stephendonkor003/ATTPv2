@@ -105,7 +105,10 @@ return [
     |
     */
 
-    'default' => $resolveMailValue(['MAIL_MAILER'], 'log'),
+    // Fail closed when MAIL_MAILER is accidentally omitted. This application
+    // delivers account setup, password reset, and MFA links/codes, so falling
+    // back to the log transport could persist credentials in plaintext logs.
+    'default' => $resolveMailValue(['MAIL_MAILER'], 'graph'),
 
     /*
     |--------------------------------------------------------------------------

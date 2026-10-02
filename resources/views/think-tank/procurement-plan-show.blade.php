@@ -155,7 +155,7 @@
                             <form method="POST" action="{{ route('think-tank.procurement-plans.items.destroy',$routeParams(['plan'=>$plan,'item'=>$item])) }}" onsubmit="return confirm('Remove {{ $item->item_code }} and all its documents from this plan?')">@csrf @method('DELETE')<button class="ttpp-btn danger" type="submit"><i class="feather-trash-2"></i> Remove</button></form>
                         @endif
                         @if($item->status==='no_objection_obtained' && !$item->procurement_id)
-                            <button class="ttpp-btn primary" type="button" onclick="document.getElementById('launch-item-{{ $item->id }}').showModal()"><i class="feather-send"></i> Configure & publish</button>
+                            <a class="ttpp-btn primary" href="{{ rtrim((string) config('think_tank_portal.frontend_url'), '/') }}/procurement/executions/create?item={{ urlencode((string) $item->id) }}"><i class="feather-layers"></i> Open Procurement Execution</a>
                         @endif
                         @if($item->procurement)
                             <div class="ttpp-execution">
@@ -210,10 +210,6 @@
                         </form>
                     </div>
                 </dialog>
-                @endif
-
-                @if($item->status==='no_objection_obtained' && !$item->procurement_id)
-                    @include('think-tank.partials.procurement-publication-builder', ['item' => $item])
                 @endif
 
                 @if($item->procurement)

@@ -12,7 +12,7 @@ class ThinkTankInvitationService
 {
     public function __construct(private readonly ThinkTankMailSecurityService $mailSecurity) {}
 
-    public function send(User $user, bool $invitation): bool
+    public function send(User $user, bool $invitation, bool $administratorInitiated = false): bool
     {
         try {
             $this->mailSecurity->assertCredentialDeliveryIsSecure();
@@ -28,7 +28,11 @@ class ThinkTankInvitationService
         $token = $broker->createToken($user);
 
         try {
-            $user->notify(new ThinkTankPortalPasswordResetNotification($token, $invitation));
+            $user->notify(new ThinkTankPortalPasswordResetNotification(
+                $token,
+                $invitation,
+                $administratorInitiated,
+            ));
 
             return true;
         } catch (Throwable $exception) {
@@ -39,5 +43,14 @@ class ThinkTankInvitationService
         } finally {
             unset($token);
         }
+    }
+
+    /**
+     * Revoke a link that was accepted for delivery but can no longer be used
+     * safely because the target account changed before access was invalidated.
+     */
+    public function invalidateOutstandingToken(User $user): void
+    {
+        Password::broker()->deleteToken($user);
     }
 }

@@ -21,11 +21,19 @@ class EnsureNotFundingPartner
 
         // Redirect funding partners to their portal if they try to access admin routes
         if ($user && ($user->user_type === 'funding_partner' || $user->isFundingPartner())) {
+            if ($request->expectsJson()) {
+                abort(403, 'You do not have permission to access that area.');
+            }
+
             return redirect()->route('partner.dashboard')
                 ->with('error', 'You do not have permission to access that area.');
         }
 
         if ($user && $user->user_type === 'vendor') {
+            if ($request->expectsJson()) {
+                abort(403, 'You do not have permission to access that area.');
+            }
+
             return redirect()->route('vendor.dashboard')
                 ->with('error', 'You do not have permission to access that area.');
         }

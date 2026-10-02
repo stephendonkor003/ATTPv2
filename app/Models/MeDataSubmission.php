@@ -18,8 +18,11 @@ class MeDataSubmission extends BaseModel
     public const STATUS_APPROVED = 'approved';
 
     public const STATUS_UNDER_REVIEW = 'under_review';
+
     public const STATUS_RESUBMITTED = 'resubmitted';
+
     public const STATUS_VERIFIED = 'verified';
+
     public const STATUS_REJECTED = 'rejected';
 
     protected $table = 'me_data_submissions';
@@ -49,6 +52,7 @@ class MeDataSubmission extends BaseModel
 
     protected $casts = [
         'revision' => 'integer',
+        'portal_lock_version' => 'integer',
         'schema_snapshot' => 'array',
         'submitted_at' => 'datetime',
         'reviewed_at' => 'datetime',

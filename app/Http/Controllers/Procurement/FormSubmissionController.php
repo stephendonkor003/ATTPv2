@@ -8,11 +8,14 @@ use App\Models\FormSubmission;
 use App\Models\FormSubmissionValue;
 use App\Models\Procurement;
 use App\Services\ProcurementSubmissionScreeningAutomation;
+use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class FormSubmissionController extends Controller
 {
+    use GovernanceScope;
+
     public function create(Request $request, DynamicForm $form)
     {
         $this->authorizeSubmissionOperation($request);
@@ -64,9 +67,21 @@ class FormSubmissionController extends Controller
         return redirect()->route('submissions.show', $submission);
     }
 
-    public function show(FormSubmission $submission)
+    public function show(Request $request, FormSubmission $submission)
     {
-        $submission->load('values');
+        $submission->load('values', 'procurement');
+        abort_if(
+            $submission->procurement?->procurement_owner_type === 'think_tank',
+            403,
+            'Think Tank procurement applications are available only through their scoped review workspaces.',
+        );
+
+        $ownsSubmission = (string) $submission->submitted_by === (string) $request->user()?->id;
+        $canManage = $request->user()?->can('forms.manage') === true;
+        abort_unless($ownsSubmission || $canManage, 403, 'You do not have access to this submission.');
+        if ($canManage) {
+            $this->assertSubmissionInScope($submission);
+        }
 
         return view('procurement.submissions.show', compact('submission'));
     }
@@ -85,6 +100,12 @@ class FormSubmissionController extends Controller
             $procurement,
             404,
             'This form is not attached to an active procurement.',
+        );
+
+        abort_if(
+            $procurement->procurement_owner_type === 'think_tank',
+            403,
+            'Think Tank execution forms accept applications only through their public or vendor portal.',
         );
 
         return $procurement;

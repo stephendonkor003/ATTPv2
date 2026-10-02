@@ -4,14 +4,12 @@ namespace App\Http\Controllers;
 
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\Funder;
-use App\Mail\FundingPartnerWelcome;
 use App\Models\PartnerActivityLog;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\AccountSetupInvitationService;
 use App\Services\ThinkTank\ThinkTankUserManagementService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -67,12 +65,15 @@ class FunderController extends Controller
         $funder = Funder::create($validated);
 
         // Handle portal access
-        $portalEmailSent = $this->syncPortalAccess($funder, $validated, $request->boolean('has_portal_access'));
-        $additionalEmailsSent = $this->syncAdditionalPortalUsers($funder->fresh(['portalUser', 'portalUsers']), $portalUsers, $request->boolean('has_portal_access'));
+        $primaryDelivery = $this->syncPortalAccess($funder, $validated, $request->boolean('has_portal_access'));
+        $additionalDelivery = $this->syncAdditionalPortalUsers($funder->fresh(['portalUser', 'portalUsers']), $portalUsers, $request->boolean('has_portal_access'));
 
         return redirect()
             ->route('finance.funders.index')
-            ->with('success', 'Partner created successfully.' . (($portalEmailSent || $additionalEmailsSent) ? ' Portal access email sent.' : ''));
+            ->with('success', 'Partner created successfully.'.$this->invitationDeliverySummary(
+                $primaryDelivery,
+                $additionalDelivery,
+            ));
     }
 
     /**
@@ -119,12 +120,15 @@ class FunderController extends Controller
         }
 
         $funder->update($validated);
-        $primaryEmailSent = $this->syncPortalAccess($funder->fresh(['portalUser', 'portalUsers']), $validated, $request->boolean('has_portal_access'));
-        $additionalEmailsSent = $this->syncAdditionalPortalUsers($funder->fresh(['portalUser', 'portalUsers']), $portalUsers, $request->boolean('has_portal_access'));
+        $primaryDelivery = $this->syncPortalAccess($funder->fresh(['portalUser', 'portalUsers']), $validated, $request->boolean('has_portal_access'));
+        $additionalDelivery = $this->syncAdditionalPortalUsers($funder->fresh(['portalUser', 'portalUsers']), $portalUsers, $request->boolean('has_portal_access'));
 
         return redirect()
             ->route('finance.funders.index')
-            ->with('success', 'Partner updated successfully.' . (($primaryEmailSent || $additionalEmailsSent) ? ' New portal access email sent.' : ''));
+            ->with('success', 'Partner updated successfully.'.$this->invitationDeliverySummary(
+                $primaryDelivery,
+                $additionalDelivery,
+            ));
     }
 
     /**
@@ -184,7 +188,8 @@ class FunderController extends Controller
         return $validated;
     }
 
-    private function syncPortalAccess(Funder $funder, array $validated, bool $hasPortalAccess): bool
+    /** @return array{attempted: int, failed: int} */
+    private function syncPortalAccess(Funder $funder, array $validated, bool $hasPortalAccess): array
     {
         if (!$hasPortalAccess) {
             if ($funder->user_id) {
@@ -196,7 +201,7 @@ class FunderController extends Controller
 
             $funder->portalUsers()->detach();
 
-            return false;
+            return ['attempted' => 0, 'failed' => 0];
         }
 
         if ($funder->portalUser) {
@@ -222,16 +227,16 @@ class FunderController extends Controller
                 ],
             ]);
 
-            return false;
+            return ['attempted' => 0, 'failed' => 0];
         }
 
         $partnerRoleId = Role::where('name', 'Funding Partner')->value('id');
-        $password = Str::random(12);
+        $invitations = app(AccountSetupInvitationService::class);
 
         $user = User::create([
             'name' => $validated['contact_person'],
             'email' => $validated['contact_email'],
-            'password' => Hash::make($password),
+            'password' => $invitations->unknownPasswordHash(),
             'user_type' => 'funding_partner',
             'role_id' => $partnerRoleId,
             'must_change_password' => true,
@@ -250,11 +255,10 @@ class FunderController extends Controller
             ],
         ]);
 
-        try {
-            Mail::to($user->email)->send(new FundingPartnerWelcome($funder->fresh(), $user, $password));
-        } catch (\Exception $e) {
-            \Log::error('Failed to send partner welcome email: ' . $e->getMessage());
-        }
+        $invitationSent = $invitations->send(
+            $user,
+            AccountSetupInvitationService::PURPOSE_FUNDING_PARTNER,
+        );
 
         PartnerActivityLog::logActivity(
             funderId: $funder->id,
@@ -263,20 +267,23 @@ class FunderController extends Controller
             metadata: ['updated_by' => auth()->id()]
         );
 
-        return true;
+        return ['attempted' => 1, 'failed' => $invitationSent ? 0 : 1];
     }
 
-    private function syncAdditionalPortalUsers(Funder $funder, array $portalUsers, bool $hasPortalAccess): bool
+    /** @return array{attempted: int, failed: int} */
+    private function syncAdditionalPortalUsers(Funder $funder, array $portalUsers, bool $hasPortalAccess): array
     {
         if (! $hasPortalAccess) {
-            return false;
+            return ['attempted' => 0, 'failed' => 0];
         }
 
         $partnerRoleId = Role::where('name', 'Funding Partner')->value('id');
         $primaryUserId = $funder->user_id;
         $primaryEmail = Str::lower((string) $funder->contact_email);
         $allowedUserIds = collect([$primaryUserId])->filter()->values();
-        $sentAnyEmail = false;
+        $attempted = 0;
+        $failed = 0;
+        $invitations = app(AccountSetupInvitationService::class);
 
         foreach ($portalUsers as $portalUser) {
             $email = Str::lower(trim((string) ($portalUser['email'] ?? '')));
@@ -287,7 +294,7 @@ class FunderController extends Controller
             }
 
             $user = User::whereRaw('LOWER(email) = ?', [$email])->first();
-            $plainPassword = null;
+            $created = false;
 
             if ($user) {
                 app(ThinkTankUserManagementService::class)
@@ -304,15 +311,15 @@ class FunderController extends Controller
             }
 
             if (! $user) {
-                $plainPassword = Str::random(12);
                 $user = User::create([
                     'name' => $name,
                     'email' => $email,
-                    'password' => Hash::make($plainPassword),
+                    'password' => $invitations->unknownPasswordHash(),
                     'user_type' => 'funding_partner',
                     'role_id' => $partnerRoleId,
                     'must_change_password' => true,
                 ]);
+                $created = true;
             } else {
                 $user->update([
                     'name' => $name,
@@ -331,12 +338,13 @@ class FunderController extends Controller
 
             $allowedUserIds->push($user->id);
 
-            if ($plainPassword) {
-                try {
-                    Mail::to($user->email)->send(new FundingPartnerWelcome($funder->fresh(), $user, $plainPassword));
-                    $sentAnyEmail = true;
-                } catch (\Exception $e) {
-                    \Log::error('Failed to send additional partner welcome email: ' . $e->getMessage());
+            if ($created) {
+                $attempted++;
+                if (! $invitations->send(
+                    $user,
+                    AccountSetupInvitationService::PURPOSE_FUNDING_PARTNER,
+                )) {
+                    $failed++;
                 }
 
                 PartnerActivityLog::logActivity(
@@ -358,7 +366,28 @@ class FunderController extends Controller
             $funder->portalUsers()->detach($removeUserIds);
         }
 
-        return $sentAnyEmail;
+        return ['attempted' => $attempted, 'failed' => $failed];
+    }
+
+    /**
+     * @param  array{attempted: int, failed: int}  ...$results
+     */
+    private function invitationDeliverySummary(array ...$results): string
+    {
+        $attempted = array_sum(array_column($results, 'attempted'));
+        $failed = array_sum(array_column($results, 'failed'));
+
+        if ($attempted === 0) {
+            return '';
+        }
+
+        if ($failed === 0) {
+            return $attempted === 1
+                ? ' A secure portal setup link was sent.'
+                : " {$attempted} secure portal setup links were sent.";
+        }
+
+        return " {$failed} of {$attempted} secure portal setup link deliveries failed. The accounts were created safely; verify mail delivery and resend password links.";
     }
 
     private function loadPartnerDetails(Funder $funder): Funder

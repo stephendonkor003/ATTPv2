@@ -64,9 +64,6 @@ return Application::configure(basePath: dirname(__DIR__))
         // Process GRM reminders and escalations based on configured response clocks.
         $schedule->job(new ProcessGrmEscalations)->hourly();
 
-        // Clear Laravel cache buildup 6 times per day.
-        $schedule->command('optimize:clear')->everyFourHours()->withoutOverlapping();
-
         // Refresh World Bank catalog + recent values for used indicators each day.
         $schedule->command('worldbank:sync --catalog --used')->dailyAt('02:15')->withoutOverlapping();
 
@@ -92,6 +89,22 @@ return Application::configure(basePath: dirname(__DIR__))
         // Recipient rows are a durable outbox for proposal invitations. This
         // completes any after-response delivery interrupted by PHP/FPM.
         $schedule->command('eoi:communications:deliver --limit=25')->everyMinute()->withoutOverlapping()->onOneServer();
+
+        // Procurement workflow notices use a durable outbox. Recover a queue
+        // publish interrupted after commit, without automatically retrying an
+        // ambiguous provider response that could duplicate an accepted email.
+        $schedule->command('think-tank:procurement-notifications:reconcile --limit=25')
+            ->everyMinute()
+            ->withoutOverlapping()
+            ->onOneServer();
+
+        // Close application windows through the canonical lifecycle so the
+        // procurement status, Think Tank audit event and durable status notice
+        // are committed together.
+        $schedule->command('procurement:close-expired --limit=250')
+            ->everyFiveMinutes()
+            ->withoutOverlapping()
+            ->onOneServer();
 
         // Catch submissions whose initial queue publication was interrupted
         // and recover 3PAP workers that stopped before completing their run.
@@ -163,6 +176,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $isThinkTankApi = static fn (Request $request): bool => $request->is(
             'api/v1/think-tank',
             'api/v1/think-tank/*'
+        );
+
+        // Expected portal boundary and validation failures are deliberate 4xx
+        // responses, not application faults. Keep genuine server-side portal
+        // failures reportable while avoiding noisy ERROR entries for probes.
+        $exceptions->dontReportWhen(
+            static fn (Throwable $exception): bool => $exception instanceof ThinkTankApiException
+                && $exception->status < 500
         );
 
         $exceptions->shouldRenderJsonWhen(

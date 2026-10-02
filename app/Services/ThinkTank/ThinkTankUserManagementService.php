@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class ThinkTankUserManagementService
 {
@@ -360,85 +361,79 @@ class ThinkTankUserManagementService
     ): bool {
         $deliveryTarget = DB::transaction(function () use ($actor, $tenant, $target): User {
             [$lockedTenant] = $this->lockMutationAuthority($tenant, $actor, true);
-
-            return $this->tenantQuery($lockedTenant)
-                ->whereKey($target->getKey())
-                ->lockForUpdate()
-                ->firstOrFail();
-        });
-
-        if (! $this->invitations->send($deliveryTarget, false)) {
-            return false;
-        }
-
-        DB::transaction(function () use ($request, $actor, $tenant, $target): void {
-            [$lockedTenant, $lockedActor] = $this->lockMutationAuthority($tenant, $actor, true);
             $lockedTarget = $this->tenantQuery($lockedTenant)
                 ->whereKey($target->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
+            abort_if($lockedTarget->is_blacklisted, 422, 'A reset link cannot be sent to a blacklisted account.');
 
-            $lockedTarget->forceFill([
-                'password' => Str::password(64),
-                'must_change_password' => true,
-                'password_changed_at' => null,
-                'otp_verified_at' => null,
-            ])->save();
-            $this->sessions->invalidateMfa($lockedTarget);
-            $this->sessions->revokeAllSessions($lockedTarget);
-            $this->audit->required(
-                $request,
-                'think_tank.user.password_reset_initiated',
-                'Think tank portal password invalidated after secure reset-link delivery was accepted.',
-                [
-                    'tenant_id' => (string) $lockedTenant->getKey(),
-                    'target_user_id' => (string) $lockedTarget->getKey(),
-                ],
-                $lockedActor,
-            );
-        });
-
-        return true;
-    }
-
-    public function setTemporaryPasswordForSystemOversight(
-        Request $request,
-        User $actor,
-        ConsortiumThinkTank $tenant,
-        User $target,
-        string $temporaryPassword,
-    ): User {
-        return DB::transaction(function () use ($request, $actor, $tenant, $target, $temporaryPassword): User {
-            [$lockedTenant, $lockedActor] = $this->lockMutationAuthority($tenant, $actor, true);
-            $lockedTarget = $this->tenantQuery($lockedTenant)
-                ->whereKey($target->getKey())
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            $lockedTarget->forceFill([
-                'password' => $temporaryPassword,
-                'must_change_password' => true,
-                'password_changed_at' => null,
-                'otp_verified_at' => null,
-                'remember_token' => null,
-            ])->save();
-
-            $this->sessions->invalidateMfa($lockedTarget);
-            $this->sessions->revokeAllSessions($lockedTarget);
-            $this->audit->required(
-                $request,
-                'think_tank.user.temporary_password_set',
-                'A temporary password was set by system oversight.',
-                [
-                    'tenant_id' => (string) $lockedTenant->getKey(),
-                    'target_user_id' => (string) $lockedTarget->getKey(),
-                    'must_change_password' => true,
-                ],
-                $lockedActor,
+            $normalizedEmail = mb_strtolower(trim((string) $lockedTarget->email));
+            abort_unless(
+                $normalizedEmail !== ''
+                    && filter_var($normalizedEmail, FILTER_VALIDATE_EMAIL) !== false
+                    && hash_equals($normalizedEmail, (string) $lockedTarget->email),
+                422,
+                'Save a valid, normalized email address before sending a reset link.',
             );
 
             return $lockedTarget->fresh();
         });
+        $deliveryEmail = (string) $deliveryTarget->email;
+
+        if (! $this->invitations->send($deliveryTarget, false, true)) {
+            return false;
+        }
+
+        try {
+            $accessRevoked = DB::transaction(function () use ($request, $actor, $tenant, $target, $deliveryEmail): bool {
+                [$lockedTenant, $lockedActor] = $this->lockMutationAuthority($tenant, $actor, true);
+                $lockedTarget = User::query()
+                    ->whereKey($target->getKey())
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $lockedTarget
+                    || $lockedTarget->user_type !== 'think_tank'
+                    || (string) $lockedTarget->think_tank_member_id !== (string) $lockedTenant->getKey()
+                    || $lockedTarget->is_blacklisted
+                    || ! hash_equals($deliveryEmail, mb_strtolower(trim((string) $lockedTarget->email)))) {
+                    return false;
+                }
+
+                $lockedTarget->forceFill([
+                    'password' => Str::password(64),
+                    'must_change_password' => true,
+                    'password_changed_at' => null,
+                    'otp_verified_at' => null,
+                ])->save();
+                $this->sessions->invalidateMfa($lockedTarget);
+                $this->sessions->revokeAllSessions($lockedTarget);
+                $this->audit->required(
+                    $request,
+                    'think_tank.user.password_reset_initiated',
+                    'Think tank portal password invalidated after secure reset-link delivery was accepted.',
+                    [
+                        'tenant_id' => (string) $lockedTenant->getKey(),
+                        'target_user_id' => (string) $lockedTarget->getKey(),
+                    ],
+                    $lockedActor,
+                );
+
+                return true;
+            });
+        } catch (Throwable $exception) {
+            $this->invitations->invalidateOutstandingToken($deliveryTarget);
+
+            throw $exception;
+        }
+
+        if (! $accessRevoked) {
+            $this->invitations->invalidateOutstandingToken($deliveryTarget);
+
+            return false;
+        }
+
+        return true;
     }
 
     /** @return array{user: User, created: bool} */

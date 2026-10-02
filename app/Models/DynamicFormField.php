@@ -29,12 +29,43 @@ class DynamicFormField extends BaseModel
 
     public function optionValues(): array
     {
+        $stored = trim((string) $this->options);
+        if ($stored === '') {
+            return [];
+        }
+
+        $decoded = json_decode($stored, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && array_is_list($decoded)) {
+            return collect($decoded)
+                ->filter(fn (mixed $option): bool => is_scalar($option))
+                ->map(fn (mixed $option): string => trim((string) $option))
+                ->filter()
+                ->values()
+                ->all();
+        }
+
+        // Backward-compatible parsing for forms saved before JSON option
+        // serialization was introduced.
         return collect(preg_split('/[\r\n,]+/', (string) $this->options))
             ->map(fn ($option) => trim((string) $option))
             ->filter()
             ->unique()
             ->values()
             ->all();
+    }
+
+    /** @param array<int, string> $options */
+    public static function encodeOptionValues(array $options): ?string
+    {
+        $values = collect($options)
+            ->map(fn (mixed $option): string => trim((string) $option))
+            ->filter()
+            ->values()
+            ->all();
+
+        return $values === []
+            ? null
+            : json_encode($values, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     /**

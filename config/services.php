@@ -37,6 +37,10 @@ return [
         'scope' => 'https://graph.microsoft.com/.default',
         'base_url' => 'https://graph.microsoft.com/v1.0',
         'timeout' => (int) env('MICROSOFT_GRAPH_TIMEOUT', 30),
+        'connect_timeout' => (int) env('MICROSOFT_GRAPH_CONNECT_TIMEOUT', 10),
+        'retry_attempts' => (int) env('MICROSOFT_GRAPH_RETRY_ATTEMPTS', 1),
+        'retry_max_delay_ms' => (int) env('MICROSOFT_GRAPH_RETRY_MAX_DELAY_MS', 2000),
+        'ca_bundle' => env('MICROSOFT_GRAPH_CA_BUNDLE'),
     ],
 
     'slack' => [

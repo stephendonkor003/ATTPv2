@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ScopesSiteVisitsToPortfolio;
 use App\Mail\BiAnnualSiteVisitCreatedMail;
-use App\Mail\UserAccountCreated;
 use App\Models\BiAnnualSiteVisitAnswer;
 use App\Models\BiAnnualSiteVisitProfile;
 use App\Models\BiAnnualSiteVisitTemplate;
@@ -15,6 +14,7 @@ use App\Models\SiteVisit;
 use App\Models\SiteVisitGroup;
 use App\Models\SiteVisitGroupMember;
 use App\Models\User;
+use App\Services\AccountSetupInvitationService;
 use App\Services\BiAnnualSiteVisitBrandingService;
 use App\Services\BiAnnualSiteVisitPdfService;
 use App\Services\BiAnnualSiteVisitTemplateService;
@@ -25,12 +25,12 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Throwable;
 
 class BiAnnualSiteVisitController extends Controller
 {
@@ -363,13 +363,13 @@ class BiAnnualSiteVisitController extends Controller
                 fn (User $user): string => (string) $user->id
             );
             $newAccounts = [];
+            $invitations = app(AccountSetupInvitationService::class);
 
             foreach ($newMemberInputs as $key => $input) {
-                $temporaryPassword = Str::password(12);
                 $user = User::create([
                     'name' => $input['name'],
                     'email' => $input['email'],
-                    'password' => Hash::make($temporaryPassword),
+                    'password' => $invitations->unknownPasswordHash(),
                     'user_type' => 'staff',
                     'governance_node_id' => $request->user()->governance_node_id,
                     'must_change_password' => true,
@@ -379,10 +379,7 @@ class BiAnnualSiteVisitController extends Controller
 
                 $reference = 'new:'.$key;
                 $usersByReference->put($reference, $user);
-                $newAccounts[] = [
-                    'user' => $user,
-                    'temporary_password' => $temporaryPassword,
-                ];
+                $newAccounts[] = $user;
             }
 
             $resolvedMemberIds = collect($teamReferences)
@@ -472,25 +469,30 @@ class BiAnnualSiteVisitController extends Controller
             'template',
         ]);
 
+        $deliveryFailures = 0;
         foreach ($newAccounts as $account) {
-            $accountMail = (new UserAccountCreated(
-                $account['user'],
-                $account['temporary_password']
-            ))
-                ->afterCommit();
-
-            Mail::to($account['user'])->queue($accountMail);
+            if (! app(AccountSetupInvitationService::class)->send(
+                $account,
+                AccountSetupInvitationService::PURPOSE_SITE_VISIT,
+            )) {
+                $deliveryFailures++;
+            }
         }
 
-        $this->queueVisitAssignmentEmails(
+        $deliveryFailures += $this->queueVisitAssignmentEmails(
             $profile,
             $profile->siteVisit?->group?->members
                 ?->map(fn (SiteVisitGroupMember $member) => $member->user) ?? collect()
         );
 
+        $message = 'Bi-Annual Site Visit scheduled with the selected monitoring team.';
+        if ($deliveryFailures > 0) {
+            $message .= " {$deliveryFailures} email notification(s) could not be dispatched; the visit and accounts remain saved. Verify mail delivery and resend the affected setup or assignment links.";
+        }
+
         return redirect()
             ->route('biannual-site-visits.show', $profile)
-            ->with('success', 'Bi-Annual Site Visit scheduled with the selected monitoring team.');
+            ->with('success', $message);
     }
 
     public function edit(
@@ -805,13 +807,13 @@ class BiAnnualSiteVisitController extends Controller
                 fn (User $member): string => (string) $member->id
             );
             $newAccounts = [];
+            $invitations = app(AccountSetupInvitationService::class);
 
             foreach ($newMemberInputs as $key => $input) {
-                $temporaryPassword = Str::password(12);
                 $member = User::create([
                     'name' => $input['name'],
                     'email' => $input['email'],
-                    'password' => Hash::make($temporaryPassword),
+                    'password' => $invitations->unknownPasswordHash(),
                     'user_type' => 'staff',
                     'governance_node_id' => $request->user()->governance_node_id,
                     'must_change_password' => true,
@@ -820,10 +822,7 @@ class BiAnnualSiteVisitController extends Controller
                 ]);
 
                 $usersByReference->put('new:'.$key, $member);
-                $newAccounts[] = [
-                    'user' => $member,
-                    'temporary_password' => $temporaryPassword,
-                ];
+                $newAccounts[] = $member;
             }
 
             $resolvedMemberIds = collect($teamReferences)
@@ -862,14 +861,14 @@ class BiAnnualSiteVisitController extends Controller
             return [$resolvedMemberIds, $newAccounts];
         });
 
+        $deliveryFailures = 0;
         foreach ($newAccounts as $account) {
-            $accountMail = (new UserAccountCreated(
-                $account['user'],
-                $account['temporary_password']
-            ))
-                ->afterCommit();
-
-            Mail::to($account['user'])->queue($accountMail);
+            if (! app(AccountSetupInvitationService::class)->send(
+                $account,
+                AccountSetupInvitationService::PURPOSE_SITE_VISIT,
+            )) {
+                $deliveryFailures++;
+            }
         }
 
         $visit->load([
@@ -881,18 +880,20 @@ class BiAnnualSiteVisitController extends Controller
         $recipients = $visit->siteVisit->group->members
             ->whereIn('user_id', $resolvedMemberIds)
             ->map(fn (SiteVisitGroupMember $member) => $member->user);
-        $this->queueVisitAssignmentEmails($visit, $recipients);
+        $deliveryFailures += $this->queueVisitAssignmentEmails($visit, $recipients);
+
+        $message = trans_choice(
+            '{1} :count monitoring-team member was added.|[2,*] :count monitoring-team members were added.',
+            $resolvedMemberIds->count(),
+            ['count' => $resolvedMemberIds->count()]
+        );
+        if ($deliveryFailures > 0) {
+            $message .= " {$deliveryFailures} email notification(s) could not be dispatched; the team changes remain saved. Verify mail delivery and resend the affected setup or assignment links.";
+        }
 
         return redirect()
             ->route('biannual-site-visits.index')
-            ->with(
-                'success',
-                trans_choice(
-                    '{1} :count monitoring-team member was added.|[2,*] :count monitoring-team members were added.',
-                    $resolvedMemberIds->count(),
-                    ['count' => $resolvedMemberIds->count()]
-                )
-            );
+            ->with('success', $message);
     }
 
     public function updateTeam(
@@ -1087,9 +1088,9 @@ class BiAnnualSiteVisitController extends Controller
             'template',
         ]);
 
-        if ($leaderChanged) {
-            $this->queueVisitAssignmentEmails($visit, collect([$newLeader]));
-        }
+        $leaderNotificationFailures = $leaderChanged
+            ? $this->queueVisitAssignmentEmails($visit, collect([$newLeader]))
+            : 0;
 
         $messages = [];
         if ($removeIds->isNotEmpty()) {
@@ -1100,7 +1101,9 @@ class BiAnnualSiteVisitController extends Controller
             );
         }
         if ($leaderChanged) {
-            $messages[] = 'the team leader was changed and their notification email was queued';
+            $messages[] = $leaderNotificationFailures > 0
+                ? 'the team leader was changed, but their notification email could not be queued'
+                : 'the team leader was changed and their notification email was queued';
         }
         if ($specialismsChanged) {
             $messages[] = 'specialist roles were updated';
@@ -2495,9 +2498,10 @@ class BiAnnualSiteVisitController extends Controller
     private function queueVisitAssignmentEmails(
         BiAnnualSiteVisitProfile $visit,
         iterable $recipients
-    ): void {
+    ): int {
         $portfolioName = $this->branding->portfolioNameForVisit($visit);
         $leaderId = (string) $visit->siteVisit?->group?->leader_id;
+        $failures = 0;
 
         collect($recipients)
             ->filter(fn (?User $recipient): bool => $recipient
@@ -2506,15 +2510,23 @@ class BiAnnualSiteVisitController extends Controller
             ->each(function (User $recipient) use (
                 $visit,
                 $portfolioName,
-                $leaderId
+                $leaderId,
+                &$failures,
             ): void {
-                Mail::to($recipient)->queue(new BiAnnualSiteVisitCreatedMail(
-                    $visit,
-                    $recipient,
-                    (string) $recipient->id === $leaderId,
-                    $portfolioName
-                ));
+                try {
+                    Mail::to($recipient)->queue(new BiAnnualSiteVisitCreatedMail(
+                        $visit,
+                        $recipient,
+                        (string) $recipient->id === $leaderId,
+                        $portfolioName
+                    ));
+                } catch (Throwable $exception) {
+                    $failures++;
+                    report($exception);
+                }
             });
+
+        return $failures;
     }
 
     /**

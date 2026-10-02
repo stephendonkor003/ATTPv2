@@ -11,6 +11,7 @@ class ThinkTankPortalPasswordResetNotification extends ResetPassword implements 
     public function __construct(
         #[\SensitiveParameter] string $token,
         private readonly bool $invitation = false,
+        private readonly bool $administratorInitiated = false,
     ) {
         parent::__construct($token);
     }
@@ -25,9 +26,21 @@ class ThinkTankPortalPasswordResetNotification extends ResetPassword implements 
                 ->subject('Set up your Think Tank Portal account')
                 ->greeting('Hello '.$notifiable->name.',')
                 ->line('A Think Tank Portal account has been created for you.')
-                ->line('Use the secure, single-use link below to choose your password. No temporary password has been created or sent.')
+                ->line('Use the secure, single-use link below to choose your password. No temporary password is displayed or sent.')
                 ->action('Set my password', $url)
                 ->line("This link expires in {$minutes} minutes. If you were not expecting this invitation, please contact your organization administrator.")
+                ->salutation('ATTP Platform Support');
+        }
+
+        if ($this->administratorInitiated) {
+            return (new MailMessage)
+                ->subject('Action required: Reset your Think Tank Portal password')
+                ->greeting('Hello '.trim((string) ($notifiable->name ?: 'there')).',')
+                ->line('An authorized ATTP administrator requested a secure password reset for your Think Tank Portal account.')
+                ->line('Your previous password no longer works and active sessions have been signed out. Use the secure button below to choose a new private password.')
+                ->action('Choose a new password', $url)
+                ->line("This single-use link expires in {$minutes} minutes.")
+                ->line('If you did not expect this reset, contact your organization administrator or ATTP Platform Support immediately.')
                 ->salutation('ATTP Platform Support');
         }
 

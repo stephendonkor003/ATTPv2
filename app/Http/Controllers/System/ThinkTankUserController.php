@@ -10,11 +10,9 @@ use App\Models\SystemAuditLog;
 use App\Models\User;
 use App\Services\ThinkTank\ThinkTankUserManagementService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Password;
 use Throwable;
 
 class ThinkTankUserController extends Controller
@@ -208,52 +206,27 @@ class ThinkTankUserController extends Controller
         abort_unless($member, 422, 'This user is not assigned to a Think Tank.');
         $member->loadMissing('consortium');
 
-        $delivered = $this->userManagement->resetPasswordForSystemOversight(
+        $completed = $this->userManagement->resetPasswordForSystemOversight(
             $request,
             $request->user(),
             $member,
             $user,
         );
-        $this->audit($request, 'think_tank_user_password_reset_initiated', 'Think Tank portal password and sessions revoked; secure reset initiated', [
-            'staff_user_id' => $user->id,
-            'think_tank_member_id' => $member->id,
-            'reset_link_delivered' => $delivered,
-        ]);
+        $this->audit($request, 'think_tank_user_password_reset_requested', $completed
+            ? 'Secure Think Tank password reset accepted for delivery; previous access revoked'
+            : 'Secure Think Tank password reset was not completed; existing access preserved', [
+                'staff_user_id' => $user->id,
+                'think_tank_member_id' => $member->id,
+                'reset_completed' => $completed,
+            ]);
 
-        return back()
-            ->with('success', $delivered
-                ? 'The previous password and active sessions were revoked, and a secure single-use reset link was sent.'
-                : 'The previous password and active sessions were revoked, but the reset link could not be delivered. Retry or ask the user to use Forgot password.');
-    }
+        if (! $completed) {
+            return back()->with('error', 'The reset could not be completed, so no usable reset link was issued. The current password, MFA state, and active sessions remain unchanged. Verify the account details and mail configuration, then try again.');
+        }
 
-    public function setTemporaryPassword(Request $request, User $user)
-    {
-        $this->assertThinkTankUser($user);
-        $data = $request->validate([
-            'administrator_password' => ['required', 'string', 'max:4096', 'current_password:web'],
-            'password' => ['required', 'string', 'max:4096', 'confirmed', Password::min(12)->mixedCase()->letters()->numbers()->symbols()],
-        ], [
-            'administrator_password.current_password' => 'Your administrator password is incorrect.',
-            'password.confirmed' => 'The temporary-password confirmation does not match.',
-        ]);
+        $recipient = mb_strtolower(trim((string) $user->email));
 
-        $member = $user->assignedThinkTankMembership()->first();
-        abort_unless($member, 422, 'This user is not assigned to a Think Tank.');
-
-        $this->userManagement->setTemporaryPasswordForSystemOversight(
-            $request,
-            $request->user(),
-            $member,
-            $user,
-            $data['password'],
-        );
-
-        $this->audit($request, 'think_tank_user_temporary_password_set', 'Think Tank portal temporary password set; sessions revoked and change required', [
-            'staff_user_id' => $user->id,
-            'think_tank_member_id' => $member->id,
-        ]);
-
-        return back()->with('success', 'Temporary password set. Existing sessions were revoked and the user must change it at the next login. Share it through a secure channel; it cannot be viewed again here.');
+        return back()->with('success', "A secure, single-use reset link was accepted for delivery to {$recipient}. The previous password and active sessions were revoked.");
     }
 
     private function thinkTankUsersQuery()

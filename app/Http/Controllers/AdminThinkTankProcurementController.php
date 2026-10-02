@@ -163,21 +163,41 @@ class AdminThinkTankProcurementController extends Controller
     public function noObjection(Request $request, ThinkTankProcurementPlan $plan, ThinkTankProcurementItem $item)
     {
         $this->assertItem($item, $plan);
+        $request->merge([
+            'step_reference' => trim((string) $request->input('step_reference')),
+            'no_objection_reference' => trim((string) $request->input('no_objection_reference')) ?: null,
+            'no_objection_notes' => trim((string) $request->input('no_objection_notes')) ?: null,
+        ]);
         $data = $request->validate([
             'step_reference' => 'required|string|max:255',
-            'no_objection_reference' => 'nullable|string|max:255',
-            'no_objection_date' => 'required|date',
+            'no_objection_reference' => 'required_without:no_objection_document|nullable|string|max:255',
+            'no_objection_date' => 'required|date|before_or_equal:today',
             'no_objection_notes' => 'nullable|string|max:5000',
-            'no_objection_document' => 'nullable|file|mimes:pdf,doc,docx|max:20480',
+            'no_objection_document' => 'required_without:no_objection_reference|nullable|file|mimes:pdf,doc,docx|max:20480',
         ]);
 
         $storedPath = null;
         try {
             DB::transaction(function () use ($request, $plan, $item, $data, &$storedPath): void {
+                $lockedPlan = ThinkTankProcurementPlan::query()
+                    ->whereKey($plan->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                $lockedItem = ThinkTankProcurementItem::query()
+                    ->where('plan_id', $lockedPlan->id)
+                    ->whereKey($item->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                abort_unless($lockedPlan->status === ThinkTankProcurementPlan::STATUS_APPROVED, 422, 'Approve the full annual plan before recording World Bank no-objection.');
+                abort_unless($lockedItem->status === ThinkTankProcurementItem::STATUS_APPROVED, 422, 'Only an approved item can receive a World Bank no-objection decision.');
+
                 if ($request->hasFile('no_objection_document')) {
                     $file = $request->file('no_objection_document');
-                    $storedPath = $file->store("think-tank-procurement/{$plan->id}/{$item->id}", 'local');
-                    $item->documents()->create([
+                    $storedPath = $file->store("think-tank-procurement/{$lockedPlan->id}/{$lockedItem->id}", 'local');
+                    if (! is_string($storedPath) || $storedPath === '') {
+                        throw new \RuntimeException('The no-objection evidence document could not be stored.');
+                    }
+                    $lockedItem->documents()->create([
                         'document_type' => 'no_objection',
                         'document_name' => 'World Bank No-Objection',
                         'original_name' => basename($file->getClientOriginalName()),
@@ -187,7 +207,7 @@ class AdminThinkTankProcurementController extends Controller
                         'uploaded_by' => $request->user()->id,
                     ]);
                 }
-                $this->workflow->recordNoObjection($item, $request->user(), $data);
+                $this->workflow->recordNoObjection($lockedItem, $request->user(), $data);
             });
         } catch (\Throwable $exception) {
             if ($storedPath) {
@@ -196,23 +216,68 @@ class AdminThinkTankProcurementController extends Controller
             throw $exception;
         }
 
-        return back()->with('success', 'World Bank no-objection recorded and the Think Tank was notified by email.');
+        return back()->with('success', 'World Bank no-objection recorded. The item is ready to execute and status emails were queued.');
     }
 
     public function downloadDocument(
+        Request $request,
         ThinkTankProcurementPlan $plan,
         ThinkTankProcurementItem $item,
         ThinkTankProcurementDocument $document
     ) {
         $this->assertItem($item, $plan);
         abort_unless((string) $document->item_id === (string) $item->id, 404);
-        abort_unless(str_starts_with($document->file_path, "think-tank-procurement/{$plan->id}/{$item->id}/"), 404);
-        abort_unless(Storage::disk('local')->exists($document->file_path), 404, 'Document file not found.');
+        $path = str_replace('\\', '/', trim((string) $document->file_path));
+        $expectedPrefix = "think-tank-procurement/{$plan->id}/{$item->id}/";
+        abort_unless(
+            $path !== ''
+                && ! str_contains($path, '..')
+                && str_starts_with($path, $expectedPrefix)
+                && Storage::disk('local')->exists($path),
+            404,
+            'Document file not found.'
+        );
 
-        return Storage::disk('local')->download($document->file_path, $document->original_name, [
-            'Content-Type' => $document->mime_type ?: 'application/octet-stream',
-            'X-Content-Type-Options' => 'nosniff',
-        ]);
+        try {
+            SystemAuditLog::create([
+                'user_id' => $request->user()?->id,
+                'module' => 'think_tank_procurement',
+                'action' => 'procurement_private_document_downloaded',
+                'action_message' => 'Private procurement document downloaded',
+                'description' => $item->item_code.' document accessed',
+                'method' => $request->method(),
+                'url' => $request->fullUrl(),
+                'route_name' => $request->route()?->getName(),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'status_code' => 200,
+                'payload' => [
+                    'plan_id' => $plan->id,
+                    'item_id' => $item->id,
+                    'document_id' => $document->id,
+                    'document_type' => $document->document_type,
+                ],
+            ]);
+        } catch (\Throwable) {
+            // A secondary audit-store outage must not expose the file or make
+            // an otherwise authorized download unavailable.
+        }
+
+        $response = response()->download(
+            Storage::disk('local')->path($path),
+            basename((string) $document->original_name),
+            [
+                'Content-Type' => 'application/octet-stream',
+                'X-Content-Type-Options' => 'nosniff',
+                'Content-Security-Policy' => "default-src 'none'; sandbox",
+            ],
+            'attachment',
+        );
+        $response->setPrivate();
+        $response->setMaxAge(0);
+        $response->headers->addCacheControlDirective('no-store');
+
+        return $response;
     }
 
     public function reports(Request $request)
@@ -402,12 +467,10 @@ class AdminThinkTankProcurementController extends Controller
                     'currency' => $currency,
                     'amount' => (float) $records->sum('estimated_amount'),
                 ])->values(),
-            'approved' => $items->filter(fn ($item) =>
-                $item->status === ThinkTankProcurementItem::STATUS_APPROVED
+            'approved' => $items->filter(fn ($item) => $item->status === ThinkTankProcurementItem::STATUS_APPROVED
                 && $item->plan?->status === ThinkTankProcurementPlan::STATUS_APPROVED
             )->count(),
-            'step_eligible' => $items->filter(fn ($item) =>
-                $item->plan?->status === ThinkTankProcurementPlan::STATUS_APPROVED
+            'step_eligible' => $items->filter(fn ($item) => $item->plan?->status === ThinkTankProcurementPlan::STATUS_APPROVED
                 && in_array($item->status, [
                     ThinkTankProcurementItem::STATUS_APPROVED,
                     ThinkTankProcurementItem::STATUS_NO_OBJECTION,

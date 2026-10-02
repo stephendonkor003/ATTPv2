@@ -27,7 +27,7 @@ class ThinkTankMailSecurityService
         }
     }
 
-    public function assertEncryptedResetQueueIsDurable(): void
+    public function assertAsynchronousMailQueueIsDurable(): void
     {
         if (! app()->environment('production')) {
             return;
@@ -39,10 +39,20 @@ class ThinkTankMailSecurityService
         if (! in_array($driver, ['database', 'redis', 'sqs', 'beanstalkd'], true)) {
             throw new ThinkTankApiException(
                 'DURABLE_CREDENTIAL_QUEUE_REQUIRED',
-                'Secure password-link delivery requires a durable production queue.',
+                'Asynchronous application mail requires a durable production queue.',
                 503,
             );
         }
+    }
+
+    /**
+     * Backward-compatible alias for deployments and tests using the original
+     * preflight method name. Password-reset links themselves are delivered
+     * synchronously so callers can react safely to transport failure.
+     */
+    public function assertEncryptedResetQueueIsDurable(): void
+    {
+        $this->assertAsynchronousMailQueueIsDurable();
     }
 
     /** @param array<string, true> $visited */

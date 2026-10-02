@@ -10,17 +10,27 @@ use App\Models\FormSubmissionValue;
 use App\Models\Procurement;
 use App\Models\ProcurementDocument;
 use App\Models\User;
+use App\Services\AccountSetupInvitationService;
+use App\Services\DynamicProcurementFormResolver;
+use App\Services\DynamicProcurementSubmissionFileService;
+use App\Services\DynamicProcurementSubmissionValidation;
 use App\Services\ProcurementSubmissionScreeningAutomation;
+use App\Services\UserEmailMutationLock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class PublicProcurementController extends Controller
 {
+    public function __construct(
+        private readonly DynamicProcurementFormResolver $formResolver,
+        private readonly DynamicProcurementSubmissionFileService $submissionFiles,
+        private readonly UserEmailMutationLock $emailLock,
+    ) {}
+
     /**
      * ===============================
      * PUBLIC PROCUREMENT LIST
@@ -29,11 +39,6 @@ class PublicProcurementController extends Controller
     public function index()
     {
         $today = now()->toDateString();
-
-        Procurement::where('status', 'published')
-            ->whereNotNull('application_end_date')
-            ->whereDate('application_end_date', '<', $today)
-            ->update(['status' => 'closed']);
 
         $procurements = Procurement::where('status', 'published')
             ->with([
@@ -72,15 +77,11 @@ class PublicProcurementController extends Controller
         $procurement->autoCloseIfExpired();
         abort_if(! $procurement->isApplicationOpen(), 404);
         $procurement->load([
-            'documents',
+            'documents' => fn ($query) => $query->bidderFacing(),
             'thinkTankMember:id,name,logo_path',
         ]);
 
-        $form = DynamicForm::approved()
-            ->where('procurement_id', $procurement->id)
-            ->where('is_active', true)
-            ->with('fields')
-            ->first(); // allow null for public view
+        $form = $this->formResolver->activeFor($procurement); // allow null for public view
 
         if ($form) {
             $form->ensureGlobalFields();
@@ -98,6 +99,7 @@ class PublicProcurementController extends Controller
 
         $procurement->autoCloseIfExpired();
         abort_if(! $procurement->isApplicationOpen(), 404);
+        abort_unless($document->audience === ProcurementDocument::AUDIENCE_BIDDER, 404);
 
         return $this->documentDownloadResponse($procurement, $document);
     }
@@ -111,6 +113,7 @@ class PublicProcurementController extends Controller
         Request $request,
         Procurement $procurement,
         ProcurementSubmissionScreeningAutomation $screeningAutomation,
+        DynamicProcurementSubmissionValidation $submissionValidation,
     ) {
         if ($procurement->visibility_type && $procurement->visibility_type !== 'public') {
             abort(404);
@@ -119,164 +122,31 @@ class PublicProcurementController extends Controller
         $procurement->autoCloseIfExpired();
         abort_if(! $procurement->isApplicationOpen(), 404);
 
-        $form = DynamicForm::approved()
-            ->where('procurement_id', $procurement->id)
-            ->where('is_active', true)
-            ->with('fields')
-            ->firstOrFail();
+        $form = $this->formResolver->activeFor($procurement, true);
 
         $form->ensureGlobalFields();
         $form->load('fields');
 
-        /*
-        |--------------------------------------------------------------------------
-        | DYNAMIC VALIDATION (SELECT2 READY)
-        |--------------------------------------------------------------------------
-        */
-        $rules = [];
+        $submissionValidation->assertUploadEnvelope($request, $form);
+        $request->validate($submissionValidation->rules($form));
 
-        foreach ($form->fields as $field) {
-
-            $key = $field->field_key;
-            $required = $field->is_required ? 'required' : 'nullable';
-            $configuration = (array) $field->validation_rules;
-            $options = $field->optionValues();
-            $maxLength = min(20000, max(1, (int) ($configuration['max_length'] ?? ($field->field_type === 'textarea' ? 20000 : 255))));
-
-            switch ($field->field_type) {
-
-                case 'email':
-                    $rules[$key] = [$required, 'email:rfc', 'max:'.$maxLength];
-                    break;
-
-                case 'file':
-                case 'image':
-                    $defaultExtensions = $field->field_type === 'image'
-                        ? ['jpg', 'jpeg', 'png', 'webp']
-                        : ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'csv', 'txt', 'zip'];
-                    $extensions = array_values(array_intersect(
-                        (array) ($configuration['allowed_extensions'] ?? $defaultExtensions),
-                        $defaultExtensions
-                    ));
-                    $maxKilobytes = min(20480, max(1024, (int) ($configuration['max_file_size_mb'] ?? 10) * 1024));
-                    $rules[$key] = [
-                        $required,
-                        'file',
-                        ...($field->field_type === 'image' ? ['image'] : []),
-                        'mimes:'.implode(',', $extensions ?: $defaultExtensions),
-                        'max:'.$maxKilobytes,
-                    ];
-                    break;
-
-                case 'checkbox':
-                case 'multiselect':
-                    $rules[$key] = [$required, 'array', ...($field->is_required ? ['min:1'] : [])];
-                    $rules[$key.'.*'] = ['string', Rule::in($options)];
-                    break;
-
-                case 'number':
-                    $rules[$key] = [
-                        $required,
-                        'numeric',
-                        ...(array_key_exists('min', $configuration) ? ['min:'.$configuration['min']] : []),
-                        ...(array_key_exists('max', $configuration) ? ['max:'.$configuration['max']] : []),
-                    ];
-                    break;
-
-                case 'url':
-                    $rules[$key] = [$required, 'url:http,https', 'max:'.$maxLength];
-                    break;
-
-                case 'tel':
-                    $rules[$key] = [$required, 'string', 'max:'.$maxLength];
-                    break;
-
-                case 'date':
-                    $rules[$key] = [$required, 'date_format:Y-m-d'];
-                    break;
-
-                case 'time':
-                    $rules[$key] = [$required, 'date_format:H:i'];
-                    break;
-
-                case 'datetime-local':
-                    $rules[$key] = [$required, 'date_format:Y-m-d\\TH:i'];
-                    break;
-
-                case 'select':
-                case 'radio':
-                    $rules[$key] = [$required, 'string', Rule::in($options)];
-                    break;
-
-                case 'boolean':
-                    $rules[$key] = [$required, 'accepted'];
-                    break;
-
-                case 'textarea':
-                case 'text':
-                    $rules[$key] = [$required, 'string', 'max:'.$maxLength];
-                    break;
-
-                default:
-                    $rules[$key] = $required;
-            }
-        }
-
-        $validated = $request->validate($rules);
-
-        $officialName = trim((string) $request->input('official_name'));
-        $officialEmail = trim((string) $request->input('official_email'));
+        $officialName = Str::squish((string) $request->input('official_name'));
+        $officialEmail = Str::lower(trim((string) $request->input('official_email')));
         if ($officialEmail === '') {
             return back()->withErrors([
                 'official_email' => 'Official email is required to receive confirmation and access credentials.',
             ]);
         }
-
-        $existingUser = User::whereRaw('LOWER(email) = ?', [Str::lower($officialEmail)])->first();
-        $temporaryPassword = null;
-        $vendorUser = null;
-
-        if ($existingUser) {
-            if ($existingUser->user_type !== 'vendor') {
-                return back()->withErrors([
-                    'official_email' => 'This email belongs to an internal account and cannot be used for procurement submissions.',
-                ]);
-            }
-
-            if ($existingUser->is_blacklisted) {
-                return back()->withErrors([
-                    'official_email' => 'This vendor has been blacklisted and cannot submit procurement applications.',
-                ]);
-            }
-
-            if ($existingUser->is_disabled) {
-                return back()->withErrors([
-                    'official_email' => 'This vendor account is disabled. Please contact the administrator.',
-                ]);
-            }
-
-            $alreadySubmitted = FormSubmission::where('procurement_id', $procurement->id)
-                ->where('submitted_by', $existingUser->id)
-                ->where('status', '!=', FormSubmission::STATUS_WITHDRAWN)
-                ->exists();
-
-            if ($alreadySubmitted) {
-                return back()->withErrors([
-                    'official_email' => 'You already have an active application. Sign in to the vendor portal to review, resubmit or withdraw it.',
-                ]);
-            }
-
-            $vendorUser = $existingUser;
-        } else {
-            $temporaryPassword = Str::random(12);
-            $vendorUser = User::create([
-                'name' => $officialName ?: $officialEmail,
-                'email' => $officialEmail,
-                'password' => Hash::make($temporaryPassword),
-                'user_type' => 'vendor',
-                'must_change_password' => true,
+        $authenticatedUser = $request->user();
+        if ($authenticatedUser?->user_type === 'vendor'
+            && ! hash_equals(Str::lower(trim((string) $authenticatedUser->email)), $officialEmail)) {
+            throw ValidationException::withMessages([
+                'official_email' => ['Sign in with the vendor account that owns this email before applying.'],
             ]);
         }
+
+        $newVendorAccount = false;
+        $vendorUser = null;
 
         /*
         |--------------------------------------------------------------------------
@@ -284,57 +154,187 @@ class PublicProcurementController extends Controller
         |--------------------------------------------------------------------------
         */
         $submission = null;
-        DB::transaction(function () use ($request, $procurement, $form, $vendorUser, &$submission) {
+        $storedPaths = [];
+        try {
+            $this->emailLock->run($officialEmail, function () use (
+                $request,
+                $procurement,
+                $form,
+                $officialName,
+                $officialEmail,
+                $submissionValidation,
+                &$newVendorAccount,
+                &$vendorUser,
+                &$submission,
+                &$storedPaths,
+            ): void {
+                DB::transaction(function () use (
+                    $request,
+                    $procurement,
+                    $form,
+                    $officialName,
+                    $officialEmail,
+                    $submissionValidation,
+                    &$newVendorAccount,
+                    &$vendorUser,
+                    &$submission,
+                    &$storedPaths,
+                ): void {
+                    $lockedProcurement = Procurement::query()
+                        ->whereKey($procurement->id)
+                        ->lockForUpdate()
+                        ->firstOrFail();
+                    abort_unless(($lockedProcurement->visibility_type ?? 'public') === 'public', 404);
+                    abort_unless($lockedProcurement->isApplicationOpen(), 409, 'This procurement is no longer open for applications.');
+                    $lockedForm = $this->formResolver->activeFor($lockedProcurement, true);
+                    abort_unless(
+                        (string) $lockedForm->id === (string) $form->id,
+                        409,
+                        'The application form changed while it was open. Reload it before submitting.',
+                    );
+                    $lockedForm->load('fields');
+                    $submissionValidation->assertUploadEnvelope($request, $lockedForm);
+                    $request->validate($submissionValidation->rules($lockedForm));
 
-            $submission = FormSubmission::create([
-                'procurement_id' => $procurement->id,
-                'form_id' => $form->id,
-                'submitted_by' => $vendorUser?->id,
-                'status' => FormSubmission::STATUS_SUBMITTED,
-                'submitted_at' => now(),
-                'publication_version' => max(1, (int) $procurement->publication_version),
-            ]);
+                    $identityMatches = User::query()
+                        ->whereRaw('LOWER(TRIM(email)) = ?', [$officialEmail])
+                        ->orderBy('id')
+                        ->limit(2)
+                        ->lockForUpdate()
+                        ->get();
+                    if ($identityMatches->count() > 1) {
+                        throw ValidationException::withMessages([
+                            'official_email' => ['This email identity requires administrator reconciliation before it can be used.'],
+                        ]);
+                    }
 
-            foreach ($form->fields as $field) {
+                    $vendorUser = $identityMatches->first();
+                    if ($vendorUser && $vendorUser->user_type !== 'vendor') {
+                        throw ValidationException::withMessages([
+                            'official_email' => ['This email belongs to an internal account and cannot be used for procurement submissions.'],
+                        ]);
+                    }
+                    $authenticatedUser = $request->user();
+                    if ($vendorUser && (! $authenticatedUser
+                        || $authenticatedUser->user_type !== 'vendor'
+                        || (string) $authenticatedUser->id !== (string) $vendorUser->id)) {
+                        throw ValidationException::withMessages([
+                            'official_email' => ['This email already has an account. Sign in to that vendor account before applying.'],
+                        ]);
+                    }
+                    if ($vendorUser?->is_blacklisted) {
+                        throw ValidationException::withMessages([
+                            'official_email' => ['This vendor has been blacklisted and cannot submit procurement applications.'],
+                        ]);
+                    }
+                    if ($vendorUser?->is_disabled) {
+                        throw ValidationException::withMessages([
+                            'official_email' => ['This vendor account is disabled. Please contact the administrator.'],
+                        ]);
+                    }
 
-                $key = $field->field_key;
-                $value = null;
+                    if (! $vendorUser) {
+                        $vendorUser = User::query()->create([
+                            'name' => $officialName ?: $officialEmail,
+                            'email' => $officialEmail,
+                            'password' => app(AccountSetupInvitationService::class)->unknownPasswordHash(),
+                            'user_type' => 'vendor',
+                            'must_change_password' => true,
+                        ]);
+                        $newVendorAccount = true;
+                    } else {
+                        $request->merge([
+                            'official_name' => $vendorUser->name ?: $vendorUser->email,
+                            'official_email' => $vendorUser->email,
+                        ]);
+                    }
 
-                // FILE
-                if (in_array($field->field_type, ['file', 'image'], true) && $request->hasFile($key)) {
-                    $value = $request->file($key)
-                        // Store submissions on the default (private) disk; access must be authorized.
-                        ->store('procurement_submissions');
-                }
+                    $alreadySubmitted = FormSubmission::query()
+                        ->where('procurement_id', $lockedProcurement->id)
+                        ->where('submitted_by', $vendorUser->id)
+                        ->where('status', '!=', FormSubmission::STATUS_WITHDRAWN)
+                        ->lockForUpdate()
+                        ->first();
+                    if ($alreadySubmitted) {
+                        throw ValidationException::withMessages([
+                            'official_email' => ['You already have an active application. Sign in to the vendor portal to review, resubmit or withdraw it.'],
+                        ]);
+                    }
 
-                // MULTI SELECT (ARRAY FROM SELECT2)
-                elseif (is_array($request->input($key))) {
-                    $value = json_encode(array_values($request->input($key)));
-                }
+                    $submission = FormSubmission::create([
+                        'procurement_id' => $lockedProcurement->id,
+                        'form_id' => $lockedForm->id,
+                        'submitted_by' => $vendorUser->id,
+                        'status' => FormSubmission::STATUS_SUBMITTED,
+                        'submitted_at' => now(),
+                        'publication_version' => max(1, (int) $lockedProcurement->publication_version),
+                    ]);
 
-                // NORMAL INPUT
-                else {
-                    $value = $request->input($key);
-                }
+                    foreach ($lockedForm->fields as $field) {
 
-                FormSubmissionValue::create([
-                    'submission_id' => $submission->id,
-                    'field_key' => $key,
-                    'value' => $value,
-                ]);
-            }
-        });
+                        $key = $field->field_key;
+                        $value = null;
+
+                        // FILE
+                        if (in_array($field->field_type, ['file', 'image'], true) && $request->hasFile($key)) {
+                            $value = $this->submissionFiles->store($request->file($key));
+                            $storedPaths[] = $value;
+                        }
+
+                        // MULTI SELECT (ARRAY FROM SELECT2)
+                        elseif (is_array($request->input($key))) {
+                            $value = json_encode(array_values($request->input($key)));
+                        }
+
+                        // NORMAL INPUT
+                        else {
+                            $value = $request->input($key);
+                        }
+
+                        FormSubmissionValue::create([
+                            'submission_id' => $submission->id,
+                            'field_key' => $key,
+                            'value' => $value,
+                        ]);
+                    }
+                });
+            });
+        } catch (\Throwable $exception) {
+            $this->submissionFiles->deleteMany($storedPaths);
+            throw $exception;
+        }
 
         if ($submission) {
             $screeningAutomation->queueSubmission($submission->id);
         }
 
+        $invitationSent = ! $newVendorAccount
+            || app(AccountSetupInvitationService::class)->send(
+                $vendorUser,
+                AccountSetupInvitationService::PURPOSE_VENDOR,
+            );
+
+        $confirmationDispatched = false;
         if ($vendorUser && $submission) {
-            Mail::to($vendorUser->email)
-                ->queue(new VendorApplicationReceived($procurement, $submission, $vendorUser, $temporaryPassword));
+            try {
+                Mail::to($vendorUser->email)
+                    ->queue(new VendorApplicationReceived($procurement, $submission, $vendorUser));
+                $confirmationDispatched = true;
+            } catch (\Throwable $exception) {
+                report($exception);
+            }
         }
 
-        return back()->with('success', 'Application submitted successfully. Your login credentials have been emailed to the official email address provided.');
+        $message = $confirmationDispatched
+            ? 'Application submitted successfully. A confirmation email was dispatched.'
+            : 'Application submitted successfully, but the confirmation email could not be dispatched. Your application remains saved.';
+        if ($newVendorAccount) {
+            $message .= $invitationSent
+                ? ' A separate secure account setup link was sent to the official email address.'
+                : ' The secure account setup link could not be delivered; use Forgot password or contact support before signing in.';
+        }
+
+        return back()->with('success', $message);
     }
 
     private function documentDownloadResponse(Procurement $procurement, ProcurementDocument $document)

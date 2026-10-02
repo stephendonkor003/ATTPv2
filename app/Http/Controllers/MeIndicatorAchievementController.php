@@ -267,11 +267,19 @@ class MeIndicatorAchievementController extends Controller
             throw ValidationException::withMessages(['rec' => 'Select the Regional Economic Community.']);
         }
 
+        // A Think Tank author may never attribute its achievement to another
+        // organization by posting an otherwise valid active membership UUID.
+        // Secretariat users retain the explicit lead selector used by the
+        // internal workspace; portal authors are always bound to report owner.
+        if ($request->user()?->isThinkTankUser() && $report->think_tank_member_id) {
+            $validated['lead_think_tank_member_id'] = (string) $report->think_tank_member_id;
+        }
+
         return $validated;
     }
 
     /** @param array<string, mixed> $validated
-     *  @return array<string, mixed>
+     * @return array<string, mixed>
      */
     private function achievementAttributes(array $validated, Request $request): array
     {

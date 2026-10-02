@@ -6,8 +6,9 @@ return [
     | Local Login OTP
     |--------------------------------------------------------------------------
     |
-    | Keep this false while working locally. Set REQUIRE_LOGIN_OTP_LOCALLY=true
-    | when you want to test the live-style OTP flow on your machine.
+    | Production always requires the session-bound email OTP challenge for
+    | every account. Local and automated environments may opt in explicitly
+    | so development never depends on an external mail delivery service.
     |
     */
     'require_login_otp_locally' => env('REQUIRE_LOGIN_OTP_LOCALLY', false),

@@ -14,9 +14,11 @@ class ThinkTankPortalWelcome extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
-    public int $tries = 1;
+    public int $tries = 3;
 
-    public int $timeout = 20;
+    public int $timeout = 75;
+
+    public bool $failOnTimeout = true;
 
     public function __construct(
         public ConsortiumThinkTank $member,
@@ -36,5 +38,11 @@ class ThinkTankPortalWelcome extends Mailable implements ShouldQueue
                 'user' => $this->user,
                 'loginUrl' => rtrim((string) config('think_tank_portal.frontend_url'), '/').'/login',
             ]);
+    }
+
+    /** @return list<int> */
+    public function backoff(): array
+    {
+        return [30, 120];
     }
 }

@@ -358,8 +358,8 @@
 
             <li>🔗 Register and submit the consortium’s proposal here: [Insert Registration and Submission Link]</li>
 
-            <p> Once registered, applicants will receive an email with login credentials to download the call for
-                proposal documents and upload instructions.</p>
+            <p> Once registered, applicants will receive a secure, single-use account setup link by email so they can
+                choose their password and access the proposal documents and upload instructions.</p>
             </p>
 
 

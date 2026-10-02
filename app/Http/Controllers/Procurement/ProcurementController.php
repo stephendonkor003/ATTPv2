@@ -242,6 +242,11 @@ class ProcurementController extends Controller
         $form = DynamicForm::findOrFail($request->form_id);
         $procurement = Procurement::findOrFail($request->procurement_id);
         $this->assertProcurementInScope($procurement);
+        abort_if(
+            $procurement->procurement_owner_type === 'think_tank' || $form->isThinkTankExecutionForm(),
+            403,
+            'Think Tank procurement forms must be managed through the tenant procurement API.',
+        );
         if ($procurement->governance_node_id && $form->resource?->governance_node_id !== $procurement->governance_node_id) {
             abort(403, 'You do not have access to attach this form to the selected procurement.');
         }

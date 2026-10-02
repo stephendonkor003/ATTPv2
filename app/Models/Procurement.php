@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\BaseModel;
+use App\Services\ProcurementOpportunityExpiryService;
 use Illuminate\Support\Str;
 use App\Models\EvaluationAssignment;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -36,11 +37,14 @@ class Procurement extends BaseModel
         'visibility_type',
         'cover_image_path',
         'publication_version',
+        'portal_lock_version',
         'recalled_at',
         'recalled_by',
         'recall_reason',
         'republished_at',
         'vendor_categories',
+        'tenant_vendor_category_ids',
+        'tenant_vendor_ids',
         'awarded_submission_id',
         'awarded_vendor_id',
         'awarded_at',
@@ -52,9 +56,12 @@ class Procurement extends BaseModel
         'application_start_date' => 'date',
         'application_end_date' => 'date',
         'publication_version' => 'integer',
+        'portal_lock_version' => 'integer',
         'recalled_at' => 'datetime',
         'republished_at' => 'datetime',
         'vendor_categories' => 'array',
+        'tenant_vendor_category_ids' => 'array',
+        'tenant_vendor_ids' => 'array',
         'awarded_at' => 'datetime',
         'deleted_at' => 'datetime',
     ];
@@ -91,16 +98,22 @@ class Procurement extends BaseModel
 
     public function autoCloseIfExpired(): bool
     {
-        if ($this->trashed()) {
+        if (! $this->exists
+            || $this->trashed()
+            || $this->status !== 'published'
+            || ! $this->application_end_date
+            || now()->startOfDay()->lte($this->application_end_date->copy()->startOfDay())) {
             return false;
         }
 
-        if ($this->status === 'published' && $this->application_end_date && now()->startOfDay()->gt($this->application_end_date)) {
-            $this->update(['status' => 'closed']);
-            return true;
+        $closed = app(ProcurementOpportunityExpiryService::class)
+            ->closeOne((string) $this->getKey());
+
+        if ($closed) {
+            $this->refresh();
         }
 
-        return false;
+        return $closed;
     }
 
     /* =========================================

@@ -20,6 +20,7 @@ use App\Models\ThinkTankProcurementItem;
 use App\Models\ThinkTankProcurementPlan;
 use App\Models\User;
 use App\Services\EvaluationReworkGuard;
+use App\Services\ProcurementPublicationNotificationService;
 use App\Services\ThinkTankProcurementWorkflowService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +29,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
 class ThinkTankProcurementPlanController extends Controller
@@ -440,8 +442,20 @@ class ThinkTankProcurementPlanController extends Controller
             'currency' => 'required|string|max:10',
             'description' => 'nullable|string|max:5000',
         ]);
-        $plan->update([...$data, 'currency' => Str::upper($data['currency'])]);
-        $this->workflow->event($plan, null, $request->user(), 'plan_folder_updated', $plan->status, $plan->status);
+        DB::transaction(function () use ($request, $plan, $member, $data): void {
+            $lockedPlan = $this->lockPlanForMutation($plan, $member);
+            abort_unless($lockedPlan->isEditable(), 422, 'This plan folder is locked while under review or after approval.');
+
+            $lockedPlan->update([...$data, 'currency' => Str::upper($data['currency'])]);
+            $this->workflow->event(
+                $lockedPlan,
+                null,
+                $request->user(),
+                'plan_folder_updated',
+                $lockedPlan->status,
+                $lockedPlan->status
+            );
+        });
 
         return back()->with('success', 'Plan details updated.');
     }
@@ -456,11 +470,14 @@ class ThinkTankProcurementPlanController extends Controller
         $storedPaths = [];
 
         try {
-            $item = DB::transaction(function () use ($request, $plan, $data, &$storedPaths): ThinkTankProcurementItem {
-                $item = $plan->items()->create([
+            $item = DB::transaction(function () use ($request, $plan, $member, $data, &$storedPaths): ThinkTankProcurementItem {
+                $lockedPlan = $this->lockPlanForMutation($plan, $member);
+                abort_unless($lockedPlan->isEditable(), 422, 'Items cannot be added while this plan is under review or approved.');
+
+                $item = $lockedPlan->items()->create([
                     ...$this->itemAttributes($data),
-                    'item_code' => $this->workflow->nextItemCode($plan),
-                    'currency' => Str::upper($data['currency'] ?? $plan->currency),
+                    'item_code' => $this->workflow->nextItemCode($lockedPlan),
+                    'currency' => Str::upper($data['currency'] ?? $lockedPlan->currency),
                     'status' => ThinkTankProcurementItem::STATUS_DRAFT,
                     'source_activity_status' => ThinkTankProcurementItem::ACTIVITY_STATUS_DRAFT,
                     'created_by' => $request->user()->id,
@@ -468,8 +485,8 @@ class ThinkTankProcurementPlanController extends Controller
                 ]);
 
                 $this->storeItemDocuments($request, $item, $storedPaths);
-                $this->workflow->syncPlanBudget($plan);
-                $this->workflow->event($plan, $item, $request->user(), 'item_created', null, $item->status, null, [
+                $this->workflow->syncPlanBudget($lockedPlan);
+                $this->workflow->event($lockedPlan, $item, $request->user(), 'item_created', null, $item->status, null, [
                     'estimated_amount' => (float) $item->estimated_amount,
                 ]);
 
@@ -478,6 +495,9 @@ class ThinkTankProcurementPlanController extends Controller
         } catch (Throwable $exception) {
             foreach ($storedPaths as $path) {
                 Storage::disk('local')->delete($path);
+            }
+            if ($exception instanceof HttpExceptionInterface) {
+                throw $exception;
             }
             report($exception);
 
@@ -494,26 +514,42 @@ class ThinkTankProcurementPlanController extends Controller
         abort_unless($item->isEditable(), 422, 'This item is locked while under review or after approval.');
 
         $data = $this->validateItem($request, false);
-        $previousStatus = $item->status;
         $storedPaths = [];
 
         try {
-            DB::transaction(function () use ($request, $plan, $item, $data, $previousStatus, &$storedPaths): void {
-                $item->update([
+            $item = DB::transaction(function () use ($request, $plan, $item, $member, $data, &$storedPaths): ThinkTankProcurementItem {
+                $lockedPlan = $this->lockPlanForMutation($plan, $member);
+                $lockedItem = $this->lockItemForMutation($lockedPlan, $item);
+                abort_unless($lockedItem->isEditable(), 422, 'This item is locked while under review or after approval.');
+
+                $previousStatus = $lockedItem->status;
+                $lockedItem->update([
                     ...$this->itemAttributes($data),
-                    'currency' => Str::upper($data['currency'] ?? $plan->currency),
+                    'currency' => Str::upper($data['currency'] ?? $lockedPlan->currency),
                     'status' => ThinkTankProcurementItem::STATUS_DRAFT,
                     'source_activity_status' => ThinkTankProcurementItem::ACTIVITY_STATUS_DRAFT,
                     'review_reason' => null,
                     'updated_by' => $request->user()->id,
                 ]);
-                $this->storeItemDocuments($request, $item, $storedPaths);
-                $this->workflow->syncPlanBudget($plan);
-                $this->workflow->event($plan, $item, $request->user(), 'item_corrected', $previousStatus, $item->status);
+                $this->storeItemDocuments($request, $lockedItem, $storedPaths);
+                $this->workflow->syncPlanBudget($lockedPlan);
+                $this->workflow->event(
+                    $lockedPlan,
+                    $lockedItem,
+                    $request->user(),
+                    'item_corrected',
+                    $previousStatus,
+                    $lockedItem->status
+                );
+
+                return $lockedItem;
             });
         } catch (Throwable $exception) {
             foreach ($storedPaths as $path) {
                 Storage::disk('local')->delete($path);
+            }
+            if ($exception instanceof HttpExceptionInterface) {
+                throw $exception;
             }
             report($exception);
 
@@ -527,15 +563,24 @@ class ThinkTankProcurementPlanController extends Controller
     {
         $member = $this->memberForPlan($request, $plan);
         $this->assertItemBelongsToPlan($item, $plan, $member);
-        abort_unless($item->isEditable(), 422, 'This item cannot be removed in its current state.');
 
-        $payload = ['item_code' => $item->item_code, 'title' => $item->title, 'status' => $item->status];
-        DB::transaction(function () use ($request, $plan, $item, $payload): void {
-            $item->delete();
-            $this->workflow->syncPlanBudget($plan);
-            $this->workflow->event($plan, null, $request->user(), 'item_removed', null, null, null, $payload);
+        $deletedItem = DB::transaction(function () use ($request, $plan, $item, $member): ThinkTankProcurementItem {
+            $lockedPlan = $this->lockPlanForMutation($plan, $member);
+            $lockedItem = $this->lockItemForMutation($lockedPlan, $item);
+            abort_unless($lockedItem->isEditable(), 422, 'This item cannot be removed in its current state.');
+
+            $payload = [
+                'item_code' => $lockedItem->item_code,
+                'title' => $lockedItem->title,
+                'status' => $lockedItem->status,
+            ];
+            $lockedItem->delete();
+            $this->workflow->syncPlanBudget($lockedPlan);
+            $this->workflow->event($lockedPlan, null, $request->user(), 'item_removed', null, null, null, $payload);
+
+            return $lockedItem;
         });
-        Storage::disk('local')->deleteDirectory("think-tank-procurement/{$plan->id}/{$item->id}");
+        Storage::disk('local')->deleteDirectory("think-tank-procurement/{$plan->id}/{$deletedItem->id}");
 
         return back()->with('success', 'Procurement item removed from the plan.');
     }
@@ -549,17 +594,48 @@ class ThinkTankProcurementPlanController extends Controller
         $member = $this->memberForPlan($request, $plan);
         $this->assertItemBelongsToPlan($item, $plan, $member);
         abort_unless((string) $document->item_id === (string) $item->id, 404);
-        abort_unless($item->isEditable(), 422, 'Documents are locked in the current workflow state.');
 
-        if ($document->document_type === 'tor' && $item->documents()->where('document_type', 'tor')->count() <= 1) {
-            throw ValidationException::withMessages(['document' => 'Upload a replacement TOR before removing the current one.']);
-        }
+        $path = DB::transaction(function () use ($request, $plan, $item, $document, $member): string {
+            $lockedPlan = $this->lockPlanForMutation($plan, $member);
+            $lockedItem = $this->lockItemForMutation($lockedPlan, $item);
+            abort_unless($lockedItem->isEditable(), 422, 'Documents are locked in the current workflow state.');
 
-        Storage::disk('local')->delete($document->file_path);
-        $document->delete();
-        $this->workflow->event($plan, $item, $request->user(), 'item_document_removed', $item->status, $item->status, null, [
-            'document_name' => $document->document_name,
-        ]);
+            // Lock every document for this item in a deterministic order so two
+            // concurrent TOR deletions cannot both pass the last-TOR check.
+            $lockedDocuments = ThinkTankProcurementDocument::query()
+                ->where('item_id', $lockedItem->id)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+            $lockedDocument = $lockedDocuments->first(
+                fn (ThinkTankProcurementDocument $candidate): bool => (string) $candidate->id === (string) $document->id
+            );
+            abort_unless($lockedDocument, 404);
+
+            $safePath = $this->procurementDocumentPath($lockedPlan, $lockedItem, $lockedDocument);
+            if ($lockedDocument->document_type === 'tor'
+                && $lockedDocuments->where('document_type', 'tor')->count() <= 1) {
+                throw ValidationException::withMessages([
+                    'document' => 'Upload a replacement TOR before removing the current one.',
+                ]);
+            }
+
+            $documentName = $lockedDocument->document_name;
+            $lockedDocument->delete();
+            $this->workflow->event(
+                $lockedPlan,
+                $lockedItem,
+                $request->user(),
+                'item_document_removed',
+                $lockedItem->status,
+                $lockedItem->status,
+                null,
+                ['document_name' => $documentName]
+            );
+
+            return $safePath;
+        });
+        Storage::disk('local')->delete($path);
 
         return back()->with('success', 'Document removed.');
     }
@@ -573,13 +649,39 @@ class ThinkTankProcurementPlanController extends Controller
         $member = $this->memberForPlan($request, $plan);
         $this->assertItemBelongsToPlan($item, $plan, $member);
         abort_unless((string) $document->item_id === (string) $item->id, 404);
-        abort_unless(str_starts_with($document->file_path, "think-tank-procurement/{$plan->id}/{$item->id}/"), 404);
-        abort_unless(Storage::disk('local')->exists($document->file_path), 404, 'Document file not found.');
+        $path = $this->procurementDocumentPath($plan, $item, $document);
+        $disk = Storage::disk('local');
+        abort_unless($disk->exists($path), 404, 'Document file not found.');
 
-        return Storage::disk('local')->download($document->file_path, $document->original_name, [
-            'Content-Type' => $document->mime_type ?: 'application/octet-stream',
-            'X-Content-Type-Options' => 'nosniff',
-        ]);
+        $diskRoot = realpath($disk->path(''));
+        $absolutePath = realpath($disk->path($path));
+        abort_unless(
+            is_string($diskRoot)
+                && is_string($absolutePath)
+                && is_file($absolutePath)
+                && $this->pathIsInside($absolutePath, $diskRoot),
+            404,
+            'Document file not found.'
+        );
+
+        $response = response()->download(
+            $absolutePath,
+            $this->safeDocumentDownloadName($document),
+            [
+                'Content-Type' => 'application/octet-stream',
+                'X-Content-Type-Options' => 'nosniff',
+                'Content-Security-Policy' => "default-src 'none'; sandbox",
+            ],
+            'attachment'
+        );
+        $response->setPrivate();
+        $response->setMaxAge(0);
+        $response->headers->addCacheControlDirective('no-store');
+        $response->headers->addCacheControlDirective('no-cache');
+        $response->headers->set('Pragma', 'no-cache');
+        $response->headers->set('Expires', '0');
+
+        return $response;
     }
 
     public function submit(Request $request, ThinkTankProcurementPlan $plan)
@@ -593,6 +695,11 @@ class ThinkTankProcurementPlanController extends Controller
 
     public function launch(Request $request, ThinkTankProcurementPlan $plan, ThinkTankProcurementItem $item)
     {
+        abort(
+            410,
+            'Direct one-step publication has been retired. Open Procurement Execution in the Think Tank portal to create a controlled draft, configure its application form and publish it after the readiness checks pass.'
+        );
+
         $member = $this->memberForPlan($request, $plan);
         $this->assertItemBelongsToPlan($item, $plan, $member);
         abort_unless($item->status === ThinkTankProcurementItem::STATUS_NO_OBJECTION, 422, 'World Bank no-objection is required before publication.');
@@ -647,19 +754,29 @@ class ThinkTankProcurementPlanController extends Controller
             }
 
             $procurement = DB::transaction(function () use ($request, $plan, $item, $member, $data, &$storedProcurementPaths, $storedCoverImagePath): Procurement {
+                $lockedPlan = $this->lockPlanForMutation($plan, $member);
+                $lockedItem = $this->lockItemForMutation($lockedPlan, $item);
+                abort_unless(
+                    $lockedItem->status === ThinkTankProcurementItem::STATUS_NO_OBJECTION,
+                    422,
+                    'World Bank no-objection is required before publication.'
+                );
+                abort_if($lockedItem->procurement_id, 422, 'This item already has an execution opportunity.');
+                $lockedItem->load('documents');
+
                 $procurement = Procurement::create([
                     'consortium_id' => $member->consortium_id,
                     'think_tank_member_id' => $member->id,
-                    'think_tank_procurement_plan_id' => $plan->id,
+                    'think_tank_procurement_plan_id' => $lockedPlan->id,
                     'procurement_owner_type' => 'think_tank',
                     'oversight_status' => 'no_objection_obtained',
-                    'title' => $item->title,
-                    'reference_no' => $item->item_code,
-                    'description' => $item->description ?: $item->title,
-                    'fiscal_year' => preg_match('/\d{4}/', (string) $plan->fiscal_year, $yearMatch)
+                    'title' => $lockedItem->title,
+                    'reference_no' => $lockedItem->item_code,
+                    'description' => $lockedItem->description ?: $lockedItem->title,
+                    'fiscal_year' => preg_match('/\d{4}/', (string) $lockedPlan->fiscal_year, $yearMatch)
                         ? (int) $yearMatch[0]
                         : (int) now()->format('Y'),
-                    'estimated_budget' => $item->estimated_amount,
+                    'estimated_budget' => $lockedItem->estimated_amount,
                     'application_start_date' => $data['application_start_date'],
                     'application_end_date' => $data['application_end_date'],
                     'status' => 'published',
@@ -669,7 +786,7 @@ class ThinkTankProcurementPlanController extends Controller
                 ]);
 
                 $form = DynamicForm::create([
-                    'name' => $item->title.' Application Form',
+                    'name' => $lockedItem->title.' Application Form',
                     'applies_to' => 'procurement',
                     'status' => 'approved',
                     'is_active' => true,
@@ -707,7 +824,7 @@ class ThinkTankProcurementPlanController extends Controller
                     ]);
                 }
 
-                foreach ($item->documents->whereIn('document_type', ['tor', 'supporting']) as $sourceDocument) {
+                foreach ($lockedItem->documents->whereIn('document_type', ['tor', 'supporting']) as $sourceDocument) {
                     $extension = pathinfo($sourceDocument->original_name, PATHINFO_EXTENSION);
                     $targetPath = "procurements/{$procurement->id}/documents/".Str::uuid().($extension ? '.'.$extension : '');
                     if (! Storage::disk('local')->copy($sourceDocument->file_path, $targetPath)) {
@@ -721,17 +838,20 @@ class ThinkTankProcurementPlanController extends Controller
                         'file_path' => $targetPath,
                         'mime_type' => $sourceDocument->mime_type,
                         'file_size' => $sourceDocument->file_size,
+                        'audience' => $sourceDocument->document_type === 'tor'
+                            ? ProcurementDocument::AUDIENCE_BIDDER
+                            : ProcurementDocument::AUDIENCE_INTERNAL,
                         'uploaded_by' => $request->user()->id,
                     ]);
                 }
 
-                $item->update([
+                $lockedItem->update([
                     'procurement_id' => $procurement->id,
                     'status' => ThinkTankProcurementItem::STATUS_PUBLISHED,
                     'source_activity_status' => ThinkTankProcurementItem::ACTIVITY_STATUS_WORLD_BANK_APPROVED,
                     'updated_by' => $request->user()->id,
                 ]);
-                $this->workflow->event($plan, $item, $request->user(), 'item_execution_created', ThinkTankProcurementItem::STATUS_NO_OBJECTION, $item->status, null, [
+                $this->workflow->event($lockedPlan, $lockedItem, $request->user(), 'item_execution_created', ThinkTankProcurementItem::STATUS_NO_OBJECTION, $lockedItem->status, null, [
                     'procurement_id' => $procurement->id,
                     'published' => $procurement->status === 'published',
                 ]);
@@ -744,6 +864,9 @@ class ThinkTankProcurementPlanController extends Controller
             }
             if ($storedCoverImagePath) {
                 Storage::disk('public')->delete($storedCoverImagePath);
+            }
+            if ($exception instanceof HttpExceptionInterface) {
+                throw $exception;
             }
             report($exception);
 
@@ -762,15 +885,23 @@ class ThinkTankProcurementPlanController extends Controller
         $member = $this->memberForPlan($request, $plan);
         $this->assertItemBelongsToPlan($item, $plan, $member);
         $procurement = $item->procurement()->firstOrFail();
-        abort_unless($procurement->status === 'published', 422, 'Only a published procurement opportunity can be recalled.');
 
         $data = $request->validate([
             'recall_reason' => 'required|string|min:10|max:2000',
         ]);
 
-        DB::transaction(function () use ($request, $plan, $item, $procurement, $data, $reworkGuard): void {
+        DB::transaction(function () use ($request, $plan, $item, $member, $procurement, $data, $reworkGuard): void {
+            $lockedPlan = $this->lockPlanForMutation($plan, $member);
+            $lockedItem = $this->lockItemForMutation($lockedPlan, $item);
+            abort_unless(
+                $lockedItem->status === ThinkTankProcurementItem::STATUS_PUBLISHED
+                    && (string) $lockedItem->procurement_id === (string) $procurement->id,
+                422,
+                'This procurement item is no longer linked to the published opportunity.'
+            );
+
             $lockedProcurement = $reworkGuard->lockAndAssertNoPendingRework(
-                $procurement,
+                $lockedItem->procurement_id,
                 'Complete or resolve all pending evaluation rework before recalling this procurement publication.'
             );
 
@@ -792,8 +923,8 @@ class ThinkTankProcurementPlanController extends Controller
                 ]);
 
             $this->workflow->event(
-                $plan,
-                $item,
+                $lockedPlan,
+                $lockedItem,
                 $request->user(),
                 'item_publication_recalled',
                 'published',
@@ -822,16 +953,30 @@ class ThinkTankProcurementPlanController extends Controller
         $member = $this->memberForPlan($request, $plan);
         $this->assertItemBelongsToPlan($item, $plan, $member);
         $procurement = $item->procurement()->firstOrFail();
-        abort_unless($procurement->status === 'recalled', 422, 'Only a recalled procurement opportunity can be republished.');
 
         $data = $request->validate([
             'application_start_date' => 'required|date|after_or_equal:today',
             'application_end_date' => 'required|date|after_or_equal:application_start_date',
         ]);
 
-        DB::transaction(function () use ($request, $plan, $item, $procurement, $data): void {
-            $fromVersion = max(1, (int) $procurement->publication_version);
-            $procurement->update([
+        DB::transaction(function () use ($request, $plan, $item, $member, $procurement, $data): void {
+            $lockedPlan = $this->lockPlanForMutation($plan, $member);
+            $lockedItem = $this->lockItemForMutation($lockedPlan, $item);
+            abort_unless(
+                $lockedItem->status === ThinkTankProcurementItem::STATUS_PUBLISHED
+                    && (string) $lockedItem->procurement_id === (string) $procurement->id,
+                422,
+                'This procurement item is no longer linked to the recalled opportunity.'
+            );
+            $lockedProcurement = Procurement::query()
+                ->withTrashed()
+                ->whereKey($lockedItem->procurement_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            abort_unless($lockedProcurement->status === 'recalled', 422, 'Only a recalled procurement opportunity can be republished.');
+
+            $fromVersion = max(1, (int) $lockedProcurement->publication_version);
+            $lockedProcurement->update([
                 'status' => 'published',
                 'application_start_date' => $data['application_start_date'],
                 'application_end_date' => $data['application_end_date'],
@@ -840,15 +985,15 @@ class ThinkTankProcurementPlanController extends Controller
             ]);
 
             $this->workflow->event(
-                $plan,
-                $item,
+                $lockedPlan,
+                $lockedItem,
                 $request->user(),
                 'item_publication_republished',
                 'recalled',
                 'published',
-                $procurement->recall_reason,
+                $lockedProcurement->recall_reason,
                 [
-                    'procurement_id' => $procurement->id,
+                    'procurement_id' => $lockedProcurement->id,
                     'previous_publication_version' => $fromVersion,
                     'publication_version' => $fromVersion + 1,
                     'application_start_date' => $data['application_start_date'],
@@ -1062,6 +1207,93 @@ class ThinkTankProcurementPlanController extends Controller
         }
     }
 
+    /**
+     * Lock the current tenant-owned plan before any lifecycle mutation.
+     */
+    private function lockPlanForMutation(
+        ThinkTankProcurementPlan $plan,
+        ConsortiumThinkTank $member
+    ): ThinkTankProcurementPlan {
+        return ThinkTankProcurementPlan::query()
+            ->whereKey($plan->getKey())
+            ->where('think_tank_member_id', $member->getKey())
+            ->lockForUpdate()
+            ->firstOrFail();
+    }
+
+    /**
+     * Lock an item only through its already-locked parent plan.
+     */
+    private function lockItemForMutation(
+        ThinkTankProcurementPlan $plan,
+        ThinkTankProcurementItem $item
+    ): ThinkTankProcurementItem {
+        $lockedItem = ThinkTankProcurementItem::query()
+            ->where('plan_id', $plan->getKey())
+            ->whereKey($item->getKey())
+            ->lockForUpdate()
+            ->firstOrFail();
+        $lockedItem->setRelation('plan', $plan);
+
+        return $lockedItem;
+    }
+
+    /**
+     * Accept only canonical private paths inside this exact plan/item folder.
+     */
+    private function procurementDocumentPath(
+        ThinkTankProcurementPlan $plan,
+        ThinkTankProcurementItem $item,
+        ThinkTankProcurementDocument $document
+    ): string {
+        $path = str_replace('\\', '/', trim((string) $document->file_path));
+        $decodedPath = rawurldecode($path);
+        $segments = explode('/', $path);
+        $expectedPrefix = "think-tank-procurement/{$plan->id}/{$item->id}/";
+
+        abort_unless(
+            $path !== ''
+                && $decodedPath === $path
+                && ! str_contains($path, "\0")
+                && ! str_starts_with($path, '/')
+                && preg_match('/^[a-zA-Z]:\//', $path) !== 1
+                && ! str_contains($path, '://')
+                && ! collect($segments)->contains(
+                    fn (string $segment): bool => $segment === '' || $segment === '.' || $segment === '..'
+                )
+                && str_starts_with($path, $expectedPrefix)
+                && strlen($path) > strlen($expectedPrefix),
+            404,
+            'Document file not found.'
+        );
+
+        return $path;
+    }
+
+    private function pathIsInside(string $candidate, string $root): bool
+    {
+        $candidate = str_replace('\\', '/', $candidate);
+        $root = rtrim(str_replace('\\', '/', $root), '/');
+        if (PHP_OS_FAMILY === 'Windows') {
+            $candidate = Str::lower($candidate);
+            $root = Str::lower($root);
+        }
+
+        return str_starts_with($candidate, $root.'/');
+    }
+
+    private function safeDocumentDownloadName(ThinkTankProcurementDocument $document): string
+    {
+        $name = basename(str_replace('\\', '/', trim((string) $document->original_name)));
+        $name = preg_replace('/[\x00-\x1F\x7F]+/u', '', $name) ?? '';
+        $name = trim($name, " .\t\n\r\0\x0B");
+        if ($name === '' || $name === '.' || $name === '..') {
+            $name = 'procurement-document';
+        }
+
+        return mb_substr($name, 0, 180);
+    }
+
     private function defaultApplicationFields(): array
     {
         return [
@@ -1078,47 +1310,8 @@ class ThinkTankProcurementPlanController extends Controller
         string $event,
         bool $onlyActive = false
     ): int {
-        $procurement->loadMissing('thinkTankMember:id,name,logo_path');
-        $submissions = $procurement->submissions()
-            ->when($onlyActive, fn ($query) => $query->where('status', '!=', FormSubmission::STATUS_WITHDRAWN))
-            ->whereNotNull('submitted_by')
-            ->latest()
-            ->get()
-            ->unique(fn (FormSubmission $submission) => (string) $submission->submitted_by)
-            ->values();
-
-        if ($submissions->isEmpty()) {
-            return 0;
-        }
-
-        $vendors = User::query()
-            ->whereIn('id', $submissions->pluck('submitted_by')->filter()->all())
-            ->where('user_type', 'vendor')
-            ->get()
-            ->keyBy(fn (User $vendor) => (string) $vendor->id);
-        $queued = 0;
-
-        foreach ($submissions as $submission) {
-            $vendor = $vendors->get((string) $submission->submitted_by);
-            if (! $vendor?->email) {
-                continue;
-            }
-
-            try {
-                Mail::to($vendor->email)->queue(new VendorProcurementLifecycleMail(
-                    $procurement,
-                    $vendor,
-                    $submission,
-                    $event,
-                    $procurement->recall_reason,
-                ));
-                $queued++;
-            } catch (Throwable $exception) {
-                report($exception);
-            }
-        }
-
-        return $queued;
+        return app(ProcurementPublicationNotificationService::class)
+            ->queue($procurement, $event, $onlyActive);
     }
 
     private function applicationFieldTypes(): array

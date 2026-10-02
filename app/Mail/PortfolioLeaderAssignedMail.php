@@ -16,7 +16,6 @@ class PortfolioLeaderAssignedMail extends Mailable
         public User $user,
         public Sector $portfolio,
         public string $roleName,
-        public ?string $plainPassword,
         public string $loginUrl,
         public string $portfolioUrl
     ) {
@@ -30,7 +29,6 @@ class PortfolioLeaderAssignedMail extends Mailable
                 'user' => $this->user,
                 'portfolio' => $this->portfolio,
                 'roleName' => $this->roleName,
-                'plainPassword' => $this->plainPassword,
                 'loginUrl' => $this->loginUrl,
                 'portfolioUrl' => $this->portfolioUrl,
             ]);

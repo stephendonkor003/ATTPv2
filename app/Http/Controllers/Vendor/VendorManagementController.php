@@ -5,22 +5,18 @@ namespace App\Http\Controllers\Vendor;
 use App\Exports\VendorTemplateExport;
 use App\Http\Controllers\Controller;
 use App\Imports\VendorImport;
-use App\Mail\VendorAccountCreated;
 use App\Models\Program;
 use App\Models\SubActivity;
 use App\Models\User;
 use App\Models\VendorCategory;
+use App\Services\AccountSetupInvitationService;
 use App\Services\ThinkTank\ThinkTankUserManagementService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\Validators\ValidationException as ExcelValidationException;
-use Throwable;
 
 class VendorManagementController extends Controller
 {
@@ -122,12 +118,12 @@ class VendorManagementController extends Controller
                 ->with('success', 'Existing back-office user converted to a vendor account successfully. The user can sign in with their existing password.');
         }
 
-        $plainPassword = str()->random(12);
+        $invitations = app(AccountSetupInvitationService::class);
 
         $vendor = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
-            'password' => Hash::make($plainPassword),
+            'password' => $invitations->unknownPasswordHash(),
             'user_type' => 'vendor',
             'role_id' => null,
             'governance_node_id' => null,
@@ -137,13 +133,13 @@ class VendorManagementController extends Controller
         ]);
         $this->syncVendorAssignments($vendor, $assignmentRows);
 
-        $mailSent = $this->sendVendorMailSafely($vendor, $plainPassword);
+        $invitationSent = $invitations->send($vendor, AccountSetupInvitationService::PURPOSE_VENDOR);
 
         return redirect()
             ->route('vendors.index')
-            ->with('success', $mailSent
-                ? 'Vendor account created successfully.'
-                : "Vendor account created successfully, but email delivery failed. Temporary password: {$plainPassword}");
+            ->with('success', $invitationSent
+                ? 'Vendor account created successfully. A secure account setup link was sent.'
+                : 'Vendor account created successfully, but the secure setup link could not be delivered. Verify mail delivery and resend a password link.');
     }
 
     public function template()
@@ -428,29 +424,4 @@ class VendorManagementController extends Controller
         ];
     }
 
-    private function sendVendorMailSafely(User $vendor, string $plainPassword): bool
-    {
-        try {
-            Mail::to($vendor->email)->send(new VendorAccountCreated($vendor, $plainPassword));
-
-            return true;
-        } catch (Throwable $exception) {
-            Log::warning('Vendor account created email could not be sent.', [
-                'vendor_id' => $vendor->id,
-                'email' => $vendor->email,
-                'mailer' => config('mail.default'),
-                'error' => $exception->getMessage(),
-            ]);
-
-            if (app()->environment(['local', 'testing'])) {
-                Log::info('Local development temporary vendor password fallback.', [
-                    'vendor_id' => $vendor->id,
-                    'email' => $vendor->email,
-                    'temporary_password' => $plainPassword,
-                ]);
-            }
-
-            return false;
-        }
-    }
 }

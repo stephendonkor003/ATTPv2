@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Exceptions\ThinkTankApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Services\PendingLoginService;
 use App\Services\ThinkTank\ThinkTankAccountAccessService;
 use App\Services\ThinkTank\ThinkTankMfaService;
 use App\Services\ThinkTank\ThinkTankProductionSecurityService;
@@ -36,7 +37,7 @@ class AuthenticatedSessionController extends Controller
                 ->withErrors(['email' => trans('auth.failed')]);
         }
 
-        $request->authenticate();
+        $user = $request->credentialUser();
         $request->session()->regenerate();
         $request->session()->forget([
             'otp_verified',
@@ -44,11 +45,8 @@ class AuthenticatedSessionController extends Controller
             'otp_verified_user_id',
         ]);
 
-        $user = Auth::user();
-
         if ($user->user_type === 'vendor') {
             if ($user->is_blacklisted) {
-                Auth::guard('web')->logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
 
@@ -68,7 +66,6 @@ class AuthenticatedSessionController extends Controller
                 ]);
                 $user->refresh();
             } else {
-                Auth::guard('web')->logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
 
@@ -88,9 +85,7 @@ class AuthenticatedSessionController extends Controller
                 $sessions->assertProductionSecurityStores();
                 app(ThinkTankProductionSecurityService::class)->assertRuntimeConfiguration();
                 app(ThinkTankAccountAccessService::class)->membership($user);
-                $sessions->bindCurrentSession($user, $request);
             } catch (ThinkTankApiException) {
-                Auth::guard('web')->logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
 
@@ -99,32 +94,40 @@ class AuthenticatedSessionController extends Controller
             }
         }
 
-        // Check if user is a super admin (bypass all security checks)
-        if ($user->isSuperAdmin()) {
-            // Funding partners who are also super admins go to partner dashboard
-            if ($user->user_type === 'funding_partner' || $user->isFundingPartner()) {
-                return redirect()->intended(route('partner.dashboard', absolute: false));
+        // Every production account, including administrators and funding
+        // partners, must complete the session-bound email OTP challenge before
+        // Laravel creates an authenticated session or fires a login event.
+        if ($user->isThinkTankUser() || $user->requiresOtpVerification()) {
+            $challenge = $this->sendLoginOtp($request, $user);
+            if ($challenge === null) {
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                return redirect()->route('login')
+                    ->withErrors(['email' => 'The verification code could not be delivered. No session was created; please try again.']);
             }
 
-            return redirect()->intended(route('dashboard', absolute: false));
+            app(PendingLoginService::class)->begin(
+                $request,
+                $user,
+                $request->boolean('remember'),
+                $challenge['expires_at'],
+                PendingLoginService::PURPOSE_WEB,
+            );
+
+            return redirect()->route('security.otp.show')
+                ->with('otpSent', true);
         }
 
-        // Check if password change is required (first login or expired)
+        Auth::guard('web')->login($user, $request->boolean('remember'));
+        if ($user->isThinkTankUser()) {
+            app(ThinkTankSessionService::class)->bindCurrentSession($user, $request);
+        }
+
+        // Local development can explicitly disable OTP. Password changes still
+        // happen only after the local authenticated session is established.
         if ($user->mustChangePassword() || $user->isPasswordExpired()) {
             return redirect()->route('security.password.change');
-        }
-
-        // Generate and send OTP for non-admin users
-        if ($user->isThinkTankUser() || $user->requiresOtpVerification()) {
-            $otpSent = $this->sendLoginOtp($user, $request->session()->getId());
-            $redirect = redirect()->route('security.otp.show')
-                ->with('otpSent', $otpSent);
-
-            if (! $otpSent) {
-                $redirect->with('warning', 'The email service is currently unavailable. In local development, use the verification code shown below.');
-            }
-
-            return $redirect;
         }
 
         // Redirect funding partners to their portal
@@ -157,16 +160,14 @@ class AuthenticatedSessionController extends Controller
     /**
      * Generate and send OTP to the user's email.
      */
-    protected function sendLoginOtp($user, ?string $sessionId = null): bool
+    protected function sendLoginOtp(Request $request, $user): ?array
     {
         try {
-            app(ThinkTankMfaService::class)->send(request(), $user, true);
-
-            return true;
+            return app(ThinkTankMfaService::class)->send($request, $user, true);
         } catch (Throwable $exception) {
             report($exception);
 
-            return false;
+            return null;
         }
     }
 

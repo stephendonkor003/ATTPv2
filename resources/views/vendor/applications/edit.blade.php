@@ -38,6 +38,14 @@
                 @csrf
                 @method('PUT')
 
+                @if($form->fields->whereIn('field_type', \App\Support\DynamicProcurementFormCatalog::UPLOAD_TYPES)->isNotEmpty())
+                    <div class="alert alert-light border small" role="note">
+                        You may upload up to {{ \App\Support\DynamicProcurementFormCatalog::MAX_SUBMISSION_FILES }} files,
+                        with a combined maximum of {{ \App\Support\DynamicProcurementFormCatalog::MAX_SUBMISSION_UPLOAD_MB }} MB.
+                    </div>
+                @endif
+                @error('files')<div class="alert alert-danger" role="alert">{{ $message }}</div>@enderror
+
                 @if($isRecallResponse)
                     <div class="mb-4 p-3 rounded-3" style="background:#eef7fa;border:1px solid #cce1e8;">
                         <label class="form-label fw-semibold" for="vendor-response">Response to the recall note <span class="text-danger">*</span></label>
@@ -58,53 +66,84 @@
                             }
                             $options = $field->optionValues();
                             $configuration = (array) $field->validation_rules;
+                            $isIdentityField = in_array($field->field_key, ['official_name', 'official_email'], true);
                             $wide = in_array($field->field_type, ['textarea', 'radio', 'checkbox', 'boolean', 'file', 'image'], true);
-                            $acceptedFiles = $field->field_type === 'image'
-                                ? 'image/jpeg,image/png,image/webp'
-                                : collect((array) ($configuration['allowed_extensions'] ?? []))->map(fn($extension) => '.'.ltrim($extension, '.'))->implode(',');
+                            $safeExtensions = \App\Support\DynamicProcurementFormCatalog::extensionsFor($field->field_type);
+                            $configuredExtensions = array_values(array_intersect(
+                                array_map(fn($extension) => strtolower(ltrim(trim((string) $extension), '.')), (array) ($configuration['allowed_extensions'] ?? $safeExtensions)),
+                                $safeExtensions,
+                            ));
+                            $acceptedFiles = collect($configuredExtensions ?: $safeExtensions)->map(fn($extension) => '.'.$extension)->implode(',');
+                            $isGroupedChoice = in_array($field->field_type, ['radio', 'checkbox', 'boolean'], true);
+                            $storedFileAvailable = in_array($field->field_type, ['file', 'image'], true)
+                                && app(\App\Services\DynamicProcurementSubmissionFileService::class)->exists($storedValue);
+                            $fieldHelpId = 'vendor-field-'.$field->id.'-help';
+                            $fieldErrorId = 'vendor-field-'.$field->id.'-error';
+                            $fieldHasError = $errors->has($field->field_key) || $errors->has($field->field_key.'.*');
+                            $fieldHasHelp = filled($field->help_text)
+                                || $isIdentityField
+                                || in_array($field->field_type, ['multiselect', 'checkbox', 'file', 'image'], true);
+                            $fieldDescribedBy = collect([$fieldHasHelp ? $fieldHelpId : null, $fieldHasError ? $fieldErrorId : null])->filter()->implode(' ');
                         @endphp
 
                         <div class="{{ $wide ? 'col-12' : 'col-lg-6' }}">
+                            @if($isGroupedChoice)
+                            <fieldset class="border-0 p-0 m-0" @if($field->is_required) aria-required="true" @endif @if($fieldDescribedBy) aria-describedby="{{ $fieldDescribedBy }}" @endif @if($fieldHasError) aria-invalid="true" @endif>
+                                <legend class="form-label fw-semibold">
+                                    {{ $field->label }}
+                                    @if ($field->is_required)<span class="text-danger">*</span>@else<span class="text-muted small">(Optional)</span>@endif
+                                </legend>
+                            @else
                             <label class="form-label fw-semibold" for="vendor-field-{{ $field->id }}">
                                 {{ $field->label }}
                                 @if ($field->is_required)<span class="text-danger">*</span>@else<span class="text-muted small">(Optional)</span>@endif
                             </label>
+                            @endif
 
                             @if ($field->field_type === 'textarea')
-                                <textarea id="vendor-field-{{ $field->id }}" name="{{ $field->field_key }}" rows="5" class="form-control" placeholder="{{ $field->placeholder }}" @required($field->is_required)>{{ $oldValue }}</textarea>
+                                <textarea id="vendor-field-{{ $field->id }}" name="{{ $field->field_key }}" rows="5" class="form-control" placeholder="{{ $field->placeholder }}" @if($configuration['max_length'] ?? null) maxlength="{{ $configuration['max_length'] }}" @endif @if($fieldDescribedBy) aria-describedby="{{ $fieldDescribedBy }}" @endif @if($fieldHasError) aria-invalid="true" @endif @required($field->is_required)>{{ $oldValue }}</textarea>
                             @elseif (in_array($field->field_type, ['file', 'image'], true))
-                                <input id="vendor-field-{{ $field->id }}" type="file" name="{{ $field->field_key }}" class="form-control" @if($acceptedFiles) accept="{{ $acceptedFiles }}" @endif @required($field->is_required && !$storedValue)>
-                                @if ($storedValue)<div class="form-text text-success"><i class="feather-check-circle"></i> A file is stored. Select another file only to replace it.</div>@endif
+                                <input id="vendor-field-{{ $field->id }}" type="file" name="{{ $field->field_key }}" class="form-control" @if($acceptedFiles) accept="{{ $acceptedFiles }}" @endif @if($fieldDescribedBy) aria-describedby="{{ $fieldDescribedBy }}" @endif @if($fieldHasError) aria-invalid="true" @endif @required($field->is_required && !$storedFileAvailable)>
                             @elseif ($field->field_type === 'select')
-                                <select id="vendor-field-{{ $field->id }}" name="{{ $field->field_key }}" class="form-select" @required($field->is_required)>
+                                <select id="vendor-field-{{ $field->id }}" name="{{ $field->field_key }}" class="form-select" @if($fieldDescribedBy) aria-describedby="{{ $fieldDescribedBy }}" @endif @if($fieldHasError) aria-invalid="true" @endif @required($field->is_required)>
                                     <option value="">Choose one answer</option>
                                     @foreach ($options as $option)<option value="{{ $option }}" @selected((string) $oldValue === (string) $option)>{{ $option }}</option>@endforeach
                                 </select>
                             @elseif ($field->field_type === 'multiselect')
-                                <select id="vendor-field-{{ $field->id }}" name="{{ $field->field_key }}[]" class="form-select" multiple @required($field->is_required)>
+                                <select id="vendor-field-{{ $field->id }}" name="{{ $field->field_key }}[]" class="form-select" multiple @if($fieldDescribedBy) aria-describedby="{{ $fieldDescribedBy }}" @endif @if($fieldHasError) aria-invalid="true" @endif @required($field->is_required)>
                                     @foreach ($options as $option)<option value="{{ $option }}" @selected(is_array($oldValue) && in_array($option, $oldValue, true))>{{ $option }}</option>@endforeach
                                 </select>
-                                <div class="form-text">Choose one or more answers.</div>
                             @elseif ($field->field_type === 'radio')
                                 <div class="d-grid gap-2 rounded-3 border p-3" id="vendor-field-{{ $field->id }}">
                                     @foreach($options as $option)<label class="d-flex gap-2 align-items-center"><input type="radio" name="{{ $field->field_key }}" value="{{ $option }}" @checked((string) $oldValue === (string) $option) @required($field->is_required)><span>{{ $option }}</span></label>@endforeach
                                 </div>
                             @elseif ($field->field_type === 'checkbox')
-                                <div class="d-grid gap-2 rounded-3 border p-3" id="vendor-field-{{ $field->id }}">
+                                <div class="d-grid gap-2 rounded-3 border p-3" id="vendor-field-{{ $field->id }}" @if($field->is_required) data-required-checkbox-group @endif>
                                     @foreach($options as $option)<label class="d-flex gap-2 align-items-center"><input type="checkbox" name="{{ $field->field_key }}[]" value="{{ $option }}" @checked(is_array($oldValue) && in_array($option, $oldValue, true))><span>{{ $option }}</span></label>@endforeach
                                 </div>
-                                <div class="form-text">Choose one or more answers.</div>
                             @elseif ($field->field_type === 'boolean')
                                 <label class="d-flex gap-2 align-items-start rounded-3 border p-3" id="vendor-field-{{ $field->id }}"><input class="mt-1" type="checkbox" name="{{ $field->field_key }}" value="1" @checked($oldValue) @required($field->is_required)><span>{{ $field->placeholder ?: 'Yes, I confirm.' }}</span></label>
                             @elseif ($field->field_type === 'number')
-                                <input id="vendor-field-{{ $field->id }}" type="number" step="any" name="{{ $field->field_key }}" value="{{ $oldValue }}" class="form-control" placeholder="{{ $field->placeholder }}" @if(array_key_exists('min', $configuration)) min="{{ $configuration['min'] }}" @endif @if(array_key_exists('max', $configuration)) max="{{ $configuration['max'] }}" @endif @required($field->is_required)>
+                                <input id="vendor-field-{{ $field->id }}" type="number" step="any" name="{{ $field->field_key }}" value="{{ $oldValue }}" class="form-control" placeholder="{{ $field->placeholder }}" @if(array_key_exists('min', $configuration)) min="{{ $configuration['min'] }}" @endif @if(array_key_exists('max', $configuration)) max="{{ $configuration['max'] }}" @endif @if($fieldDescribedBy) aria-describedby="{{ $fieldDescribedBy }}" @endif @if($fieldHasError) aria-invalid="true" @endif @required($field->is_required)>
                             @else
-                                <input id="vendor-field-{{ $field->id }}" type="{{ $field->field_type }}" name="{{ $field->field_key }}" value="{{ $oldValue }}" class="form-control" placeholder="{{ $field->placeholder }}" @required($field->is_required)>
+                                <input id="vendor-field-{{ $field->id }}" type="{{ $field->field_type }}" name="{{ $field->field_key }}" value="{{ $oldValue }}" class="form-control" placeholder="{{ $field->placeholder }}" @if($configuration['max_length'] ?? null) maxlength="{{ $configuration['max_length'] }}" @endif @if($fieldDescribedBy) aria-describedby="{{ $fieldDescribedBy }}" @endif @if($fieldHasError) aria-invalid="true" @endif @readonly($isIdentityField) @required($field->is_required)>
                             @endif
 
-                            @if($field->help_text)<div class="form-text">{{ $field->help_text }}</div>@endif
-                            @error($field->field_key)<div class="text-danger small mt-1">{{ $message }}</div>@enderror
-                            @error($field->field_key.'.*')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                            @if($fieldHasHelp)<div id="{{ $fieldHelpId }}">
+                                @if($isIdentityField)<div class="form-text">This value comes from your signed-in vendor account and cannot be changed in an application.</div>@endif
+                                @if(in_array($field->field_type, ['multiselect', 'checkbox'], true))<div class="form-text">Choose one or more answers.</div>@endif
+                                @if(in_array($field->field_type, ['file', 'image'], true))
+                                    @if ($storedFileAvailable)<div class="form-text text-success"><i class="feather-check-circle"></i> A file is stored. Select another file only to replace it.</div>@elseif($storedValue)<div class="form-text text-danger">The previously stored file is unavailable. Upload a replacement before resubmitting.</div>@endif
+                                    @if(!empty($configuredExtensions))<div class="form-text">Accepted types: {{ collect($configuredExtensions)->map(fn($extension) => strtoupper($extension))->implode(', ') }}.</div>@endif
+                                    @if($configuration['max_file_size_mb'] ?? null)<div class="form-text">Maximum file size: {{ $configuration['max_file_size_mb'] }} MB.</div>@endif
+                                @endif
+                                @if($field->help_text)<div class="form-text">{{ $field->help_text }}</div>@endif
+                            </div>@endif
+                            @if($fieldHasError)<div id="{{ $fieldErrorId }}" class="text-danger small mt-1" role="alert">
+                                @error($field->field_key)<div>{{ $message }}</div>@enderror
+                                @error($field->field_key.'.*')<div>{{ $message }}</div>@enderror
+                            </div>@endif
+                            @if($isGroupedChoice)</fieldset>@endif
                         </div>
                     @endforeach
                 </div>
@@ -130,3 +169,7 @@
         </div>
     </details>
 @endsection
+
+@push('scripts')
+    @include('procurement.partials.required-checkbox-groups')
+@endpush

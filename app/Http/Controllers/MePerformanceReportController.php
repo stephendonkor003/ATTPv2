@@ -13,13 +13,14 @@ use App\Models\MeIndicatorAchievement;
 use App\Models\MeKnowledgeEvidenceItem;
 use App\Models\MePerformanceReport;
 use App\Models\MePerformanceReportDocument;
+use App\Models\MeReportingPeriod;
 use App\Models\MeRepositoryDocumentLink;
 use App\Models\MeRepositoryDocumentVersion;
-use App\Models\MeReportingPeriod;
-use App\Support\IndicatorReportingSchedule;
 use App\Services\IndicatorAggregationService;
 use App\Services\MeReportingNotificationService;
 use App\Services\MeRepositoryFolderService;
+use App\Support\IndicatorReportingSchedule;
+use App\Support\MePerformanceReportDocumentSafety;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -198,7 +199,7 @@ class MePerformanceReportController extends Controller
             });
         } catch (\Throwable $exception) {
             foreach ($storedPaths as $storedPath) {
-                Storage::disk('local')->delete($storedPath);
+                $this->deleteUnreferencedReportFile($report, $storedPath);
             }
 
             throw $exception;
@@ -212,7 +213,7 @@ class MePerformanceReportController extends Controller
     public function submit(Request $request, MePerformanceReport $report): RedirectResponse
     {
         $this->assertReportInScope($request, $report);
-        abort_unless($this->userMayAuthorReport($request, $report), 403, 'Only the assigned report author can submit this report.');
+        abort_unless($this->userMaySubmitReport($request, $report), 403, 'Only an assigned report submitter can submit this report.');
         if (! $report->isEditable()) {
             throw ValidationException::withMessages([
                 'report' => 'This report is not available for submission.',
@@ -459,9 +460,18 @@ class MePerformanceReportController extends Controller
     ) {
         $this->assertReportInScope($request, $report);
         abort_unless((string) $document->report_id === (string) $report->id, 404);
-        abort_unless(Storage::disk('local')->exists($document->file_path), 404);
+        $path = $this->safeReportDocumentPath($report, $document);
+        abort_unless($path !== null, 404);
 
-        return Storage::disk('local')->download($document->file_path, $document->original_filename);
+        return Storage::disk('local')->download(
+            $path,
+            MePerformanceReportDocumentSafety::safeDownloadName($document->original_filename, $path),
+            [
+                'Content-Type' => 'application/octet-stream',
+                'X-Content-Type-Options' => 'nosniff',
+                'Cache-Control' => 'private, no-store, max-age=0',
+            ]
+        );
     }
 
     public function destroyDocument(
@@ -478,18 +488,33 @@ class MePerformanceReportController extends Controller
             ]);
         }
 
-        $path = $document->file_path;
-        $repositoryItemId = $document->repository_item_id;
-        $document->delete();
-        if ($repositoryItemId && ! $report->documents()->where('repository_item_id', $repositoryItemId)->exists()) {
-            MeRepositoryDocumentLink::query()
-                ->where('repository_item_id', $repositoryItemId)
-                ->where('linkable_type', MePerformanceReport::class)
-                ->where('linkable_id', $report->id)
-                ->where('purpose', 'report_attachment')
-                ->delete();
-        } else {
-            Storage::disk('local')->delete($path);
+        $path = null;
+        $repositoryItemId = null;
+        DB::transaction(function () use ($report, $document, &$path, &$repositoryItemId): void {
+            $ownedDocument = MePerformanceReportDocument::query()
+                ->where('report_id', $report->id)
+                ->whereKey($document->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $path = MePerformanceReportDocumentSafety::normalizeRelativePath($ownedDocument->file_path);
+            $repositoryItemId = $ownedDocument->repository_item_id;
+            $ownedDocument->delete();
+
+            if ($repositoryItemId
+                && ! $report->documents()->where('repository_item_id', $repositoryItemId)->exists()) {
+                MeRepositoryDocumentLink::query()
+                    ->where('repository_item_id', $repositoryItemId)
+                    ->where('linkable_type', MePerformanceReport::class)
+                    ->where('linkable_id', $report->id)
+                    ->where('purpose', 'report_attachment')
+                    ->delete();
+            }
+        });
+
+        // Repository-backed documents are retained for their version and audit history.
+        // A legacy standalone path is removed only when no other database record references it.
+        if (! $repositoryItemId && $path !== null) {
+            DB::afterCommit(fn () => $this->deleteUnreferencedReportFile($report, $path));
         }
 
         return back()->with('success', 'Supporting document removed.');
@@ -527,7 +552,13 @@ class MePerformanceReportController extends Controller
         }
 
         $folder = app(MeRepositoryFolderService::class)->forReport($report, (string) $request->user()->id);
-        $path = $file->store('me/performance-reports/'.$report->id, 'local');
+        $storedPath = $file->store('me/performance-reports/'.$report->id, 'local');
+        $path = $this->safeOwnedReportFilePath($report, is_string($storedPath) ? $storedPath : null);
+        if ($path === null) {
+            throw ValidationException::withMessages([
+                'replacement_file' => 'The replacement could not be stored in the protected report directory.',
+            ]);
+        }
         try {
             DB::transaction(function () use ($request, $report, $document, $repositoryItem, $folder, $file, $path, $checksum, $validated): void {
                 if (! $repositoryItem) {
@@ -608,7 +639,7 @@ class MePerformanceReportController extends Controller
                 ], ['linked_by' => $request->user()->id]);
             });
         } catch (\Throwable $exception) {
-            Storage::disk('local')->delete($path);
+            $this->deleteUnreferencedReportFile($report, $path);
             throw $exception;
         }
 
@@ -787,6 +818,27 @@ class MePerformanceReportController extends Controller
             && ($user->can('me.data_entry.manage') || $user->can('me.configuration.manage'));
     }
 
+    protected function userMaySubmitReport(Request $request, MePerformanceReport $report): bool
+    {
+        $user = $request->user();
+        if (! $user) {
+            return false;
+        }
+        if ($user->isSuperAdmin() || $user->isAdmin()) {
+            return true;
+        }
+
+        if ($report->think_tank_member_id) {
+            return $user->isThinkTankUser()
+                && $user->canAccessThinkTankArea('me')
+                && $user->can('think_tank.me.reports.submit')
+                && (string) $user->resolvedThinkTankMembership()?->id === (string) $report->think_tank_member_id;
+        }
+
+        return (string) $report->created_by === (string) $user->id
+            && ($user->can('me.data_entry.manage') || $user->can('me.configuration.manage'));
+    }
+
     private function reportRules(bool $final): array
     {
         $required = $final ? 'required' : 'nullable';
@@ -861,7 +913,7 @@ class MePerformanceReportController extends Controller
                 ? round(($actual / $target) * 100, 2)
                 : null;
 
-            $indicatorResult = $reportResult->indicatorResult ?: new IndicatorResult();
+            $indicatorResult = $reportResult->indicatorResult ?: new IndicatorResult;
             $indicatorResult->fill([
                 'indicator_id' => $reportResult->indicator_id,
                 'reporting_period_id' => $report->reporting_period_id,
@@ -946,9 +998,23 @@ class MePerformanceReportController extends Controller
                 ->first();
 
             if ($repositoryItem) {
-                $path = $repositoryItem->file_path;
+                $path = $this->safeRepositoryFilePath($repositoryItem->file_path);
+                if ($path === null) {
+                    throw ValidationException::withMessages([
+                        'documents' => 'The matching repository file is missing or outside the protected M&E document directories.',
+                    ]);
+                }
             } else {
-                $path = $file->store('me/performance-reports/'.$report->id, 'local');
+                $storedPath = $file->store('me/performance-reports/'.$report->id, 'local');
+                $path = $this->safeOwnedReportFilePath(
+                    $report,
+                    is_string($storedPath) ? $storedPath : null
+                );
+                if ($path === null) {
+                    throw ValidationException::withMessages([
+                        'documents' => 'The supporting document could not be stored in the protected report directory.',
+                    ]);
+                }
                 $storedPaths[] = $path;
                 $repositoryItem = MeKnowledgeEvidenceItem::query()->create([
                     'portfolio_id' => $report->portfolio_id,
@@ -996,6 +1062,124 @@ class MePerformanceReportController extends Controller
                 'linked_by' => $request->user()->id,
             ]);
         }
+    }
+
+    private function safeReportDocumentPath(
+        MePerformanceReport $report,
+        MePerformanceReportDocument $document
+    ): ?string {
+        $path = MePerformanceReportDocumentSafety::normalizeRelativePath($document->file_path);
+        if ($path === null) {
+            return null;
+        }
+
+        $isOwnedReportPath = MePerformanceReportDocumentSafety::hasExpectedPrefix(
+            $path,
+            ['me/performance-reports/'.$report->id]
+        );
+        $isOwnedRepositoryPath = false;
+        if ($document->repository_item_id) {
+            $repositoryItem = MeKnowledgeEvidenceItem::query()
+                ->with('versions:id,repository_item_id,file_path')
+                ->find($document->repository_item_id);
+            if ($repositoryItem) {
+                $knownPaths = $repositoryItem->versions
+                    ->pluck('file_path')
+                    ->push($repositoryItem->file_path)
+                    ->map(fn ($knownPath) => MePerformanceReportDocumentSafety::normalizeRelativePath(
+                        is_string($knownPath) ? $knownPath : null
+                    ))
+                    ->filter()
+                    ->unique();
+                $isOwnedRepositoryPath = $knownPaths->contains($path)
+                    && MePerformanceReportDocumentSafety::hasExpectedPrefix($path, [
+                        'me/knowledge-evidence',
+                        'me/performance-reports',
+                    ]);
+            }
+        }
+
+        if (! $isOwnedReportPath && ! $isOwnedRepositoryPath) {
+            return null;
+        }
+
+        return $this->localPathIsContainedFile($path) ? $path : null;
+    }
+
+    private function safeOwnedReportFilePath(MePerformanceReport $report, ?string $path): ?string
+    {
+        $path = MePerformanceReportDocumentSafety::normalizeRelativePath($path);
+        if ($path === null
+            || ! MePerformanceReportDocumentSafety::hasExpectedPrefix(
+                $path,
+                ['me/performance-reports/'.$report->id]
+            )) {
+            return null;
+        }
+
+        return $this->localPathIsContainedFile($path) ? $path : null;
+    }
+
+    private function safeRepositoryFilePath(?string $path): ?string
+    {
+        $path = MePerformanceReportDocumentSafety::normalizeRelativePath($path);
+        if ($path === null
+            || ! MePerformanceReportDocumentSafety::hasExpectedPrefix($path, [
+                'me/knowledge-evidence',
+                'me/performance-reports',
+            ])) {
+            return null;
+        }
+
+        return $this->localPathIsContainedFile($path) ? $path : null;
+    }
+
+    private function localPathIsContainedFile(string $path): bool
+    {
+        $disk = Storage::disk('local');
+        if (! $disk->exists($path)) {
+            return false;
+        }
+
+        $root = realpath($disk->path(''));
+        $candidate = realpath($disk->path($path));
+
+        return $root !== false
+            && $candidate !== false
+            && is_file($candidate)
+            && MePerformanceReportDocumentSafety::isContainedPath($root, $candidate);
+    }
+
+    private function deleteUnreferencedReportFile(MePerformanceReport $report, ?string $path): void
+    {
+        $path = $this->safeOwnedReportFilePath($report, $path);
+        if ($path === null || $this->reportFilePathIsReferenced($path)) {
+            return;
+        }
+
+        // Re-check immediately before the irreversible operation in case a surrounding
+        // transaction has just rolled back or another report adopted the same path.
+        if (! $this->reportFilePathIsReferenced($path)) {
+            Storage::disk('local')->delete($path);
+        }
+    }
+
+    private function reportFilePathIsReferenced(string $path): bool
+    {
+        if (MePerformanceReportDocument::query()->where('file_path', $path)->exists()
+            || MeKnowledgeEvidenceItem::query()->where('file_path', $path)->exists()
+            || MeRepositoryDocumentVersion::query()->where('file_path', $path)->exists()) {
+            return true;
+        }
+
+        return MeRepositoryDocumentLink::query()
+            ->whereHas('repositoryItem', function ($repositoryItem) use ($path): void {
+                $repositoryItem->where(function ($repositoryPath) use ($path): void {
+                    $repositoryPath->where('file_path', $path)
+                        ->orWhereHas('versions', fn ($version) => $version->where('file_path', $path));
+                });
+            })
+            ->exists();
     }
 
     private function scopedForms(Request $request)

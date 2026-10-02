@@ -15,7 +15,6 @@ class ProgramTtlAssignedMail extends Mailable
     public function __construct(
         public User $user,
         public Program $program,
-        public ?string $plainPassword,
         public string $loginUrl,
         public string $programUrl
     ) {
@@ -28,7 +27,6 @@ class ProgramTtlAssignedMail extends Mailable
             ->with([
                 'user' => $this->user,
                 'program' => $this->program,
-                'plainPassword' => $this->plainPassword,
                 'loginUrl' => $this->loginUrl,
                 'programUrl' => $this->programUrl,
             ]);

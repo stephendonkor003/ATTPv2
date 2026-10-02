@@ -82,7 +82,16 @@ class DynamicForm extends BaseModel
 
     public function canEdit(): bool
     {
-        return !$this->hasSubmissions();
+        return ! $this->isThinkTankExecutionForm() && ! $this->hasSubmissions();
+    }
+
+    public function isThinkTankExecutionForm(): bool
+    {
+        if (blank($this->procurement_id)) {
+            return false;
+        }
+
+        return $this->procurement?->procurement_owner_type === 'think_tank';
     }
 
     public function hasSubmissions(): bool
@@ -147,6 +156,9 @@ class DynamicForm extends BaseModel
                     'field_type' => $field['field_type'],
                     'is_required' => $field['is_required'],
                     'options' => null,
+                    'help_text' => null,
+                    'placeholder' => null,
+                    'validation_rules' => null,
                     'sort_order' => $field['sort_order'],
                     'created_by' => $createdBy,
                 ]

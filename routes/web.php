@@ -102,7 +102,6 @@ use App\Http\Controllers\{
 	    TtlPortalController,
 	    ActivityController,
 	    SubActivityController,
-	    // AllocationController,
 	    AllocationSummaryController,
 	    BudgetAllocationController,
 	    BudgetCommitmentController,
@@ -440,10 +439,9 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])
                 Route::post('/', 'store')->name('store');
                 Route::get('/{user}', 'show')->name('show');
                 Route::put('/{user}', 'update')->name('update');
-                Route::post('/{user}/reset-password', 'resetPassword')->name('reset-password');
-                Route::post('/{user}/set-temporary-password', 'setTemporaryPassword')
-                    ->middleware('throttle:5,1,think-tank-system-password')
-                    ->name('set-temporary-password');
+                Route::post('/{user}/reset-password', 'resetPassword')
+                    ->middleware('throttle:5,1,think-tank-system-password-reset')
+                    ->name('reset-password');
             });
 
 
@@ -2492,7 +2490,7 @@ Route::prefix('procurement/submissions')
 
         // List submissions
         Route::get('/', [ProcurementSubmissionController::class, 'index'])
-            // ->middleware('can:procurement.view')
+            ->middleware('permission:forms.manage')
             ->name('procurement.submissions.index');
 
         Route::post('/screen-all', [ProcurementSubmissionController::class, 'screenAll'])
@@ -2513,11 +2511,12 @@ Route::prefix('procurement/submissions')
 
         // View submission details
         Route::get('/{submission}', [ProcurementSubmissionController::class, 'show'])
-            // ->middleware('can:procurement.view')
+            ->middleware('permission:forms.manage')
             ->name('procurement.submissions.show');
 
         // Secure download/stream of uploaded submission files (private storage)
         Route::get('/{submission}/values/{value}/download', [ProcurementSubmissionController::class, 'downloadValue'])
+            ->middleware('permission:forms.manage')
             ->name('procurement.submissions.values.download');
 });
 
@@ -3905,14 +3904,15 @@ Route::middleware(['auth'])
 */
 use App\Http\Controllers\Auth\SecurityController;
 
-Route::middleware(['auth'])->prefix('security')->name('security.')->group(function () {
+Route::prefix('security')->name('security.')->group(function () {
 
     // Force Password Change
     Route::get('/password/change', [SecurityController::class, 'showPasswordChangeForm'])
+        ->middleware('auth')
         ->name('password.change');
 
     Route::post('/password/change', [SecurityController::class, 'submitPasswordChange'])
-        ->middleware('throttle:10,1,legacy-password-change')
+        ->middleware(['auth', 'throttle:10,1,legacy-password-change'])
         ->name('password.submit');
 
     // OTP Verification
@@ -4326,6 +4326,20 @@ Route::middleware(['auth', 'think.tank', 'permission:think_tank.portal.access'])
 | ATTP Think Tank Procurement Oversight
 |--------------------------------------------------------------------------
 */
+Route::middleware([
+    'auth',
+    'not.funding.partner',
+    'permission:think_tank.procurement.review|think_tank.procurement.step|procurement.view_all|procurement.manage_all',
+])
+    ->prefix('think-tank-procurement/worksheet')
+    ->name('think-tank-procurement.worksheet.')
+    ->controller(\App\Http\Controllers\AdminThinkTankProcurementWorksheetController::class)
+    ->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::get('/plans/{plan}/items/{item}', 'show')->name('show');
+        Route::get('/plans/{plan}/items/{item}/pdf', 'pdf')->name('pdf');
+    });
+
 Route::middleware(['auth', 'not.funding.partner'])
     ->prefix('think-tank-procurement')
     ->name('think-tank-procurement.')
@@ -4335,7 +4349,7 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->middleware('permission:think_tank.procurement.review|procurement.view_all|procurement.manage_all')
             ->name('index');
         Route::get('/reports', 'reports')
-            ->middleware('permission:think_tank.procurement.reports|procurement.view_all|procurement.manage_all')
+            ->middleware('permission:think_tank.procurement.reports|think_tank.procurement.step|procurement.view_all|procurement.manage_all')
             ->name('reports');
         Route::get('/reports/export/pdf', 'exportReportPdf')
             ->middleware('permission:think_tank.procurement.reports|procurement.view_all|procurement.manage_all')
@@ -4356,6 +4370,6 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->middleware('permission:think_tank.procurement.step|procurement.manage_all')
             ->name('items.no-objection');
         Route::get('/plans/{plan}/items/{item}/documents/{document}', 'downloadDocument')
-            ->middleware('permission:think_tank.procurement.review|procurement.view_all|procurement.manage_all')
+            ->middleware('permission:think_tank.procurement.review|think_tank.procurement.step|procurement.view_all|procurement.manage_all')
             ->name('documents.download');
     });

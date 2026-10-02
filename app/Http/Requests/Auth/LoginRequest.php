@@ -2,7 +2,10 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\User;
 use Closure;
+use Illuminate\Auth\Events\Attempting;
+use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
@@ -42,10 +45,25 @@ class LoginRequest extends FormRequest
      */
     public function authenticate(): void
     {
+        $user = $this->credentialUser();
+        Auth::guard('web')->login($user, $this->boolean('remember'));
+    }
+
+    /**
+     * Validate the password without creating an authenticated session. This
+     * lets the controller complete email OTP before firing the login event.
+     */
+    public function credentialUser(): User
+    {
         $this->ensureIsNotRateLimited();
+        $credentials = $this->only('email', 'password');
+        $guard = Auth::guard('web');
+        $provider = $guard->getProvider();
+        event(new Attempting('web', $credentials, $this->boolean('remember')));
 
         try {
-            $authenticated = Auth::attempt($this->only('email', 'password'), $this->boolean('remember'));
+            $authenticated = $guard->validate($credentials);
+            $user = $guard->getLastAttempted();
         } catch (RuntimeException $exception) {
             if (! str_contains($exception->getMessage(), 'does not use the Bcrypt algorithm')) {
                 throw $exception;
@@ -57,9 +75,11 @@ class LoginRequest extends FormRequest
             ]);
 
             $authenticated = false;
+            $user = null;
         }
 
         if (! $authenticated) {
+            event(new Failed('web', $user, $credentials));
             RateLimiter::hit($this->throttleKey());
             RateLimiter::hit(
                 $this->accountThrottleKey(),
@@ -75,9 +95,15 @@ class LoginRequest extends FormRequest
 
         // Think Tank failures remain account-limited until the complete MFA
         // ceremony succeeds. Other legacy account types retain prior behavior.
-        if (! Auth::user()?->isThinkTankUser()) {
+        if (! $user->isThinkTankUser()) {
             RateLimiter::clear($this->accountThrottleKey());
         }
+
+        if ((bool) config('hashing.rehash_on_login', true)) {
+            $provider->rehashPasswordIfRequired($user, $credentials);
+        }
+
+        return $user;
     }
 
     /**

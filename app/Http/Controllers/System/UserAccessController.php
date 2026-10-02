@@ -3,8 +3,6 @@
 namespace App\Http\Controllers\System;
 
 use App\Http\Controllers\Controller;
-use App\Mail\UserAccountCreated;
-use App\Mail\VendorAccountCreated;
 use App\Models\AuMemberState;
 use App\Models\GovernanceNode;
 use App\Models\GovernanceReportingLine;
@@ -13,12 +11,11 @@ use App\Models\Role;
 use App\Models\User;
 use App\Notifications\ApplicationPasswordResetNotification;
 use App\Models\VendorCategory;
+use App\Services\AccountSetupInvitationService;
 use App\Services\ThinkTank\ThinkTankUserManagementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -158,12 +155,12 @@ class UserAccessController extends Controller
                 ->withInput();
         }
 
-        $plainPassword = str()->random(10);
+        $invitations = app(AccountSetupInvitationService::class);
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => Hash::make($plainPassword),
+            'password' => $invitations->unknownPasswordHash(),
             'role_id' => $isVendor ? null : $request->role_id,
             'governance_node_id' => $isVendor ? null : $request->input('governance_node_id'),
             'member_state_id' => $validated['user_type'] === 'member_state' ? $request->input('member_state_id') : null,
@@ -172,15 +169,11 @@ class UserAccessController extends Controller
             'must_change_password' => true,
         ]);
 
-        $mailSent = $this->sendUserMailSafely(
+        $invitationSent = $invitations->send(
             $user,
             $isVendor
-                ? new VendorAccountCreated($user, $plainPassword)
-                : new UserAccountCreated($user, $plainPassword),
-            $isVendor
-                ? 'Vendor account created email could not be sent.'
-                : 'User account created email could not be sent.',
-            $plainPassword
+                ? AccountSetupInvitationService::PURPOSE_VENDOR
+                : AccountSetupInvitationService::PURPOSE_STAFF,
         );
 
         $redirectRoute = $isVendor && $request->user()?->can('vendor.manage')
@@ -189,9 +182,12 @@ class UserAccessController extends Controller
 
         return redirect()
             ->route($redirectRoute)
-            ->with('success', $mailSent
-                ? ($isVendor ? 'Vendor account created successfully.' : 'User account created successfully.')
-                : (($isVendor ? 'Vendor account created successfully' : 'User account created successfully').", but email delivery failed. Temporary password: {$plainPassword}"));
+            ->with('success', $invitationSent
+                ? ($isVendor
+                    ? 'Vendor account created successfully. A secure account setup link was sent.'
+                    : 'User account created successfully. A secure account setup link was sent.')
+                : (($isVendor ? 'Vendor account created successfully' : 'User account created successfully')
+                    .', but the secure setup link could not be delivered. Verify mail delivery and resend a password link.'));
     }
 
     /* ======================================================
@@ -308,7 +304,7 @@ class UserAccessController extends Controller
     }
 
     /* ======================================================
-     | RESET PASSWORD (EMAIL NEW PASSWORD)
+     | RESET PASSWORD (SECURE SINGLE-USE LINK)
      ====================================================== */
     public function resetPassword(User $user)
     {
@@ -638,29 +634,4 @@ class UserAccessController extends Controller
         return array_keys($seen);
     }
 
-    private function sendUserMailSafely(User $user, $mail, string $logMessage, string $plainPassword): bool
-    {
-        try {
-            Mail::to($user->email)->send($mail);
-
-            return true;
-        } catch (Throwable $exception) {
-            Log::warning($logMessage, [
-                'user_id' => $user->id,
-                'email' => $user->email,
-                'mailer' => config('mail.default'),
-                'error' => $exception->getMessage(),
-            ]);
-
-            if (app()->environment(['local', 'testing'])) {
-                Log::info('Local development temporary user password fallback.', [
-                    'user_id' => $user->id,
-                    'email' => $user->email,
-                    'temporary_password' => $plainPassword,
-                ]);
-            }
-
-            return false;
-        }
-    }
 }

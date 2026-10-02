@@ -15,6 +15,7 @@ use App\Models\ThinkTankProcurementPlan;
 use App\Models\ThinkTankResearchOutput;
 use App\Models\User;
 use App\Models\UserLoginOtp;
+use App\Services\ThinkTank\ThinkTankSessionService;
 use Database\Seeders\ConsortiumOperationsPermissionsSeeder;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Testing\Concerns\InteractsWithExceptionHandling;
@@ -22,6 +23,7 @@ use Illuminate\Foundation\Testing\Concerns\InteractsWithAuthentication;
 use Illuminate\Foundation\Testing\Concerns\MakesHttpRequests;
 use Illuminate\Foundation\Testing\Concerns\InteractsWithSession;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -65,11 +67,16 @@ class ThinkTankPortalSmoke
         try {
             $data = $this->prepareData();
 
-            $this->postWithCsrf('/login', [
+            $loginResponse = $this->postWithCsrf('/login', [
                 'email' => $data['thinkTankUser']->email,
                 'password' => 'Password123!',
-            ])->assertRedirect(route('security.otp.show'));
-
+            ]);
+            $loginResponse->assertRedirect(route('security.otp.show'));
+            $this->assertTrue(! auth('web')->check(), 'Password validation created an authenticated session before OTP.');
+            $this->assertTrue(
+                $loginResponse->getSession()->has('security.pending_login.user_id'),
+                'Password validation created neither a pending OTP login nor a safe unauthenticated state.'
+            );
             $otp = UserLoginOtp::where('user_id', $data['thinkTankUser']->id)->latest()->first();
             $this->assertTrue((bool) $otp, 'Think tank login did not generate an OTP.');
 
@@ -87,7 +94,7 @@ class ThinkTankPortalSmoke
 
             // Research is retained as a Secretariat-only legacy workflow. Keep
             // its end-to-end coverage through the System Admin preview path.
-            $this->asAdmin($data['adminUser'])
+            $researchResponse = $this->asAdmin($data['adminUser'])
                 ->postWithCsrf(route('think-tank.research.store'), [
                     'think_tank_member_id' => $data['member']->id,
                     'title' => 'E2E Agricultural Policy Research ' . Str::random(5),
@@ -116,8 +123,10 @@ class ThinkTankPortalSmoke
                     ],
                     'qasc_author_signature' => UploadedFile::fake()->image('author-signature.png', 160, 60),
                     'qasc_think_tank_signature' => UploadedFile::fake()->image('think-tank-signature.png', 160, 60),
-                ])
-                ->assertRedirect();
+                ]);
+            $researchResponse
+                ->assertRedirect()
+                ->assertSessionHasNoErrors();
 
             $this->assertTrue(
                 ThinkTankResearchOutput::where('think_tank_member_id', $data['member']->id)->exists(),
@@ -141,7 +150,7 @@ class ThinkTankPortalSmoke
             $this->asThinkTank($data['thinkTankUser'])
                 ->get(route('think-tank.procurement-plans'))
                 ->assertOk()
-                ->assertSee('Procurement plans')
+                ->assertSee('Procurement Plans')
                 ->assertSee($plan->title);
 
             // Public opportunities and evaluations are no longer part of the
@@ -237,7 +246,7 @@ class ThinkTankPortalSmoke
             $this->asAdmin($data['adminUser'])
                 ->get(route('consortium-operations.index'))
                 ->assertOk()
-                ->assertSee('Graphical Components')
+                ->assertSee('Advanced Comparison')
                 ->assertSee('Comparison Selector')
                 ->assertSee('Selection style')
                 ->assertSee('Records to compare')
@@ -325,11 +334,10 @@ class ThinkTankPortalSmoke
             $this->asAdmin($data['adminUser'])
                 ->get(route('think-tank.upload-report-finding', ['think_tank_member_id' => $data['member']->id]))
                 ->assertOk()
-                ->assertSee('Upload Report and Finding')
-                ->assertSee('Upload Reports')
-                ->assertSee('Upload Research Finding')
-                ->assertSee('Annex B: ATTP Quality Assurance Self-Certification')
-                ->assertSee('Submit Upload');
+                ->assertSee('Upload an activity report')
+                ->assertSee('Report files')
+                ->assertSee('Recent uploads')
+                ->assertSee('Submit report');
 
             $this->asAdmin($data['adminUser'])
                 ->get(route('think-tank.reports.download', ['think_tank_member_id' => $data['member']->id]))
@@ -485,10 +493,17 @@ class ThinkTankPortalSmoke
 
     private function asThinkTank(User $user): self
     {
-        $this->actingAs($user)->withSession([
+        $this->actingAs($user);
+        $session = $this->app->make('session.store');
+        $request = Request::create('/');
+        $request->setLaravelSession($session);
+        app(ThinkTankSessionService::class)->bindCurrentSession($user, $request);
+
+        $this->withSession([
             'otp_verified' => true,
             'otp_verified_user_id' => (string) $user->id,
             'otp_verified_at' => now()->toIso8601String(),
+            'think_tank_security_stamp' => $session->get('think_tank_security_stamp'),
         ]);
 
         return $this;
@@ -505,6 +520,11 @@ class ThinkTankPortalSmoke
     private function asAdmin(User $user): self
     {
         $this->actingAs($user);
+        $this->withSession([
+            'otp_verified' => true,
+            'otp_verified_user_id' => (string) $user->id,
+            'otp_verified_at' => now()->toIso8601String(),
+        ]);
 
         return $this;
     }
@@ -512,6 +532,11 @@ class ThinkTankPortalSmoke
     private function asPartner(User $user): self
     {
         $this->actingAs($user);
+        $this->withSession([
+            'otp_verified' => true,
+            'otp_verified_user_id' => (string) $user->id,
+            'otp_verified_at' => now()->toIso8601String(),
+        ]);
 
         return $this;
     }

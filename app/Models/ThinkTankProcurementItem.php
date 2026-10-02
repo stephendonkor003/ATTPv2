@@ -8,16 +8,25 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class ThinkTankProcurementItem extends BaseModel
 {
     public const STATUS_DRAFT = 'draft';
+
     public const STATUS_SUBMITTED = 'submitted';
+
     public const STATUS_REVISION_REQUESTED = 'revision_requested';
+
     public const STATUS_REJECTED = 'rejected';
+
     public const STATUS_APPROVED = 'approved';
+
     public const STATUS_NO_OBJECTION = 'no_objection_obtained';
+
     public const STATUS_PUBLISHED = 'published';
 
     public const ACTIVITY_STATUS_DRAFT = 'Draft';
+
     public const ACTIVITY_STATUS_SUBMITTED = 'Submitted';
+
     public const ACTIVITY_STATUS_ATTP_APPROVED = 'Approved by ATTP Secretariat';
+
     public const ACTIVITY_STATUS_WORLD_BANK_APPROVED = 'Approved by World Bank — No Objection';
 
     protected $table = 'attp_think_tank_procurement_items';
@@ -34,6 +43,8 @@ class ThinkTankProcurementItem extends BaseModel
         'no_objection_date', 'no_objection_notes', 'no_objection_by',
         'no_objection_recorded_at', 'procurement_id', 'source_file', 'source_sheet',
         'source_row', 'source_payload', 'planned_milestones', 'created_by', 'updated_by',
+        'limited_selection_justification', 'budget_reference', 'bank_comment',
+        'action_taken', 'portal_lock_version',
     ];
 
     protected $casts = [
@@ -48,6 +59,7 @@ class ThinkTankProcurementItem extends BaseModel
         'no_objection_recorded_at' => 'datetime',
         'source_payload' => 'array',
         'planned_milestones' => 'array',
+        'portal_lock_version' => 'integer',
     ];
 
     public function plan(): BelongsTo
@@ -73,6 +85,11 @@ class ThinkTankProcurementItem extends BaseModel
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    public function noObjectionRecorder(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'no_objection_by');
     }
 
     public function hasTermsOfReference(): bool

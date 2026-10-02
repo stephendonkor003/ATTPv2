@@ -104,7 +104,7 @@ class NewPasswordController extends Controller
         if (! $this->passwordResetTokensTableExists()) {
             $this->logPasswordResetFailure('Password reset token table is missing.');
 
-            return $this->temporaryPasswordResetFailure($request);
+            return $this->passwordResetUnavailable($request);
         }
 
         try {
@@ -164,9 +164,31 @@ class NewPasswordController extends Controller
                             );
                         });
                     } else {
-                        $this->completeStandardPasswordReset($user, $password);
+                        DB::transaction(function () use ($broker, $password, $request, $user): void {
+                            $lockedUser = User::query()
+                                ->whereKey($user->getKey())
+                                ->lockForUpdate()
+                                ->firstOrFail();
+
+                            // Standard setup/reset links use the same in-lock
+                            // consume-before-save rule as Think Tank links. Two
+                            // concurrent submissions cannot both replace the
+                            // password with one token.
+                            if (! $broker->tokenExists($lockedUser, $request->string('token')->toString())) {
+                                throw ValidationException::withMessages([
+                                    'token' => ['This password reset link is invalid or has expired.'],
+                                ]);
+                            }
+
+                            $this->completeStandardPasswordReset($lockedUser, $password);
+                            $sessions = app(ThinkTankSessionService::class);
+                            $sessions->invalidateMfa($lockedUser);
+                            $sessions->revokeAllSessions($lockedUser);
+                            $broker->deleteToken($lockedUser);
+                        });
                     }
 
+                    $user->refresh();
                     event(new PasswordReset($user));
                 }
             );
@@ -175,11 +197,11 @@ class NewPasswordController extends Controller
         } catch (QueryException $exception) {
             $this->logPasswordResetFailure('Password reset database failure.', $exception);
 
-            return $this->temporaryPasswordResetFailure($request);
+            return $this->passwordResetUnavailable($request);
         } catch (Throwable $exception) {
             $this->logPasswordResetFailure('Password reset failure.', $exception);
 
-            return $this->temporaryPasswordResetFailure($request);
+            return $this->passwordResetUnavailable($request);
         }
 
         // If the password was successfully reset, we will redirect the user back to
@@ -208,7 +230,7 @@ class NewPasswordController extends Controller
         }
     }
 
-    private function temporaryPasswordResetFailure(Request $request): RedirectResponse
+    private function passwordResetUnavailable(Request $request): RedirectResponse
     {
         return back()
             ->withInput($request->only('email'))
@@ -221,7 +243,9 @@ class NewPasswordController extends Controller
     {
         $user->forceFill([
             'password' => $password,
-            'remember_token' => Str::random(60),
+            'must_change_password' => false,
+            'password_changed_at' => now(),
+            'otp_verified_at' => null,
             // A valid, single-use token delivered to this mailbox proves the
             // same ownership as the separate verification-email ceremony.
             'email_verified_at' => $user->email_verified_at ?: now(),

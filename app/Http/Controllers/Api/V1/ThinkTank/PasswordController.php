@@ -9,7 +9,6 @@ use App\Services\ThinkTank\ThinkTankAccountAccessService;
 use App\Services\ThinkTank\ThinkTankApiAuditService;
 use App\Services\ThinkTank\ThinkTankAuthenticationStateService;
 use App\Services\ThinkTank\ThinkTankInvitationService;
-use App\Services\ThinkTank\ThinkTankMfaService;
 use App\Services\ThinkTank\ThinkTankSessionService;
 use App\Support\ThinkTankApiResponse;
 use Closure;
@@ -35,7 +34,6 @@ class PasswordController extends ThinkTankApiController
         private readonly ThinkTankAuthenticationStateService $states,
         private readonly ThinkTankInvitationService $invitations,
         private readonly ThinkTankSessionService $sessions,
-        private readonly ThinkTankMfaService $mfa,
         private readonly ThinkTankApiAuditService $audit,
     ) {}
 
@@ -174,6 +172,18 @@ class PasswordController extends ThinkTankApiController
 
     public function update(Request $request): JsonResponse
     {
+        $authenticatedUser = $request->user();
+
+        if (! $authenticatedUser instanceof User
+            || ! $this->states->hasValidMfaSession($request, $authenticatedUser)) {
+            throw new ThinkTankApiException(
+                'MFA_REQUIRED',
+                'Multi-factor verification is required before changing the password.',
+                409,
+                $this->states->summary(ThinkTankAuthenticationStateService::MFA_REQUIRED),
+            );
+        }
+
         $data = $this->validateOnly($request, [
             'current_password' => ['bail', 'required', 'string', 'max:4096', $this->passwordByteRule()],
             'password' => ['bail', 'required', 'string', 'max:4096', $this->passwordByteRule(), 'different:current_password', 'confirmed', $this->passwordRule()],
@@ -200,6 +210,7 @@ class PasswordController extends ThinkTankApiController
             ])->save();
             $this->sessions->invalidateMfa($lockedUser);
             $this->sessions->revokeOtherSessions($lockedUser, $request);
+            $lockedUser->forceFill(['otp_verified_at' => now()])->save();
             $this->audit->required($request, 'think_tank.password.changed', 'Think tank portal password changed.', [
                 'target_user_id' => (string) $lockedUser->getKey(),
             ], $lockedUser);
@@ -208,24 +219,21 @@ class PasswordController extends ThinkTankApiController
         });
 
         // The transaction loaded a separate model. Sanctum must observe the
-        // updated password on both the guard and this session, including when
-        // MFA delivery fails before its response middleware can refresh it.
+        // updated password and rotated security stamp on this verified session.
         $guard = Auth::guard('web');
         $guard->setUser($user);
+        $request->session()->regenerate();
         $request->session()->put('password_hash_web', $guard->hashPasswordForCookie($user->getAuthPassword()));
         $this->sessions->bindCurrentSession($user, $request);
-        $this->states->clearMfaSession($request);
+        $this->states->markMfaVerified($request, $user);
         $state = $this->states->state($request, $user);
-        $challenge = $state === ThinkTankAuthenticationStateService::MFA_REQUIRED
-            ? $this->mfa->send($request, $user, true)
-            : null;
 
         return ThinkTankApiResponse::success([
             ...$this->states->summary($state),
             'user' => $state === ThinkTankAuthenticationStateService::READY
                 ? (new ThinkTankViewerResource($user))->resolve($request)
                 : null,
-            'challenge' => $challenge,
+            'challenge' => null,
         ], 200, 'Password changed successfully.');
     }
 

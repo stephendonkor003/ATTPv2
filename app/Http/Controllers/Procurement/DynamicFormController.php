@@ -108,6 +108,7 @@ class DynamicFormController extends Controller
      */
     public function edit(DynamicForm $form)
     {
+        $this->assertLegacyManagedForm($form);
         $this->assertFormInScope($form);
         $form->ensureGlobalFields();
         $form->load('fields')->loadCount('submissions');
@@ -126,6 +127,7 @@ class DynamicFormController extends Controller
      */
     public function submit(DynamicForm $form)
     {
+        $this->assertLegacyManagedForm($form);
         $this->assertFormInScope($form);
         if (!in_array($form->status, ['draft', 'rejected'], true)) {
             return back()->with('error', 'Only draft or rejected forms can be submitted.');
@@ -152,6 +154,7 @@ class DynamicFormController extends Controller
      */
     public function approve(DynamicForm $form)
     {
+        $this->assertLegacyManagedForm($form);
         $this->assertFormInScope($form);
         if ($form->status !== 'submitted') {
             return back()->with('error', 'Only submitted forms can be approved.');
@@ -172,6 +175,7 @@ class DynamicFormController extends Controller
      */
     public function reject(Request $request, DynamicForm $form)
     {
+        $this->assertLegacyManagedForm($form);
         $this->assertFormInScope($form);
         if ($form->status !== 'submitted') {
             return back()->with('error', 'Only submitted forms can be rejected.');
@@ -192,6 +196,7 @@ class DynamicFormController extends Controller
 
     public function destroy(DynamicForm $form)
     {
+        $this->assertLegacyManagedForm($form);
         $this->assertFormInScope($form);
 
         if ($form->hasSubmissions()) {
@@ -221,10 +226,16 @@ class DynamicFormController extends Controller
             ],
         ]);
 
-        $form = DynamicForm::findOrFail($request->form_id);
+        $form = DynamicForm::query()->whereNull('procurement_id')->findOrFail($request->form_id);
+        $this->assertLegacyManagedForm($form);
         $this->assertFormInScope($form);
         $procurement = Procurement::findOrFail($request->procurement_id);
         $this->assertProcurementInScope($procurement);
+        abort_if(
+            $procurement->procurement_owner_type === 'think_tank',
+            403,
+            'Think Tank procurement forms must be managed through the tenant procurement API.',
+        );
         if ($procurement->governance_node_id && $form->resource?->governance_node_id !== $procurement->governance_node_id) {
             abort(403, 'You do not have access to attach this form to the selected procurement.');
         }
@@ -257,5 +268,14 @@ class DynamicFormController extends Controller
         if (!$nodeId || !in_array($nodeId, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to this form.');
         }
+    }
+
+    private function assertLegacyManagedForm(DynamicForm $form): void
+    {
+        abort_if(
+            $form->isThinkTankExecutionForm(),
+            403,
+            'Think Tank execution forms must be managed through the tenant procurement API.',
+        );
     }
 }

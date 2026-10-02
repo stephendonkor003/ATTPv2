@@ -20,8 +20,6 @@ class EnsureOtpVerified
         'security.otp.show',
         'security.otp.verify',
         'security.otp.resend',
-        'security.password.change',
-        'security.password.submit',
         'logout',
         'login',
     ];
@@ -38,11 +36,6 @@ class EnsureOtpVerified
         // The original administrator's authenticated session is authoritative
         // while acting on behalf of the selected user.
         if (UserImpersonation::isActive($request)) {
-            return $next($request);
-        }
-
-        // Skip for super admins
-        if ($user->isSuperAdmin()) {
             return $next($request);
         }
 

@@ -303,9 +303,9 @@
                                 <label class="form-label fw-semibold">
                                     Password
                                 </label>
-                                <input type="text" class="form-control" value="Auto-generated" disabled>
+                                <input type="text" class="form-control" value="Chosen securely by the user" disabled>
                                 <small class="text-muted">
-                                    A secure password will be generated automatically and emailed to the user.
+                                    A single-use setup link will be emailed so the user can choose a private password. No temporary password is displayed or emailed.
                                 </small>
                             </div>
 

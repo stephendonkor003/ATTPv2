@@ -26,7 +26,7 @@ class VerifyThinkTankPortalSecurity extends Command
         foreach ([
             fn () => $sessions->assertProductionSecurityStores(),
             fn () => $mail->assertCredentialDeliveryIsSecure(),
-            fn () => $mail->assertEncryptedResetQueueIsDurable(),
+            fn () => $mail->assertAsynchronousMailQueueIsDurable(),
         ] as $assertion) {
             try {
                 $assertion();

@@ -5,7 +5,6 @@ ini_set('memory_limit', '512M');
 
 use App\Http\Controllers\BiAnnualSiteVisitController;
 use App\Mail\BiAnnualSiteVisitCreatedMail;
-use App\Mail\UserAccountCreated;
 use App\Models\BiAnnualSiteVisitProfile;
 use App\Models\BiAnnualSiteVisitQuestion;
 use App\Models\BiAnnualSiteVisitTemplate;
@@ -14,6 +13,7 @@ use App\Models\Role;
 use App\Models\Sector;
 use App\Models\SiteVisit;
 use App\Models\User;
+use App\Notifications\ApplicationAccountSetupNotification;
 use App\Services\BiAnnualSiteVisitBrandingService;
 use App\Services\BiAnnualSiteVisitTemplateService;
 use App\Support\BiannualQuestionnaire;
@@ -25,6 +25,7 @@ use Illuminate\Foundation\Testing\Concerns\MakesHttpRequests;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
@@ -53,6 +54,7 @@ class BiAnnualSiteVisitsSmoke
     {
         $this->assertSchema();
         Mail::fake();
+        Notification::fake();
 
         DB::beginTransaction();
 
@@ -844,12 +846,7 @@ class BiAnnualSiteVisitsSmoke
                     && $inlineStaff->can('biannual_site_visits.submit'),
                 'The inline-created staff account is missing its password or assignment permissions.'
             );
-            Mail::assertQueued(
-                UserAccountCreated::class,
-                fn (UserAccountCreated $mail): bool => (string) $mail->user->id === (string) $inlineStaff->id
-                    && $mail->hasTo($newStaffEmail)
-                    && $mail->queue === null
-            );
+            Notification::assertSentTo($inlineStaff, ApplicationAccountSetupNotification::class);
             Mail::assertQueued(
                 BiAnnualSiteVisitCreatedMail::class,
                 fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $inlineVisit->id
@@ -862,7 +859,6 @@ class BiAnnualSiteVisitsSmoke
                 ->map('strval')
                 ->values();
             $duplicateNewEmail = 'biannual-duplicate-member-'.Str::lower(Str::random(6)).'@example.test';
-            $accountMailCountBeforeInvalidAdd = Mail::queued(UserAccountCreated::class)->count();
             $assignmentMailCountBeforeInvalidAdd = Mail::queued(
                 BiAnnualSiteVisitCreatedMail::class,
                 fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $inlineVisit->id
@@ -898,11 +894,6 @@ class BiAnnualSiteVisitsSmoke
                 ! User::query()->whereRaw('LOWER(email) = ?', [$duplicateNewEmail])->exists()
                     && $inlineVisit->siteVisit->group->members()->count() === $memberIdsBeforeAdd->count(),
                 'Duplicate new-member emails created a partial account or membership.'
-            );
-            $this->assertSame(
-                $accountMailCountBeforeInvalidAdd,
-                Mail::queued(UserAccountCreated::class)->count(),
-                'A rejected duplicate new member queued an account email.'
             );
             $this->assertSame(
                 $assignmentMailCountBeforeInvalidAdd,
@@ -1028,16 +1019,7 @@ class BiAnnualSiteVisitsSmoke
                     'An additional monitoring-team account received incorrect visit permissions.'
                 );
 
-                $accountMail = Mail::queued(
-                    UserAccountCreated::class,
-                    fn (UserAccountCreated $mail): bool => (string) $mail->user->id === (string) $createdMember->id
-                )->first();
-                $this->assertTrue(
-                    $accountMail
-                        && $accountMail->hasTo($createdMember->email)
-                        && Hash::check($accountMail->plainPassword, $createdMember->password),
-                    'An additional monitoring-team account did not receive valid temporary login details.'
-                );
+                Notification::assertSentTo($createdMember, ApplicationAccountSetupNotification::class);
                 Mail::assertQueued(
                     BiAnnualSiteVisitCreatedMail::class,
                     fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $inlineVisit->id
@@ -1050,15 +1032,6 @@ class BiAnnualSiteVisitsSmoke
                 fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $inlineVisit->id
                     && (string) $mail->recipient->id === (string) $existingAdditionalMember->id
                     && ! $mail->isLeader
-            );
-            $this->assertSame(
-                2,
-                Mail::queued(
-                    UserAccountCreated::class,
-                    fn (UserAccountCreated $mail): bool => $createdAdditionalMembers
-                        ->contains(fn (User $member): bool => (string) $member->id === (string) $mail->user->id)
-                )->count(),
-                'The add-members action did not queue exactly one account email for each new member.'
             );
             $this->assertSame(
                 5,

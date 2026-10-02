@@ -7,12 +7,12 @@ use App\Models\GovernanceNode;
 use App\Models\GovernanceReportingLine;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\AccountSetupInvitationService;
 use App\Services\PortfolioLeaderAssignmentNotificationService;
 use App\Services\ThinkTank\ThinkTankUserManagementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
@@ -162,7 +162,7 @@ class SectorController extends Controller
             $leader['user'],
             $sector,
             $validated['portfolio_manager_role'],
-            $leader['plain_password']
+            $leader['created'],
         );
 
         $message = $leader['created']
@@ -170,11 +170,11 @@ class SectorController extends Controller
             : 'Portfolio created successfully and the existing account was assigned as portfolio leader.';
 
         if ($mailSent) {
-            $message .= ' A portfolio assignment email has been queued for the user.';
+            $message .= $leader['created']
+                ? ' A secure setup link was sent and a portfolio assignment email was queued.'
+                : ' A portfolio assignment email has been queued for the user.';
         } else {
-            $message .= $leader['plain_password']
-                ? " Notification email failed. Temporary password: {$leader['plain_password']}"
-                : ' Notification email failed, but the account assignment was saved.';
+            $message .= ' One or more account emails could not be delivered, but the account assignment was saved. Verify mail delivery and retry the secure setup or assignment notification.';
         }
 
         return redirect()
@@ -307,7 +307,7 @@ class SectorController extends Controller
                 $leader['user'],
                 $sector,
                 $request->portfolio_manager_role,
-                $leader['plain_password']
+                $leader['created'],
             );
         }
 
@@ -320,11 +320,11 @@ class SectorController extends Controller
 
         if ($shouldNotifyLeader) {
             if ($mailSent) {
-                $message .= ' A portfolio assignment email has been queued for the user.';
+                $message .= $leader['created']
+                    ? ' A secure setup link was sent and a portfolio assignment email was queued.'
+                    : ' A portfolio assignment email has been queued for the user.';
             } else {
-                $message .= $leader['plain_password']
-                    ? " Notification email failed. Temporary password: {$leader['plain_password']}"
-                    : ' Notification email failed, but the account assignment was saved.';
+                $message .= ' One or more account emails could not be delivered, but the account assignment was saved. Verify mail delivery and retry.';
             }
         }
 
@@ -414,18 +414,17 @@ class SectorController extends Controller
 
             return [
                 'user' => $existingUser->fresh(['role']),
-                'plain_password' => null,
                 'created' => false,
                 'converted' => ! ($sector && (string) $sector->portfolio_manager_user_id === (string) $existingUser->id),
             ];
         }
 
-        $plainPassword = Str::password(10);
+        $invitations = app(AccountSetupInvitationService::class);
 
         $user = User::create([
             'name' => $validated['portfolio_manager_name'],
             'email' => Str::lower($validated['portfolio_manager_email']),
-            'password' => Hash::make($plainPassword),
+            'password' => $invitations->unknownPasswordHash(),
             'role_id' => $targetRole->id,
             'governance_node_id' => $validated['governance_node_id'],
             'member_state_id' => null,
@@ -435,7 +434,6 @@ class SectorController extends Controller
 
         return [
             'user' => $user->fresh(['role']),
-            'plain_password' => $plainPassword,
             'created' => true,
             'converted' => false,
         ];
@@ -476,11 +474,18 @@ class SectorController extends Controller
         }
     }
 
-    private function sendPortfolioLeaderMailSafely(User $user, Sector $portfolio, string $roleName, ?string $plainPassword): bool
+    private function sendPortfolioLeaderMailSafely(User $user, Sector $portfolio, string $roleName, bool $newAccount): bool
     {
         try {
-            return app(PortfolioLeaderAssignmentNotificationService::class)
-                ->notify($user, $portfolio, $roleName, $plainPassword);
+            $setupSent = ! $newAccount
+                || app(AccountSetupInvitationService::class)->send(
+                    $user,
+                    AccountSetupInvitationService::PURPOSE_PORTFOLIO_LEADER,
+                );
+            $assignmentSent = app(PortfolioLeaderAssignmentNotificationService::class)
+                ->notify($user, $portfolio, $roleName);
+
+            return $setupSent && $assignmentSent;
         } catch (Throwable $e) {
             Log::warning('Portfolio leader account notification could not be queued or sent.', [
                 'user_id' => $user->id,

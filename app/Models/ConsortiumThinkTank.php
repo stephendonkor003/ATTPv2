@@ -102,6 +102,21 @@ class ConsortiumThinkTank extends BaseModel
         return $this->belongsTo(User::class, 'vendor_user_id');
     }
 
+    public function vendorCategories(): HasMany
+    {
+        return $this->hasMany(ThinkTankVendorCategory::class, 'think_tank_member_id');
+    }
+
+    public function vendorUsers()
+    {
+        return $this->belongsToMany(
+            User::class,
+            'attp_think_tank_vendor_user',
+            'think_tank_member_id',
+            'vendor_user_id',
+        )->withPivot(['status', 'can_manage_setup', 'invited_by'])->withTimestamps();
+    }
+
     public function reports(): HasMany
     {
         return $this->hasMany(ConsortiumActivityReport::class, 'think_tank_member_id');

@@ -12,10 +12,9 @@ use App\Models\{
     ResourceCategory
 };
 use App\Models\User;
+use App\Services\AccountSetupInvitationService;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -495,23 +494,23 @@ class HrController extends Controller
                 return back()->with('error', 'Only shortlisted applicants can be hired.');
             }
 
-            DB::transaction(function () use ($applicant) {
+            $result = DB::transaction(function () use ($applicant): array {
 
                 $user = User::where('email', $applicant->email)->first();
-
-                $plainPassword = null;
+                $created = false;
 
                 if (!$user) {
-                    $plainPassword = Str::random(10);
+                    $invitations = app(AccountSetupInvitationService::class);
 
                     $user = User::create([
                         'name'                 => $applicant->full_name,
                         'email'                => $applicant->email,
-                        'password'             => Hash::make($plainPassword),
+                        'password'             => $invitations->unknownPasswordHash(),
                         'user_type'            => 'employee',
                         'governance_node_id'   => $applicant->governance_node_id,
                         'must_change_password' => true,
                     ]);
+                    $created = true;
                 }
 
                 HrEmployee::updateOrCreate(
@@ -529,24 +528,18 @@ class HrController extends Controller
 
                 $applicant->update(['status' => 'hired']);
 
-                if ($plainPassword) {
-                    Mail::send(
-                        'emails.hr.employee-welcome',
-                        [
-                            'name'     => $user->name,
-                            'email'    => $user->email,
-                            'password' => $plainPassword,
-                            'userType' => 'Employee',
-                        ],
-                        function ($message) use ($user) {
-                            $message->to($user->email)
-                                    ->subject('Congratulations! You Have Been Hired');
-                        }
-                    );
-                }
+                return ['user' => $user, 'created' => $created];
             });
 
-            return back()->with('success', 'Applicant hired successfully.');
+            $invitationSent = ! $result['created']
+                || app(AccountSetupInvitationService::class)->send(
+                    $result['user'],
+                    AccountSetupInvitationService::PURPOSE_EMPLOYEE,
+                );
+
+            return back()->with('success', $result['created'] && ! $invitationSent
+                ? 'Applicant hired successfully, but the secure employee account setup link could not be delivered. Verify mail delivery and resend a password link.'
+                : 'Applicant hired successfully.'.($result['created'] ? ' A secure employee account setup link was sent.' : ' The existing account password was preserved.'));
 
         } catch (\Throwable $e) {
             return back()->with('error', $e->getMessage());

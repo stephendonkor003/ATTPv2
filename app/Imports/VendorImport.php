@@ -2,12 +2,10 @@
 
 namespace App\Imports;
 
-use App\Mail\VendorAccountCreated;
 use App\Models\User;
 use App\Models\VendorCategory;
+use App\Services\AccountSetupInvitationService;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
 use Maatwebsite\Excel\Concerns\ToCollection;
@@ -23,6 +21,8 @@ class VendorImport implements ToCollection, WithHeadingRow, WithValidation, Skip
 
     public function collection(Collection $rows)
     {
+        $invitations = app(AccountSetupInvitationService::class);
+
         foreach ($rows as $row) {
             $email = trim((string) ($row['email'] ?? ''));
             $name = trim((string) ($row['name'] ?? ''));
@@ -52,14 +52,13 @@ class VendorImport implements ToCollection, WithHeadingRow, WithValidation, Skip
                 continue;
             }
 
-            $password = Str::random(12);
             $isDisabled = $this->parseBoolean($row['disabled'] ?? 'no');
             $isBlacklisted = $this->parseBoolean($row['blacklisted'] ?? 'no');
 
             $vendor = User::create([
                 'name' => $name !== '' ? $name : $email,
                 'email' => $email,
-                'password' => Hash::make($password),
+                'password' => $invitations->unknownPasswordHash(),
                 'user_type' => 'vendor',
                 'vendor_category' => $categoryName ?: null,
                 'is_disabled' => $isDisabled,
@@ -69,16 +68,14 @@ class VendorImport implements ToCollection, WithHeadingRow, WithValidation, Skip
                 'must_change_password' => true,
             ]);
 
-            try {
-                Mail::to($vendor->email)->send(new VendorAccountCreated($vendor, $password));
-            } catch (\Throwable $exception) {
+            if (! $invitations->send($vendor, AccountSetupInvitationService::PURPOSE_VENDOR)) {
                 $this->mailFailures[] = [
                     'email' => $vendor->email,
-                    'error' => $exception->getMessage(),
+                    'error' => 'Secure setup link could not be delivered.',
                 ];
-                \Log::error('Vendor account email failed', [
+                \Log::warning('Vendor account setup link could not be delivered.', [
+                    'vendor_id' => $vendor->id,
                     'vendor_email' => $vendor->email,
-                    'error' => $exception->getMessage(),
                 ]);
             }
 

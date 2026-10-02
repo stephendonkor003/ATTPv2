@@ -368,9 +368,9 @@
 
             <p> <strong>22. Can I revise my proposal after it has been submitted? </p> </strong>
 
-            <p> Yes. Proposals can be edited once submitted before the deadline for submissions. Successful applications
-                will be granted login credentials, which can be used to log in to the ATTP platform via the following
-                link:
+            <p> Yes. Proposals can be edited once submitted before the deadline for submissions. Applicants receive a
+                secure, single-use account setup link by email and choose their own password before signing in through
+                the following link:
                 https://africathinktankplatform.africa/login. Applicants will only be given the option to edit and
                 upload
                 ‘Required Documents.’</p>

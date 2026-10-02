@@ -23,8 +23,7 @@ class NotifyPortfolioLeaderAssigned implements ShouldQueue
     public function __construct(
         public string $portfolioId,
         public string $userId,
-        public string $roleName,
-        public ?string $plainPassword = null
+        public string $roleName
     ) {
     }
 
@@ -58,7 +57,6 @@ class NotifyPortfolioLeaderAssigned implements ShouldQueue
                     user: $user,
                     portfolio: $portfolio,
                     roleName: $this->roleName,
-                    plainPassword: $this->plainPassword,
                     loginUrl: route('login'),
                     portfolioUrl: route('budget.portfolios.show', $portfolio)
                 ));
@@ -75,6 +73,8 @@ class NotifyPortfolioLeaderAssigned implements ShouldQueue
                 'email' => $user->email,
                 'error' => $exception->getMessage(),
             ]);
+
+            throw $exception;
         }
     }
 

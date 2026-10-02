@@ -14,6 +14,12 @@ final class TestGraphMail extends Command
 
     public function handle(): int
     {
+        if (config('mail.default') !== 'graph') {
+            $this->error('The default mailer is not configured as graph. No email was sent.');
+
+            return self::FAILURE;
+        }
+
         $recipient = (string) $this->argument('recipient');
         if (filter_var($recipient, FILTER_VALIDATE_EMAIL) === false) {
             $this->error('The recipient must be a valid email address.');
@@ -35,7 +41,8 @@ final class TestGraphMail extends Command
             return self::FAILURE;
         }
 
-        $this->info("Microsoft Graph accepted the test email for {$recipient} (HTTP 202).");
+        $this->info('Microsoft Graph accepted the test email request (HTTP 202).');
+        $this->warn('HTTP 202 confirms request acceptance only; it does not confirm inbox delivery.');
 
         return self::SUCCESS;
     }

@@ -71,7 +71,7 @@ class ThinkTankAuthenticationStateService
         ]);
     }
 
-    private function hasValidMfaSession(Request $request, User $user): bool
+    public function hasValidMfaSession(Request $request, User $user): bool
     {
         if (! $request->session()->get('otp_verified', false)) {
             return false;

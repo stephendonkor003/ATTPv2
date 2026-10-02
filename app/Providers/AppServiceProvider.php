@@ -12,19 +12,22 @@ use App\Models\DiscussionReaction;
 use App\Models\NewsPost;
 use App\Models\SystemAuditLog;
 use App\Models\UserLoginOtp;
+use App\Services\Mail\MicrosoftGraphMailService;
 use App\Support\IpGeo;
 use App\Support\UserImpersonation;
-use App\Services\Mail\MicrosoftGraphMailService;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
+use Illuminate\Contracts\Encryption\Encrypter;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Psr\Log\LoggerInterface;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -34,9 +37,10 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(MicrosoftGraphMailService::class, fn ($app) => new MicrosoftGraphMailService(
-            $app->make(\Illuminate\Http\Client\Factory::class),
+            $app->make(HttpFactory::class),
             $app->make('cache.store'),
-            $app->make(\Psr\Log\LoggerInterface::class),
+            $app->make(LoggerInterface::class),
+            $app->make(Encrypter::class),
             (array) config('services.microsoft_graph', []),
         ));
     }

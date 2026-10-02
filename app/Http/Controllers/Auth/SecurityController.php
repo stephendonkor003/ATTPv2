@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\Security\PasswordChangedMail;
 use App\Models\User;
 use App\Models\UserLoginOtp;
+use App\Services\PendingLoginService;
 use App\Services\ThinkTank\ThinkTankAccountAccessService;
 use App\Services\ThinkTank\ThinkTankApiAuditService;
 use App\Services\ThinkTank\ThinkTankAuthenticationStateService;
@@ -171,9 +172,13 @@ class SecurityController extends Controller
                 ->withErrors(['email' => 'This Think Tank portal account is not currently available.']);
         }
 
+        $request->session()->regenerate();
         if ($user->isThinkTankUser()) {
             app(ThinkTankSessionService::class)->bindCurrentSession($user, $request);
-            app(ThinkTankAuthenticationStateService::class)->clearMfaSession($request);
+        }
+        if ($user->isThinkTankUser() || $user->requiresOtpVerification()) {
+            $user->markOtpAsVerified();
+            app(ThinkTankAuthenticationStateService::class)->markMfaVerified($request, $user);
         }
 
         // Send confirmation email immediately so users receive security notices without a queue worker.
@@ -194,20 +199,6 @@ class SecurityController extends Controller
             'email' => $user->email,
             'ip' => $request->ip(),
         ]);
-
-        // Send OTP right after password change for all non-admin users
-        if ($user->isThinkTankUser() || $user->requiresOtpVerification()) {
-            $otpSent = $this->sendOtpCode($user);
-            $redirect = redirect()->route('security.otp.show')
-                ->with('otpSent', $otpSent)
-                ->with('success', 'Your password has been updated. Please verify the OTP sent to your email.');
-
-            if (! $otpSent) {
-                $redirect->with('warning', 'The email service is currently unavailable. In local development, use the verification code shown below.');
-            }
-
-            return $redirect;
-        }
 
         // Redirect funding partners to their portal
         if ($user->user_type === 'funding_partner' || $user->isFundingPartner()) {
@@ -248,7 +239,11 @@ class SecurityController extends Controller
      */
     public function showOtpForm(Request $request)
     {
-        $user = auth()->user();
+        $user = $this->otpUser($request);
+        if (! $user) {
+            return redirect()->route('login')
+                ->withErrors(['email' => 'Your verification session expired. Please sign in again.']);
+        }
 
         // Generate and send OTP if not already sent recently
         $recentOtp = UserLoginOtp::where('user_id', $user->id)
@@ -258,9 +253,17 @@ class SecurityController extends Controller
             ->first();
 
         if (! $recentOtp) {
-            $otpSent = $this->sendOtpCode($user);
-            if (! $otpSent) {
-                session()->flash('warning', 'The email service is currently unavailable. In local development, use the verification code shown below.');
+            $challenge = $this->sendOtpCode($user);
+            $otpSent = $challenge !== null;
+            if ($challenge !== null && ! $request->user()) {
+                app(PendingLoginService::class)->refreshExpiration(
+                    $request,
+                    $challenge['expires_at'],
+                    PendingLoginService::PURPOSE_WEB,
+                );
+            }
+            if ($challenge === null) {
+                session()->flash('warning', 'The verification code could not be delivered. No code was created; please retry when email delivery is available.');
             }
         } else {
             $otpSent = false;
@@ -285,7 +288,11 @@ class SecurityController extends Controller
             'otp_code.digits' => 'The verification code must be exactly 6 digits.',
         ]);
 
-        $user = auth()->user();
+        $user = $this->otpUser($request);
+        if (! $user) {
+            return redirect()->route('login')
+                ->withErrors(['email' => 'Your verification session expired. Please sign in again.']);
+        }
 
         // Session and account keys are deliberately independent of client IP,
         // so proxy/IP rotation cannot expand a six-digit guessing budget.
@@ -318,14 +325,69 @@ class SecurityController extends Controller
             ]);
         }
 
+        $pendingLogin = ! $request->user();
+        if ($pendingLogin) {
+            // The account may have been changed while the OTP comparison was
+            // in flight. Re-resolve the purpose-bound pending identity so a
+            // password reset, disablement, email/type change, or access change
+            // cannot be followed by a stale login.
+            $freshUser = app(PendingLoginService::class)->user(
+                $request,
+                PendingLoginService::PURPOSE_WEB,
+            );
+
+            if (! $freshUser) {
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                return redirect()->route('login')
+                    ->withErrors(['email' => 'Your verification session is no longer available. Please sign in again.']);
+            }
+
+            $user = $freshUser;
+
+            if ($user->is_disabled || ($user->user_type === 'vendor' && $user->is_blacklisted)) {
+                app(PendingLoginService::class)->clear($request, PendingLoginService::PURPOSE_WEB);
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                return redirect()->route('login')
+                    ->withErrors(['email' => 'This account is not currently available. Please contact the administrator.']);
+            }
+
+            if ($user->isThinkTankUser()) {
+                try {
+                    $sessions = app(ThinkTankSessionService::class);
+                    $sessions->assertProductionSecurityStores();
+                    app(ThinkTankProductionSecurityService::class)->assertRuntimeConfiguration();
+                    app(ThinkTankAccountAccessService::class)->membership($user);
+                } catch (ThinkTankApiException) {
+                    app(PendingLoginService::class)->clear($request, PendingLoginService::PURPOSE_WEB);
+                    $request->session()->invalidate();
+                    $request->session()->regenerateToken();
+
+                    return redirect()->route('login')
+                        ->withErrors(['email' => 'This Think Tank portal account is not currently available.']);
+                }
+            }
+
+            $remember = app(PendingLoginService::class)->remember($request, PendingLoginService::PURPOSE_WEB);
+            app(PendingLoginService::class)->clear($request, PendingLoginService::PURPOSE_WEB);
+            Auth::guard('web')->login($user, $remember);
+        }
+
         RateLimiter::clear($sessionKey);
         RateLimiter::clear($accountKey);
         RateLimiter::clear('think-tank-login-account:'.hash('sha256', mb_strtolower((string) $user->email)));
 
-        // Mark OTP as verified for the session
+        // Mark OTP as verified only after both factors have succeeded, then
+        // rotate the session identifier before granting account access.
         $user->markOtpAsVerified();
         $request->session()->regenerate();
         app(ThinkTankAuthenticationStateService::class)->markMfaVerified($request, $user);
+        if ($user->isThinkTankUser()) {
+            app(ThinkTankSessionService::class)->bindCurrentSession($user, $request);
+        }
 
         // Log the activity
         Log::info('OTP verification successful', [
@@ -333,6 +395,11 @@ class SecurityController extends Controller
             'email' => $user->email,
             'ip' => $request->ip(),
         ]);
+
+        if ($user->mustChangePassword() || $user->isPasswordExpired()) {
+            return redirect()->route('security.password.change')
+                ->with('success', 'Identity verified. Create your private password to finish signing in.');
+        }
 
         // Redirect funding partners to their portal
         if ($user->user_type === 'funding_partner' || $user->isFundingPartner()) {
@@ -369,7 +436,11 @@ class SecurityController extends Controller
      */
     public function resendOtp(Request $request)
     {
-        $user = auth()->user();
+        $user = $this->otpUser($request);
+        if (! $user) {
+            return redirect()->route('login')
+                ->withErrors(['email' => 'Your verification session expired. Please sign in again.']);
+        }
 
         // Rate limiting: Check if OTP was sent in last 60 seconds
         $recentOtp = UserLoginOtp::where('user_id', $user->id)
@@ -381,8 +452,16 @@ class SecurityController extends Controller
             return back()->with('warning', 'Please wait at least 60 seconds before requesting a new code.');
         }
 
-        if (! $this->sendOtpCode($user)) {
-            return back()->with('warning', 'The email service is currently unavailable. In local development, use the verification code shown below.');
+        $challenge = $this->sendOtpCode($user);
+        if ($challenge === null) {
+            return back()->with('warning', 'The verification code could not be delivered. No code was created; please try again.');
+        }
+        if (! $request->user()) {
+            app(PendingLoginService::class)->refreshExpiration(
+                $request,
+                $challenge['expires_at'],
+                PendingLoginService::PURPOSE_WEB,
+            );
         }
 
         return back()->with('success', 'A new verification code has been sent to your email.');
@@ -391,17 +470,24 @@ class SecurityController extends Controller
     /**
      * Send OTP code to user's email
      */
-    protected function sendOtpCode($user): bool
+    protected function sendOtpCode($user): ?array
     {
         try {
-            app(ThinkTankMfaService::class)->send(request(), $user, true);
-
-            return true;
+            return app(ThinkTankMfaService::class)->send(request(), $user, true);
         } catch (Throwable $exception) {
             report($exception);
 
-            return false;
+            return null;
         }
+    }
+
+    private function otpUser(Request $request): ?User
+    {
+        $authenticated = $request->user();
+
+        return $authenticated instanceof User
+            ? $authenticated
+            : app(PendingLoginService::class)->user($request, PendingLoginService::PURPOSE_WEB);
     }
 
     private function passwordByteRule(): Closure

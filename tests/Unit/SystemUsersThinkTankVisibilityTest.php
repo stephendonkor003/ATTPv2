@@ -18,7 +18,7 @@ it('includes Think Tank accounts in the system user directory and keeps tenant a
         ->toContain('@if (! $isThinkTankUser)');
 });
 
-it('supports secure email and direct temporary-password recovery without auditing secrets', function (): void {
+it('uses only secure reset links for system oversight password recovery', function (): void {
     $root = dirname(__DIR__, 2);
     $controller = file_get_contents($root.'/app/Http/Controllers/System/ThinkTankUserController.php');
     $service = file_get_contents($root.'/app/Services/ThinkTank/ThinkTankUserManagementService.php');
@@ -27,16 +27,18 @@ it('supports secure email and direct temporary-password recovery without auditin
     $auditMiddleware = file_get_contents($root.'/app/Http/Middleware/SystemAuditLogger.php');
 
     expect($controller)
-        ->toContain('current_password:web')
-        ->toContain('Password::min(12)->mixedCase()->letters()->numbers()->symbols()')
-        ->toContain('setTemporaryPasswordForSystemOversight');
+        ->toContain('resetPasswordForSystemOversight')
+        ->not->toContain('setTemporaryPassword')
+        ->not->toContain('current_password:web');
     expect($service)
         ->toContain("'must_change_password' => true")
         ->toContain('revokeAllSessions($lockedTarget)')
-        ->toContain("'password' => \$temporaryPassword");
-    expect($routes)->toContain("set-temporary-password");
+        ->toContain("'password' => Str::password(64)")
+        ->not->toContain('setTemporaryPasswordForSystemOversight');
+    expect($routes)->not->toContain('set-temporary-password');
     expect($view)
         ->toContain('Send secure reset link')
-        ->toContain('Set temporary password');
+        ->not->toContain('Set temporary password')
+        ->not->toContain('administrator_password');
     expect($auditMiddleware)->toContain("'administrator_password'");
 });

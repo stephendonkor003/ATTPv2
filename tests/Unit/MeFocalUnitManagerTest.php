@@ -52,6 +52,8 @@ it('separates focal responsibility records from account authority and preserves 
         ->toContain("'is_active' => false, 'is_primary' => false")
         ->toContain('Unlink the platform account before changing this contact email or mapped organization.')
         ->toContain('demoteOtherPrimaryContacts')
-        ->toContain("'think_tank_access_level' => User::THINK_TANK_ACCESS_ME")
-        ->toContain('Internal, vendor and funding-partner accounts cannot be converted');
+        ->toContain('$lockedUser->think_tank_access_level !== User::THINK_TANK_ACCESS_ME')
+        ->toContain("Provision this account as the same Think Tank\\'s M&E Officer through Think Tank Users before linking it here.")
+        ->toContain('$lockedContact->update')
+        ->not->toContain('$lockedUser->update([');
 });

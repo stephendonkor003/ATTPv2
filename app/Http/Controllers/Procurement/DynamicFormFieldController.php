@@ -15,6 +15,8 @@ class DynamicFormFieldController extends Controller
      */
     public function store(Request $request, DynamicForm $form)
     {
+        $this->assertLegacyManagedForm($form);
+
         // ❗ Business rule: only editable forms can be modified
         if (!$form->canEdit()) {
             return back()->with('error', 'This form already has submissions and cannot be edited.');
@@ -46,6 +48,8 @@ class DynamicFormFieldController extends Controller
      */
     public function destroy(DynamicFormField $field)
     {
+        $this->assertLegacyManagedForm($field->form);
+
         // ❗ Prevent deletion if parent form is locked
         if (!$field->form->canEdit()) {
             return back()->with('error', 'Fields cannot be removed after submissions exist for this form.');
@@ -58,5 +62,14 @@ class DynamicFormFieldController extends Controller
         $field->delete();
 
         return back()->with('success', 'Field removed successfully.');
+    }
+
+    private function assertLegacyManagedForm(DynamicForm $form): void
+    {
+        abort_if(
+            $form->isThinkTankExecutionForm(),
+            403,
+            'Think Tank execution forms must be managed through the tenant procurement API.',
+        );
     }
 }

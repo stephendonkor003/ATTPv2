@@ -10,6 +10,7 @@ use App\Models\Procurement;
 use App\Models\ProcurementSubmissionScreening;
 use App\Services\ProcurementSubmissionScreeningAutomation;
 use App\Services\ProcurementSubmissionScreeningService;
+use App\Services\DynamicProcurementSubmissionFileService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -275,35 +276,48 @@ class ProcurementSubmissionController extends Controller
     /**
      * Download/stream a file value from a procurement submission (private storage).
      */
-    public function downloadValue(Request $request, FormSubmission $submission, FormSubmissionValue $value)
+    public function downloadValue(
+        Request $request,
+        FormSubmission $submission,
+        FormSubmissionValue $value,
+        DynamicProcurementSubmissionFileService $submissionFiles,
+    )
     {
         $this->assertSubmissionInScope($submission);
 
         abort_unless($value->submission_id === $submission->id, 404);
 
-        $path = (string) ($value->value ?? '');
-        abort_if($path === '', 404, 'File not found.');
+        $submission->loadMissing('form.fields');
+        $field = $submission->form?->fields?->firstWhere('field_key', $value->field_key);
+        abort_unless($field && in_array($field->field_type, ['file', 'image'], true), 404);
 
-        // File fields store a path string. Ignore non-file JSON payloads.
-        if (str_starts_with($path, '[') || str_starts_with($path, '{')) {
-            abort(404, 'Not a file value.');
-        }
+        $path = $submissionFiles->normalizedAllowedPath($value->value);
+        abort_unless($path !== null, 404, 'File not found.');
 
         $privateDisk = Storage::disk('local');
+        $publicDisk = Storage::disk('public');
 
-        if (! $privateDisk->exists($path) && Storage::disk('public')->exists($path)) {
+        if (! $privateDisk->exists($path) && $publicDisk->exists($path)) {
             // Best-effort migration from public -> private.
-            $stream = Storage::disk('public')->readStream($path);
+            $stream = $publicDisk->readStream($path);
             if ($stream !== false) {
-                $privateDisk->writeStream($path, $stream);
-                if (is_resource($stream)) {
-                    fclose($stream);
+                try {
+                    $written = $privateDisk->writeStream($path, $stream);
+                } finally {
+                    if (is_resource($stream)) {
+                        fclose($stream);
+                    }
                 }
-                Storage::disk('public')->delete($path);
+                if ($written === true && $privateDisk->exists($path)) {
+                    $publicDisk->delete($path);
+                }
             }
         }
 
-        if (! $privateDisk->exists($path)) {
+        $disk = $privateDisk->exists($path)
+            ? $privateDisk
+            : ($publicDisk->exists($path) ? $publicDisk : null);
+        if ($disk === null) {
             Log::warning('Procurement submission attachment is unavailable on the private disk.', [
                 'submission_id' => $submission->id,
                 'value_id' => $value->id,
@@ -315,7 +329,7 @@ class ProcurementSubmissionController extends Controller
             abort(404, 'File missing on disk.');
         }
 
-        $absolutePath = $privateDisk->path($path);
+        $absolutePath = $disk->path($path);
         if (is_link($absolutePath) || ! is_file($absolutePath) || ! is_readable($absolutePath)) {
             Log::warning('Procurement submission attachment exists but is not a readable regular file.', [
                 'submission_id' => $submission->id,
@@ -339,10 +353,10 @@ class ProcurementSubmissionController extends Controller
 
         // Browsers cannot display ZIP packages reliably. Always return those as downloads.
         if ($request->boolean('download') || $extension === 'zip') {
-            return $privateDisk->download($path, $downloadName, $headers);
+            return $disk->download($path, $downloadName, $headers);
         }
 
-        return $privateDisk->response($path, $downloadName, $headers);
+        return $disk->response($path, $downloadName, $headers);
     }
 
     private function submissionsQuery(?array $scopedNodeIds)

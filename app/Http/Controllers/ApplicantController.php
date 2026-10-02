@@ -3,15 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Applicant;
+use App\Models\ThinkDataset;
+use App\Models\User;
+use App\Services\AccountSetupInvitationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use App\Mail\ApplicantSubmissionReceived;
-use Illuminate\Support\Facades\Mail;
-use App\Models\User;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
-use App\Models\ThinkDataset;
 
 class ApplicantController extends Controller
 {
@@ -244,14 +242,13 @@ class ApplicantController extends Controller
             // Save applicant
             $applicant = Applicant::create($data);
 
-            // Create user account
-            $defaultPassword = Str::random(8);
+            $invitations = app(AccountSetupInvitationService::class);
 
             try {
                 $user = User::create([
                     'name' => $uniqueCode,
                     'email' => $applicant->email,
-                    'password' => Hash::make($defaultPassword),
+                    'password' => $invitations->unknownPasswordHash(),
                     'user_type' => 'applicant',
                     'must_change_password' => true,
                 ]);
@@ -265,10 +262,11 @@ class ApplicantController extends Controller
                 return redirect()->back()->withErrors(['error' => 'An unexpected database error occurred.']);
             }
 
-            // Send confirmation email immediately because it contains the applicant login credentials.
-            Mail::to($applicant->email)->send(new ApplicantSubmissionReceived($applicant, $uniqueCode, $defaultPassword));
+            $invitationSent = $invitations->send($user, AccountSetupInvitationService::PURPOSE_APPLICANT);
 
-            return redirect()->back()->with('success', 'Application submitted successfully. Login credentials have been sent to your email.');
+            return redirect()->back()->with('success', $invitationSent
+                ? 'Application submitted successfully. A secure account setup link has been sent to your email.'
+                : 'Application submitted successfully, but the secure account setup link could not be delivered. Use Forgot password or contact support.');
         } catch (\Exception $e) {
             return redirect()->back()->withErrors(['error' => 'Failed to save application. Please try again later.']);
         }

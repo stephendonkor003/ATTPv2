@@ -8,7 +8,6 @@ use App\Services\ThinkTank\ThinkTankAccountAccessService;
 use App\Services\ThinkTank\ThinkTankApiAuditService;
 use App\Services\ThinkTank\ThinkTankAuthenticationStateService;
 use App\Services\ThinkTank\ThinkTankInvitationService;
-use App\Services\ThinkTank\ThinkTankMfaService;
 use App\Services\ThinkTank\ThinkTankSessionService;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel;
@@ -22,7 +21,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\Http\Middleware\AuthenticateSession;
 
-it('preserves the current Sanctum session after password change and MFA delivery', function (bool $mailFails) {
+it('requires completed MFA and preserves it after the mandatory password change', function () {
     $bootedHere = ! Container::getInstance()->bound(Kernel::class);
 
     if ($bootedHere) {
@@ -98,24 +97,24 @@ it('preserves the current Sanctum session after password change and MFA delivery
         $request->setLaravelSession($session);
         $request->setUserResolver(fn () => $guard->user());
 
+        $membership = (new ConsortiumThinkTank)->forceFill([
+            'id' => '10000000-0000-4000-8000-000000000002',
+            'name' => 'Test Think Tank',
+            'status' => 'active',
+        ]);
+        $membership->setRelation('consortium', null);
+        $request->attributes->set('think_tank.membership', $membership);
         $accounts = Mockery::mock(ThinkTankAccountAccessService::class);
-        $accounts->shouldReceive('membership')->once()->andReturn(new ConsortiumThinkTank);
+        $accounts->shouldReceive('membership')->once()->andReturn($membership);
         $audit = Mockery::mock(ThinkTankApiAuditService::class);
         $audit->shouldReceive('required')->once();
-        $mfa = Mockery::mock(ThinkTankMfaService::class);
-        $delivery = $mfa->shouldReceive('send')->once();
-        if ($mailFails) {
-            $delivery->andThrow(new ThinkTankApiException('MFA_DELIVERY_FAILED', 'Local fixture delivery failed.', 503));
-        } else {
-            $delivery->andReturn(['sent' => true]);
-        }
         $sessions = new ThinkTankSessionService;
+        $states = new ThinkTankAuthenticationStateService;
         $controller = new PasswordController(
             $accounts,
-            new ThinkTankAuthenticationStateService,
+            $states,
             Mockery::mock(ThinkTankInvitationService::class),
             $sessions,
-            $mfa,
             $audit,
         );
         $middleware = new AuthenticateSession(app('auth'));
@@ -123,11 +122,17 @@ it('preserves the current Sanctum session after password change and MFA delivery
             $request,
             fn (Request $request) => $controller->update($request),
         ));
-        if ($mailFails) {
-            expect($changePassword)->toThrow(ThinkTankApiException::class);
-        } else {
-            expect($changePassword()->getData(true)['data']['state'])->toBe('MFA_REQUIRED');
+
+        try {
+            $changePassword();
+            throw new RuntimeException('The password change unexpectedly bypassed MFA.');
+        } catch (ThinkTankApiException $exception) {
+            expect($exception->errorCode)->toBe('MFA_REQUIRED')
+                ->and(Hash::check($oldPassword, User::query()->findOrFail($id)->getAuthPassword()))->toBeTrue();
         }
+
+        $states->markMfaVerified($request, $guard->user());
+        expect($changePassword()->getData(true)['data']['state'])->toBe('READY');
 
         // Simulate the next HTTP request reloading the account from its database.
         $freshUser = User::query()->findOrFail($id);
@@ -141,7 +146,8 @@ it('preserves the current Sanctum session after password change and MFA delivery
             ->and(Hash::check($newPassword, $freshUser->getAuthPassword()))->toBeTrue()
             ->and($session->get('password_hash_web'))->not->toBe($oldSessionHash)
             ->and($sessions->hasValidCurrentSession($freshUser, $nextRequest))->toBeTrue()
-            ->and($session->get('otp_verified', false))->toBeFalse();
+            ->and($session->get('otp_verified', false))->toBeTrue()
+            ->and((string) $session->get('otp_verified_user_id'))->toBe($id);
     } finally {
         DB::purge($connectionName);
         Auth::forgetGuards();
@@ -153,5 +159,4 @@ it('preserves the current Sanctum session after password change and MFA delivery
             restore_exception_handler();
         }
     }
-})->with(['successful delivery' => false, 'failed delivery' => true])
-    ->skip(! extension_loaded('pdo_sqlite'), 'Enable pdo_sqlite to run isolated password session tests.');
+})->skip(! extension_loaded('pdo_sqlite'), 'Enable pdo_sqlite to run isolated password session tests.');

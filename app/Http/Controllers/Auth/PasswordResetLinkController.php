@@ -42,7 +42,7 @@ class PasswordResetLinkController extends Controller
         if (! $this->passwordResetTokensTableExists()) {
             $this->logPasswordResetFailure('Password reset token table is missing.');
 
-            return $this->temporaryPasswordResetFailure($request);
+            return $this->passwordResetUnavailable($request);
         }
 
         try {
@@ -61,11 +61,11 @@ class PasswordResetLinkController extends Controller
         } catch (QueryException $exception) {
             $this->logPasswordResetFailure('Password reset link database failure.', $exception);
 
-            return $this->temporaryPasswordResetFailure($request);
+            return $this->passwordResetUnavailable($request);
         } catch (Throwable $exception) {
             $this->logPasswordResetFailure('Password reset link delivery failure.', $exception);
 
-            return $this->temporaryPasswordResetFailure($request);
+            return $this->passwordResetUnavailable($request);
         }
 
         return back()->with('status', 'If an account exists for this email, a password reset link will be sent shortly.');
@@ -82,7 +82,7 @@ class PasswordResetLinkController extends Controller
         }
     }
 
-    private function temporaryPasswordResetFailure(Request $request): RedirectResponse
+    private function passwordResetUnavailable(Request $request): RedirectResponse
     {
         return back()
             ->withInput($request->only('email'))

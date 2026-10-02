@@ -140,7 +140,13 @@ class ThinkTankPerformanceReportController extends MePerformanceReportController
         $data = $internalView->getData();
         $data['member'] = $member;
         $data['canManage'] = $this->canAuthor($request) && $report->isEditable();
+        $data['canSubmit'] = $this->canSubmit($request) && $report->isEditable();
         $data['portalRouteParams'] = $this->portalRouteParams($request, $member);
+        // The internal editor needs the organization directory, but a portal
+        // author may only attribute achievements to its own report owner.
+        $data['activeThinkTanks'] = ConsortiumThinkTank::query()
+            ->whereKey($member->id)
+            ->get(['id', 'name', 'country']);
 
         return view('think-tank.me-performance-reports.edit', $data);
     }
@@ -164,7 +170,7 @@ class ThinkTankPerformanceReportController extends MePerformanceReportController
     {
         $member = $this->member($request);
         $this->assertOwnedReport($report, $member);
-        $this->assertCanAuthor($request);
+        $this->assertCanSubmit($request);
         parent::submit($request, $report);
 
         return redirect()
@@ -290,7 +296,16 @@ class ThinkTankPerformanceReportController extends MePerformanceReportController
 
     private function assertCanAuthor(Request $request): void
     {
-        abort_unless($this->canAuthor($request), 403, 'Your assigned role cannot create, edit, or submit performance reports.');
+        abort_unless($this->canAuthor($request), 403, 'Your assigned role cannot create or edit performance reports.');
+    }
+
+    private function assertCanSubmit(Request $request): void
+    {
+        abort_unless(
+            $this->canSubmit($request),
+            403,
+            'Your assigned role cannot submit performance reports.',
+        );
     }
 
     private function canAuthor(Request $request): bool
@@ -300,7 +315,16 @@ class ThinkTankPerformanceReportController extends MePerformanceReportController
         return (bool) ($user
             && $user->isThinkTankUser()
             && $user->canAccessThinkTankArea('me')
-            && $user->can('think_tank.me.reports.manage')
+            && $user->can('think_tank.me.reports.manage'));
+    }
+
+    private function canSubmit(Request $request): bool
+    {
+        $user = $request->user();
+
+        return (bool) ($user
+            && $user->isThinkTankUser()
+            && $user->canAccessThinkTankArea('me')
             && $user->can('think_tank.me.reports.submit'));
     }
 

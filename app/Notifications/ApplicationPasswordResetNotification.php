@@ -3,9 +3,10 @@
 namespace App\Notifications;
 
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Notifications\Messages\MailMessage;
 
-final class ApplicationPasswordResetNotification extends ResetPassword
+final class ApplicationPasswordResetNotification extends ResetPassword implements ShouldBeEncrypted
 {
     public function __construct(
         #[\SensitiveParameter] string $token,

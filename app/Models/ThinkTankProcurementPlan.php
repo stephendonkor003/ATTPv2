@@ -36,6 +36,7 @@ class ThinkTankProcurementPlan extends BaseModel
         'approved_at',
         'rejected_at',
         'decision_reason',
+        'portal_lock_version',
     ];
 
     protected $casts = [
@@ -46,6 +47,8 @@ class ThinkTankProcurementPlan extends BaseModel
         'last_resubmitted_at' => 'datetime',
         'approved_at' => 'datetime',
         'rejected_at' => 'datetime',
+        'version' => 'integer',
+        'portal_lock_version' => 'integer',
     ];
 
     public function consortium(): BelongsTo
