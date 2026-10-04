@@ -46,6 +46,28 @@ class ThinkTankProcurementApiService
                 ['key' => 'contract_termination', 'label' => 'Contract Termination', 'planned_writable' => false],
             ],
         ],
+        'rfb' => [
+            'label' => 'Request for Bids (RFB)',
+            'aliases' => ['rfb', 'request for bids'],
+            'milestones' => [
+                ['key' => 'draft_prequalification_documents', 'label' => 'Draft Pre-qualification Documents', 'planned_writable' => true],
+                ['key' => 'prequalification_notice', 'label' => 'Specific Procurement Notice (Pre-qualification)', 'planned_writable' => true],
+                ['key' => 'amendments_to_prequalification_documents', 'label' => 'Amendments to Pre-qualification Documents', 'planned_writable' => false],
+                ['key' => 'prequalification_opening_minutes', 'label' => 'Opening / Minutes of Pre-qualification', 'planned_writable' => true],
+                ['key' => 'prequalification_evaluation_report', 'label' => 'Pre-qualification Evaluation Report', 'planned_writable' => true],
+                ['key' => 'draft_bidding_documents', 'label' => 'Draft Bidding Documents', 'planned_writable' => true],
+                ['key' => 'bidding_notice', 'label' => 'Specific Procurement Notice (Bidding)', 'planned_writable' => true],
+                ['key' => 'invitation_to_providers', 'label' => 'Invitation to Providers', 'planned_writable' => true],
+                ['key' => 'amendments_to_bidding_documents', 'label' => 'Amendments to Bidding Documents', 'planned_writable' => false],
+                ['key' => 'bid_submission_opening_minutes', 'label' => 'Bid Submission / Opening / Minutes', 'planned_writable' => true],
+                ['key' => 'bid_evaluation_and_award_recommendation', 'label' => 'Bid Evaluation Report and Recommendation for Award', 'planned_writable' => true],
+                ['key' => 'notification_of_intention_of_award', 'label' => 'Notification of Intention of Award', 'planned_writable' => true],
+                ['key' => 'signed_contract', 'label' => 'Signed Contract', 'planned_writable' => true],
+                ['key' => 'contract_amendments', 'label' => 'Contract Amendments', 'planned_writable' => false],
+                ['key' => 'contract_completion', 'label' => 'Contract Completion', 'planned_writable' => true],
+                ['key' => 'contract_termination', 'label' => 'Contract Termination', 'planned_writable' => false],
+            ],
+        ],
         'qcbs_fbs_lcs' => [
             'label' => 'QCBS / FBS / LCS',
             'aliases' => [
@@ -121,7 +143,7 @@ class ThinkTankProcurementApiService
         ],
         'direct_goods' => [
             'label' => 'Direct Selection - Goods',
-            'aliases' => ['direct_goods', 'direct goods', 'direct selection - goods', 'direct selection'],
+            'aliases' => ['direct_goods', 'direct goods', 'direct selection - goods'],
             'milestones' => [
                 ['key' => 'justification_for_direct_procurement', 'label' => 'Justification for Direct Procurement', 'planned_writable' => true],
                 ['key' => 'invitation_to_supplier_contractor', 'label' => 'Invitation to Supplier / Contractor', 'planned_writable' => true],
@@ -130,6 +152,20 @@ class ThinkTankProcurementApiService
                 ['key' => 'signed_contract', 'label' => 'Signed Contract', 'planned_writable' => true],
                 ['key' => 'contract_amendments', 'label' => 'Contract Amendments', 'planned_writable' => false],
                 ['key' => 'contract_completion', 'label' => 'Contract Completion', 'planned_writable' => true],
+            ],
+        ],
+        'direct_selection' => [
+            'label' => 'Direct Selection',
+            'aliases' => ['direct selection', 'direct procurement'],
+            'milestones' => [
+                ['key' => 'justification_for_direct_procurement', 'label' => 'Justification for Direct Procurement', 'planned_writable' => true],
+                ['key' => 'invitation_to_supplier_contractor', 'label' => 'Invitation to Supplier / Contractor', 'planned_writable' => true],
+                ['key' => 'draft_contract', 'label' => 'Draft Contract', 'planned_writable' => true],
+                ['key' => 'notification_of_intention_of_award', 'label' => 'Notification of Intention of Award', 'planned_writable' => true],
+                ['key' => 'signed_contract', 'label' => 'Signed Contract', 'planned_writable' => true],
+                ['key' => 'contract_amendments', 'label' => 'Contract Amendments', 'planned_writable' => false],
+                ['key' => 'contract_completion', 'label' => 'Contract Completion', 'planned_writable' => true],
+                ['key' => 'contract_termination', 'label' => 'Contract Termination', 'planned_writable' => false],
             ],
         ],
     ];
@@ -187,12 +223,6 @@ class ThinkTankProcurementApiService
         foreach (self::METHOD_TEMPLATES as $code => $template) {
             foreach ($template['aliases'] as $alias) {
                 if ($needle === Str::lower($alias) || str_contains($needle, Str::lower($alias))) {
-                    if ($code === 'direct_goods'
-                        && $needle === 'direct selection'
-                        && Str::lower((string) $category) !== 'goods') {
-                        continue;
-                    }
-
                     return $code;
                 }
             }
@@ -1033,7 +1063,7 @@ class ThinkTankProcurementApiService
 
         $value = trim((string) ($entry['date'] ?? $entry['value'] ?? ''));
 
-        return $value !== '' ? $value : null;
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? $value : null;
     }
 
     private function planStatusLabel(?string $status): string

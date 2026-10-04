@@ -5,6 +5,10 @@
 
     RewriteEngine On
 
+    # Legacy procurement workbooks contain internal planning evidence and must
+    # never be served as public static files.
+    RewriteRule ^procurement_data(?:/|$) - [F,L,NC]
+
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 

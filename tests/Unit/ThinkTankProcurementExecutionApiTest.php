@@ -46,8 +46,15 @@ it('provides method-specific bidder forms and a stable imported method fallback'
         $service = procurementExecutionService();
         $templates = collect($service->methodTemplates())->keyBy('code');
 
-        expect($templates->keys()->all())->toContain('rfq', 'qcbs_fbs_lcs', 'cqs', 'cds', 'indv', 'direct_goods', 'other')
+        expect($templates->keys()->all())->toContain(
+            'rfq', 'rfb', 'qcbs_fbs_lcs', 'cqs', 'cds', 'indv',
+            'direct_goods', 'direct_selection', 'other'
+        )
             ->and(collect($templates['rfq']['suggestedFields'])->pluck('key')->all())
+            ->toContain('signed_quotation', 'price_schedule', 'specification_compliance', 'delivery_schedule')
+            ->and(collect($templates['rfb']['suggestedFields'])->pluck('key')->all())
+            ->toContain('signed_quotation', 'price_schedule', 'specification_compliance', 'delivery_schedule')
+            ->and(collect($templates['direct_selection']['suggestedFields'])->pluck('key')->all())
             ->toContain('signed_quotation', 'price_schedule', 'specification_compliance', 'delivery_schedule')
             ->and(collect($templates['indv']['suggestedFields'])->pluck('key')->all())
             ->toContain('curriculum_vitae', 'technical_approach', 'financial_quote')

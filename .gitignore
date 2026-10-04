@@ -22,6 +22,7 @@ env
 /public/build
 /public/hot
 /public/storage
+/public/procurement_data/
 /storage/app/private/*
 !/storage/app/private/.gitignore
 /storage/app/public/*

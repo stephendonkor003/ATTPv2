@@ -100,7 +100,7 @@ class ThinkTankProcurementExecutionService
         ];
 
         $fields = match ($methodCode) {
-            'rfq', 'direct_goods' => [
+            'rfq', 'rfb', 'direct_goods', 'direct_selection' => [
                 $profile,
                 [
                     'key' => 'signed_quotation',

@@ -243,11 +243,21 @@ it('issues state-bound HMAC locks and rejects stale procurement writes', functio
 
 it('matches every workbook method template and preserves actual-only milestones', function () {
     $api = new ThinkTankProcurementApiService;
+    $milestoneValue = new ReflectionMethod($api, 'milestoneValue');
     $templates = collect($api->methodTemplates())->keyBy('code');
     $expected = [
         'rfq' => [
             'draft_request_for_quotations', 'specific_procurement_notice', 'invitation_to_supplier_contractor',
             'amendments_to_request_for_quotations', 'receive_quotations', 'comparison_of_quotations',
+            'notification_of_intention_of_award', 'signed_contract', 'contract_amendments',
+            'contract_completion', 'contract_termination',
+        ],
+        'rfb' => [
+            'draft_prequalification_documents', 'prequalification_notice',
+            'amendments_to_prequalification_documents', 'prequalification_opening_minutes',
+            'prequalification_evaluation_report', 'draft_bidding_documents', 'bidding_notice',
+            'invitation_to_providers', 'amendments_to_bidding_documents',
+            'bid_submission_opening_minutes', 'bid_evaluation_and_award_recommendation',
             'notification_of_intention_of_award', 'signed_contract', 'contract_amendments',
             'contract_completion', 'contract_termination',
         ],
@@ -278,6 +288,11 @@ it('matches every workbook method template and preserves actual-only milestones'
             'justification_for_direct_procurement', 'invitation_to_supplier_contractor', 'draft_contract',
             'notification_of_intention_of_award', 'signed_contract', 'contract_amendments', 'contract_completion',
         ],
+        'direct_selection' => [
+            'justification_for_direct_procurement', 'invitation_to_supplier_contractor', 'draft_contract',
+            'notification_of_intention_of_award', 'signed_contract', 'contract_amendments',
+            'contract_completion', 'contract_termination',
+        ],
     ];
 
     foreach ($expected as $method => $keys) {
@@ -296,14 +311,17 @@ it('matches every workbook method template and preserves actual-only milestones'
     expect($api->methodCode('QCBS / FBS / LCS'))->toBe('qcbs_fbs_lcs')
         ->and($api->methodCode('QCBS/FBS/LCS'))->toBe('qcbs_fbs_lcs')
         ->and($api->methodCode('direct goods', 'GoOdS'))->toBe('direct_goods')
-        ->and($api->methodCode('Direct Selection', 'services'))->toBeNull()
+        ->and($api->methodCode('Request for Bids (RFB)', 'goods'))->toBe('rfb')
+        ->and($api->methodCode('Direct Selection', 'non_consulting_services'))->toBe('direct_selection')
         ->and(collect($templates->get('cds')['milestones'])->pluck('key'))->toContain('contract_amendments')
         ->not->toContain('contract_amments')
         ->and(collect($templates->get('rfq')['milestones'])->firstWhere('key', 'contract_amendments')['plannedWritable'])->toBeFalse()
         ->and(collect($merged)->where('key', 'signed_contract')->where('timing', 'planned')->pluck('date')->all())->toBe(['2026-07-01'])
         ->and(collect($merged)->where('key', 'contract_amendments')->where('timing', 'planned'))->toBeEmpty()
         ->and(collect($merged)->where('key', 'contract_amendments')->where('timing', 'actual')->pluck('date')->all())->toBe(['2026-08-01'])
-        ->and(collect($merged)->where('milestone', 'Imported custom stage'))->toHaveCount(1);
+        ->and(collect($merged)->where('milestone', 'Imported custom stage'))->toHaveCount(1)
+        ->and($milestoneValue->invoke($api, ['date' => null, 'value' => 'N/A']))->toBeNull()
+        ->and($milestoneValue->invoke($api, ['date' => '2026-09-27', 'value' => 'N/A']))->toBe('2026-09-27');
 });
 
 it('accepts the workbook estimate directly and rejects a conflicting optional unit breakdown', function () {
@@ -404,9 +422,9 @@ it('keeps procurement routes tenant-bound stateful ready permissioned and no-sto
         $routes = collect($router->getRoutes()->getRoutes())
             ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/think-tank/procurement'));
 
-        // Twelve annual-plan/report routes, seventeen controlled execution
+        // Twelve annual-plan/report routes, twenty controlled execution
         // routes, and five tenant vendor-directory routes retain one boundary.
-        expect($routes)->toHaveCount(34);
+        expect($routes)->toHaveCount(37);
         $routes->each(function ($route): void {
             expect($route->gatherMiddleware())
                 ->toContain('think.tank.api.no-store')
