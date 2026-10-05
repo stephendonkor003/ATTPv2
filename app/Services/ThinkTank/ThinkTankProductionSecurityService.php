@@ -73,6 +73,12 @@ class ThinkTankProductionSecurityService
             (array) config('sanctum.stateful', []),
         );
 
+        if (collect($stateful)->contains(
+            fn (string $domain): bool => ! $this->isExactStatefulHost($domain)
+        )) {
+            $problems[] = 'Every Sanctum stateful domain must be an exact host and optional port; wildcards are forbidden.';
+        }
+
         if ($statefulHost === '' || ! in_array($statefulHost, $stateful, true)) {
             $problems[] = 'SANCTUM_STATEFUL_DOMAINS must include the exact portal host and port.';
         }
@@ -159,5 +165,35 @@ class ThinkTankProductionSecurityService
         $bits = (int) $prefix;
 
         return $maximum > 0 && $bits > 0 && $bits <= $maximum;
+    }
+
+    private function isExactStatefulHost(string $domain): bool
+    {
+        if ($domain === ''
+            || str_contains($domain, '*')
+            || str_contains($domain, '://')) {
+            return false;
+        }
+
+        try {
+            $parts = parse_url('https://'.$domain);
+        } catch (Throwable) {
+            return false;
+        }
+
+        if (! is_array($parts)
+            || filled($parts['user'] ?? null)
+            || filled($parts['pass'] ?? null)
+            || filled($parts['query'] ?? null)
+            || filled($parts['fragment'] ?? null)
+            || ! in_array((string) ($parts['path'] ?? ''), ['', '/'], true)) {
+            return false;
+        }
+
+        $host = mb_strtolower((string) ($parts['host'] ?? ''));
+        $port = $parts['port'] ?? null;
+        $canonical = $host.(is_int($port) ? ':'.$port : '');
+
+        return $host !== '' && hash_equals($canonical, $domain);
     }
 }

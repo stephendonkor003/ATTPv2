@@ -18,6 +18,7 @@ use App\Http\Middleware\EnsureThinkTankApiReady;
 use App\Http\Middleware\EnsureThinkTankApiStatefulSession;
 use App\Http\Middleware\EnsureThinkTankApiUserManager;
 use App\Http\Middleware\EnsureThinkTankAreaAccess;
+use App\Http\Middleware\EnsureThinkTankFrontendRequestsAreStateful;
 use App\Http\Middleware\EnsureThinkTankUser;
 use App\Http\Middleware\InjectWebsiteVisitTracker;
 use App\Http\Middleware\NoStoreThinkTankApiResponses;
@@ -128,8 +129,6 @@ return Application::configure(basePath: dirname(__DIR__))
                 | Request::HEADER_X_FORWARDED_PORT,
         );
 
-        $middleware->statefulApi();
-
         $middleware->alias([
             'verified' => EnsureEmailIsVerifiedOrImpersonating::class,
             'permission' => CheckPermission::class,
@@ -163,10 +162,13 @@ return Application::configure(basePath: dirname(__DIR__))
             InjectWebsiteVisitTracker::class,
         ]);
 
-        $middleware->api(append: [
-            SecurityHeaders::class,
-            EnforceAuditorReadOnly::class,
-        ]);
+        $middleware->api(
+            append: [
+                SecurityHeaders::class,
+                EnforceAuditorReadOnly::class,
+            ],
+            prepend: [EnsureThinkTankFrontendRequestsAreStateful::class],
+        );
 
         // Recovery must run after the session starts but before route-level
         // authentication, including when the impersonated user was deleted.
@@ -208,6 +210,17 @@ return Application::configure(basePath: dirname(__DIR__))
 
             if ($exception->status === 429 && isset($exception->data['retry_after'])) {
                 $response->headers->set('Retry-After', (string) max(0, (int) $exception->data['retry_after']));
+            }
+
+            // A 503 at this boundary means the portal must remain closed until
+            // its secure session dependency is healthy. Give the Next.js
+            // gateway a bounded retry hint without exposing configuration or
+            // infrastructure details in the response body.
+            if ($exception->status === 503) {
+                $response->headers->set(
+                    'Retry-After',
+                    (string) max(1, (int) ($exception->data['retry_after'] ?? 5)),
+                );
             }
 
             return $response;

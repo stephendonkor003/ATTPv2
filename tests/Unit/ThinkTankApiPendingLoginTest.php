@@ -57,7 +57,10 @@ it('keeps the API guard unauthenticated until OTP and then requires the password
     app('session')->forgetDrivers();
     app()->instance('session.store', $session);
     app('redirect')->setSession($session);
-    Event::fake([Login::class]);
+    // This isolated authentication test owns only the users table. Keep the
+    // application-wide model audit listener from requiring its separate audit
+    // schema while still asserting the login event below.
+    Event::fake();
     Auth::forgetGuards();
 
     try {
@@ -153,12 +156,12 @@ it('keeps the API guard unauthenticated until OTP and then requires the password
         $sessionPayload = $authentication
             ->session($makeRequest('/api/v1/think-tank/auth/session', 'GET'))
             ->getData(true)['data'];
-        expect($sessionPayload)->toMatchArray([
-            'state' => 'MFA_REQUIRED',
-            'next_action' => 'VERIFY_MFA',
-            'user' => null,
-            'challenge' => ['masked_destination' => 'p***@example.test'],
-        ])->and($guard->check())->toBeFalse();
+        expect($sessionPayload)->toHaveKeys(['state', 'next_action', 'user', 'challenge'])
+            ->and($sessionPayload['state'])->toBe('MFA_REQUIRED')
+            ->and($sessionPayload['next_action'])->toBe('VERIFY_MFA')
+            ->and($sessionPayload['user'])->toBeNull()
+            ->and($sessionPayload['challenge']['masked_destination'] ?? null)->toBe('p***@example.test')
+            ->and($guard->check())->toBeFalse();
 
         $verifyRequest = $makeRequest('/api/v1/think-tank/auth/mfa/verify', 'POST', ['code' => '123456']);
         $verifiedPayload = $mfaController->verify($verifyRequest)->getData(true)['data'];

@@ -99,7 +99,7 @@ Each phase is complete only when all of the following are true:
 
 ## Known production blockers discovered during Phase 1
 
-- Runtime session files are present in Git state and must be removed from version control and invalidated before deployment.
+- Runtime session/cache contents must remain outside Git; only the required `storage/framework/sessions/.gitignore` marker is tracked.
 - Local development uses file-backed sessions and cache. Production needs a durable shared store.
 - Current password-era OTP records store recoverable codes; Phase 1 includes a hashed, single-use replacement.
 - Existing temporary-password email flows must be retired in favor of one-time password-setting links.
@@ -139,3 +139,41 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\start-think-tank
 The authenticated integration harness is documented in the sibling portal's `tests/live/README.md`. It uses a separate SQLite database, database sessions and rate limits, real CSRF/MFA, captured local-only test mail, and synthetic `example.test` accounts. It never loads the application's `.env` or alters the normal PostgreSQL accounts.
 
 This checkpoint connects and validates authentication and user management. Tenant roles, budgets, procurement, M&E, payments, reports, audit screens, and dashboard business records remain subsequent migration phases; their sample screens are not API-complete. The existing Blade workflows remain available.
+
+## Production secure-session deployment gate
+
+The Laravel API and Next.js portal are one authentication boundary. A release is not ready until Laravel accepts the portal's exact public origin and the Next.js host can reach Laravel through its server-only upstream URL. Never work around an unavailable session check by treating it as a logged-out session or by rendering a protected page.
+
+Copy the non-secret shape from `.env.example` into the production secret/configuration manager and replace every angle-bracket placeholder. The same portal origin must be used for `THINK_TANK_PORTAL_URL` and `THINK_TANK_PORTAL_ALLOWED_ORIGINS`. `SANCTUM_STATEFUL_DOMAINS` contains only that origin's `host[:port]`, without a scheme or path. `THINK_TANK_TRUSTED_PROXIES` contains only the exact IP addresses or bounded CIDRs that connect directly to PHP; wildcard proxy trust is forbidden.
+
+Production also requires encrypted, Secure, HttpOnly, host-only, SameSite Strict cookies, database sessions, a shared database/Redis-compatible rate-limit and lock store, MFA, a durable queue, and a real mail transport. `SESSION_DOMAIN` stays empty. The Next.js deployment separately requires its server-only `LARAVEL_API_BASE_URL` to point to the Laravel origin reachable from the Next.js host; do not use a loopback default unless both processes genuinely share that network namespace.
+
+Run the Laravel release gate from the deployed release directory after setting the production environment, but before enabling portal traffic:
+
+```bash
+composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+php artisan optimize:clear
+php artisan migrate --force
+php artisan think-tank:security:preflight
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+php artisan think-tank:security:preflight
+php artisan graph-mail:check --authenticate
+php artisan queue:restart
+```
+
+The locked Composer install is mandatory on every release; updating Git alone does not update the runtime framework in `vendor`. The second security preflight deliberately verifies the cached configuration. `graph-mail:check --authenticate` makes no email send, but proves that the configured Microsoft Graph credentials can obtain a token. Start or reload the durable queue worker and scheduler under the process supervisor after these commands.
+
+From the Next.js host, probe the Laravel session endpoint with the real portal origin before restarting or exposing the portal (substitute the placeholders; do not print response headers because they can contain cookies):
+
+```bash
+curl --fail-with-body --silent --show-error --output /dev/null --write-out '%{http_code}\n' \
+  --header 'Accept: application/json' \
+  --header 'X-Requested-With: XMLHttpRequest' \
+  --header 'Origin: https://<portal-public-host>' \
+  --header 'Referer: https://<portal-public-host>/' \
+  'https://<laravel-origin-reachable-from-next>/api/v1/think-tank/auth/session'
+```
+
+The expected result from this reachability probe is HTTP `200`. Then run the portal's `npm run preflight` command to validate the `UNAUTHENTICATED` JSON contract and the complete CSRF/session cookie policy without printing cookie-bearing response headers. HTTP `400` indicates an Origin/Sanctum mismatch. HTTP `503` indicates a failed secure store or production configuration gate and includes a bounded `Retry-After` hint; correct the reported server-side configuration and rerun both preflight checks rather than weakening the middleware.

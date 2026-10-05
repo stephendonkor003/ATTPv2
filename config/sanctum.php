@@ -1,9 +1,19 @@
 <?php
 
+use App\Support\SanctumStatefulDomainList;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Laravel\Sanctum\Http\Middleware\AuthenticateSession;
 use Laravel\Sanctum\Sanctum;
+
+$statefulDomains = SanctumStatefulDomainList::parse(
+    (string) env('SANCTUM_STATEFUL_DOMAINS', sprintf(
+        '%s%s',
+        'localhost,localhost:3000,localhost:3100,127.0.0.1,127.0.0.1:3000,127.0.0.1:3100,127.0.0.1:8000,::1',
+        Sanctum::currentApplicationUrlWithPort(),
+        // Sanctum::currentRequestHost(),
+    ))
+);
 
 return [
 
@@ -18,12 +28,7 @@ return [
     |
     */
 
-    'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', sprintf(
-        '%s%s',
-        'localhost,localhost:3000,localhost:3100,127.0.0.1,127.0.0.1:3000,127.0.0.1:3100,127.0.0.1:8000,::1',
-        Sanctum::currentApplicationUrlWithPort(),
-        // Sanctum::currentRequestHost(),
-    ))),
+    'stateful' => $statefulDomains,
 
     /*
     |--------------------------------------------------------------------------
