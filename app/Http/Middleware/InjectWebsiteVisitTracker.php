@@ -26,13 +26,20 @@ class InjectWebsiteVisitTracker
             'heartbeatUrl' => route('website-visit-tracker.heartbeat'),
         ])->render();
 
-        $response->setContent(str_ireplace('</body>', $script . "\n</body>", $content));
+        $response->setContent(str_ireplace('</body>', $script."\n</body>", $content));
 
         return $response;
     }
 
     private function shouldInject(Request $request, Response $response): bool
     {
+        // Read-only Auditor sessions must not emit background POST heartbeats;
+        // those requests are correctly rejected by the global write guard and
+        // would otherwise create avoidable 403 noise in the browser.
+        if ($request->user()?->isAuditor()) {
+            return false;
+        }
+
         if (! $request->isMethod('GET') || $request->expectsJson() || $request->ajax()) {
             return false;
         }

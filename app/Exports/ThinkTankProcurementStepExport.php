@@ -10,7 +10,7 @@ use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithStrictNullComparison;
 
-class ThinkTankProcurementStepExport implements FromCollection, WithHeadings, WithMapping, ShouldAutoSize, WithStrictNullComparison
+class ThinkTankProcurementStepExport implements FromCollection, ShouldAutoSize, WithHeadings, WithMapping, WithStrictNullComparison
 {
     public function __construct(private readonly Collection $items) {}
 
@@ -73,7 +73,7 @@ class ThinkTankProcurementStepExport implements FromCollection, WithHeadings, Wi
             $item->source_sea_sh_risk,
             $item->source_document_type,
             $item->source_process_status,
-            $item->workflowActivityStatus(),
+            $item->currentStepActivityStatus() ?: $item->importedActivityStatus() ?: $item->workflowActivityStatus(),
             $item->currency,
             $item->planned_start_date?->format('Y-m-d'),
             $item->planned_end_date?->format('Y-m-d'),

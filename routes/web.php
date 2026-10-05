@@ -4369,6 +4369,9 @@ Route::middleware(['auth', 'not.funding.partner'])
         Route::post('/plans/{plan}/items/{item}/no-objection', 'noObjection')
             ->middleware('permission:think_tank.procurement.step|procurement.manage_all')
             ->name('items.no-objection');
+        Route::post('/plans/{plan}/items/{item}/step-status', 'syncStepStatus')
+            ->middleware('permission:think_tank.procurement.step|procurement.manage_all')
+            ->name('items.step-status');
         Route::get('/plans/{plan}/items/{item}/documents/{document}', 'downloadDocument')
             ->middleware('permission:think_tank.procurement.review|think_tank.procurement.step|procurement.view_all|procurement.manage_all')
             ->name('documents.download');

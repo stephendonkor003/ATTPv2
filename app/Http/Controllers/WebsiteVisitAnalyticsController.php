@@ -114,7 +114,7 @@ class WebsiteVisitAnalyticsController extends Controller
     {
         $user = $request->user();
 
-        abort_unless($user && ($user->isSuperAdmin() || $user->isAdmin()), 403);
+        abort_unless($user && $user->hasSystemWideReadAccess(), 403);
     }
 
     private function filters(Request $request): array

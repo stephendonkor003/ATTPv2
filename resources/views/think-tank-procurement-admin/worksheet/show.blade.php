@@ -5,20 +5,49 @@
 
 @section('content')
 @php
+    $hasCompleteNoObjectionEvidence = $item->hasCompleteNoObjectionEvidence();
+    $readyToExecute = $item->isReadyToExecute();
     $statusLabels = [
         'draft' => 'Draft at Think Tank',
         'submitted' => 'Submitted to AUC-ATTP',
         'revision_requested' => 'Returned for correction',
         'rejected' => 'Rejected',
         'approved' => 'Pending World Bank no-objection',
-        'no_objection_obtained' => 'No-objection received / ready to execute',
+        'no_objection_obtained' => 'STEP Cleared / ready to execute',
         'published' => 'Execution underway / published',
     ];
     $memberName = $plan->member?->name ?: 'Think Tank not set';
     $planApproved = $plan->status === 'approved';
     $canReviewNow = $permissions['review'] && $item->status === 'submitted' && in_array($plan->status, ['submitted', 'revision_requested'], true);
-    $canRecordNoObjection = $permissions['step'] && $item->status === 'approved' && $planApproved;
+    $canRecordNoObjection = $permissions['step'] && (
+        ($item->status === 'approved' && $planApproved)
+        || in_array($item->status, ['no_objection_obtained', 'published'], true)
+    );
+    $canSyncStepStatus = (bool) ($permissions['step'] ?? false);
+    $hasExecutionRecord = filled($item->procurement_id) || $item->status === 'published';
     $plannedMilestones = collect($item->planned_milestones ?? [])->filter(fn ($row) => is_array($row));
+    $sourcePayload = is_array($item->source_payload) ? $item->source_payload : [];
+    $importedExcelActivityStatus = $item->importedActivityStatus();
+    $currentStepActivityStatus = $item->currentStepActivityStatus();
+    $sourceRow = (array) data_get($sourcePayload, 'source.row', []);
+    $sourceCells = collect(data_get($sourceRow, 'cells', []))->filter(fn ($cell) => is_array($cell));
+    $sourceHeaders = collect(data_get($sourcePayload, 'source.header.cells', []));
+    $sourceSubheaders = collect(data_get($sourcePayload, 'source.subheader.cells', []));
+    $sourceReviewFlags = collect(data_get($sourcePayload, 'review_flags', []))->filter(fn ($flag) => is_array($flag));
+    $sourceProvenance = (array) data_get($sourcePayload, 'provenance.selected', []);
+    $payloadValue = static function (mixed $value): string {
+        if ($value === null) {
+            return 'null';
+        }
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+        if (is_scalar($value)) {
+            return (string) $value;
+        }
+
+        return (string) json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    };
 @endphp
 
 <div class="nxl-container">
@@ -89,19 +118,71 @@
                             <div class="ttw-fact"><dt>Planned period</dt><dd>{{ $item->planned_quarter ?: 'Quarter not set' }} · {{ $item->planned_start_date?->format('d M Y') ?: 'Start TBC' }} to {{ $item->planned_end_date?->format('d M Y') ?: 'End TBC' }}</dd></div>
                             <div class="ttw-fact"><dt>SEA / SH risk</dt><dd>{{ $item->source_sea_sh_risk ?: 'Not set' }}</dd></div>
                             <div class="ttw-fact"><dt>Process status</dt><dd>{{ $item->source_process_status ?: 'Not set' }}</dd></div>
-                            <div class="ttw-fact"><dt>Activity status</dt><dd>{{ $item->source_activity_status ?: $item->workflowActivityStatus() }}</dd></div>
+                            <div class="ttw-fact"><dt>Imported Excel Activity Status</dt><dd>{{ $importedExcelActivityStatus ?: 'Not supplied in Excel' }}</dd></div>
+                            <div class="ttw-fact"><dt>Current STEP Activity Status</dt><dd>{{ $currentStepActivityStatus ?: 'Not synchronized' }}</dd></div>
+                            <div class="ttw-fact"><dt>Current system status</dt><dd>{{ $statusLabels[$item->status] ?? Str::headline($item->status) }}</dd></div>
                             <div class="ttw-fact"><dt>In process</dt><dd>{{ $item->source_in_process ?: 'Not set' }}</dd></div>
                         </dl>
 
                         @if($item->limited_selection_justification || $item->budget_reference || $item->bank_comment || $item->action_taken)
-                            <div class="ttw-subhead"><h3>Workbook notes and controls</h3><span>Preserved from the submitted plan</span></div>
+                            <div class="ttw-subhead"><h3>Workbook notes and controls</h3><span>Imported Excel evidence · read-only</span></div>
                             <dl class="ttw-facts">
                                 @if($item->limited_selection_justification)<div class="ttw-fact"><dt>Limited selection justification</dt><dd>{{ $item->limited_selection_justification }}</dd></div>@endif
                                 @if($item->budget_reference)<div class="ttw-fact"><dt>Budget reference</dt><dd>{{ $item->budget_reference }}</dd></div>@endif
-                                @if($item->bank_comment)<div class="ttw-fact"><dt>World Bank comment</dt><dd>{{ $item->bank_comment }}</dd></div>@endif
-                                @if($item->action_taken)<div class="ttw-fact"><dt>Action taken</dt><dd>{{ $item->action_taken }}</dd></div>@endif
+                                @if($item->bank_comment)<div class="ttw-fact"><dt>World Bank comment (imported)</dt><dd>{{ $item->bank_comment }}</dd></div>@endif
+                                @if($item->action_taken)<div class="ttw-fact"><dt>AUC comment / action taken (imported)</dt><dd>{{ $item->action_taken }}</dd></div>@endif
                             </dl>
+                            <div class="ttw-source-lock"><i class="feather-lock"></i><span>These workbook values are source evidence. STEP synchronization appends a separate audited comment and never rewrites them.</span></div>
                         @endif
+
+                        <div class="ttw-subhead"><h3>Complete imported Excel source row</h3><span>Read-only payload · {{ $sourceCells->count() }} preserved cell(s)</span></div>
+                        <div class="ttw-source-meta">
+                            <span><strong>Workbook</strong>{{ $item->source_file ?: data_get($sourceProvenance, 'source_file', 'Not recorded') }}</span>
+                            <span><strong>Sheet</strong>{{ $item->source_sheet ?: data_get($sourceProvenance, 'source_sheet', 'Not recorded') }}</span>
+                            <span><strong>Row</strong>{{ $item->source_row ?: data_get($sourceProvenance, 'source_row', data_get($sourceRow, 'row_number', 'Not recorded')) }}</span>
+                            <span><strong>Source path</strong>{{ data_get($sourceProvenance, 'source_path', 'Not recorded') }}</span>
+                        </div>
+                        @if($sourceCells->isNotEmpty())
+                            <div class="ttw-source-grid" aria-label="Complete imported Excel row payload">
+                                @foreach($sourceCells as $column => $cell)
+                                    @php
+                                        $header = data_get($sourceHeaders->get($column), 'formatted');
+                                        $subheader = data_get($sourceSubheaders->get($column), 'formatted');
+                                        $cellLabel = collect([$header, $subheader])->filter(fn ($value) => filled($value))->unique()->implode(' / ');
+                                        $cellComment = (array) data_get($cell, 'comment', []);
+                                    @endphp
+                                    <article class="ttw-source-cell">
+                                        <header><strong>{{ data_get($cell, 'coordinate', $column.($sourceRow['row_number'] ?? '')) }}</strong><span>{{ $cellLabel ?: 'Unlabelled workbook column '.$column }}</span></header>
+                                        <div class="ttw-source-value">{{ $payloadValue(data_get($cell, 'formatted')) }}</div>
+                                        <dl>
+                                            <div><dt>Raw</dt><dd>{{ $payloadValue(data_get($cell, 'raw')) }}</dd></div>
+                                            <div><dt>Formula</dt><dd>{{ $payloadValue(data_get($cell, 'formula')) }}</dd></div>
+                                            <div><dt>Cached</dt><dd>{{ $payloadValue(data_get($cell, 'cached')) }}</dd></div>
+                                            <div><dt>Excel type</dt><dd>{{ $payloadValue(data_get($cell, 'data_type')) }}</dd></div>
+                                        </dl>
+                                        @if(filled(data_get($cellComment, 'text')))
+                                            <div class="ttw-source-comment">
+                                                <strong><i class="feather-message-square"></i> Imported Excel {{ data_get($cellComment, 'type') === 'threaded' ? 'threaded comment' : 'note' }}</strong>
+                                                <p>{{ data_get($cellComment, 'text') }}</p>
+                                                @if(filled(data_get($cellComment, 'author')))<small>Author: {{ data_get($cellComment, 'author') }}</small>@endif
+                                            </div>
+                                        @endif
+                                    </article>
+                                @endforeach
+                            </div>
+                        @else
+                            <div class="ttw-permission-note"><i class="feather-alert-circle"></i><span>No cell-level source payload is attached to this record. The canonical imported fields above remain available.</span></div>
+                        @endif
+
+                        <div class="ttw-subhead"><h3>Import review flags</h3><span>{{ $sourceReviewFlags->count() }} flag(s) retained with this row</span></div>
+                        @forelse($sourceReviewFlags as $flag)
+                            <article class="ttw-review-flag">
+                                <strong>{{ Str::headline((string) data_get($flag, 'type', data_get($flag, 'source', 'Review flag'))) }}</strong>
+                                <pre>{{ json_encode($flag, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) }}</pre>
+                            </article>
+                        @empty
+                            <div class="ttw-permission-note"><i class="feather-check-circle"></i><span>The audited import did not attach a review flag to this source row.</span></div>
+                        @endforelse
 
                         <div class="ttw-subhead"><h3>Private supporting documents</h3><span>{{ $item->documents->count() }} attachment(s)</span></div>
                         <div class="ttw-docs">
@@ -142,6 +223,7 @@
                                         <strong>{{ Str::headline($event->action) }} @if(!$event->item_id)<span class="text-muted">· Plan event</span>@endif</strong>
                                         <p>{{ $event->actor?->name ?: 'System' }}@if($event->from_status || $event->to_status) · {{ Str::headline($event->from_status ?: 'created') }} → {{ Str::headline($event->to_status ?: 'recorded') }}@endif</p>
                                         @if($event->reason)<p class="ttw-review-note">{{ $event->reason }}</p>@endif
+                                        @if(data_get($event->metadata, 'external_activity_status'))<p class="ttw-review-note">STEP Activity Status: {{ data_get($event->metadata, 'external_activity_status') }}</p>@endif
                                         @if(($event->notifications_queued_count + $event->notifications_sent_count + $event->notifications_failed_count) > 0)
                                             <div class="ttw-delivery" aria-label="Notification delivery summary">
                                                 <span><i class="feather-clock"></i> {{ $event->notifications_queued_count }} queued</span>
@@ -167,7 +249,7 @@
                     <p>{{ match($item->status) {
                         'submitted' => 'The Think Tank has submitted this item to the AUC-ATTP Secretariat for review.',
                         'approved' => $planApproved ? 'Secretariat review is complete. Record the World Bank no-objection when the formal decision is received.' : 'The item is accepted, but the complete annual plan must be approved before World Bank processing.',
-                        'no_objection_obtained' => 'The World Bank no-objection has been received and this item is ready to execute.',
+                        'no_objection_obtained' => 'STEP is synchronized as Cleared. The World Bank no-objection is recorded and this item is ready to execute.',
                         'published' => 'The cleared item has moved into execution or publication.',
                         'revision_requested' => 'The item is back with the Think Tank for correction and resubmission.',
                         'rejected' => 'The rejection is final for this submission version unless the workflow is reopened.',
@@ -177,7 +259,7 @@
                         <span class="ttw-check"><i class="{{ $plan->submitted_at ? 'feather-check-circle' : 'feather-circle' }}"></i> Plan submitted to AUC-ATTP</span>
                         <span class="ttw-check"><i class="{{ $planApproved ? 'feather-check-circle' : 'feather-circle' }}"></i> Full annual plan approved</span>
                         <span class="ttw-check"><i class="{{ $item->step_exported_at ? 'feather-check-circle' : 'feather-circle' }}"></i> STEP export {{ $item->step_exported_at ? 'recorded '.$item->step_exported_at->format('d M Y') : 'not yet recorded' }}</span>
-                        <span class="ttw-check"><i class="{{ $item->no_objection_recorded_at ? 'feather-check-circle' : 'feather-circle' }}"></i> World Bank decision {{ $item->no_objection_recorded_at ? 'recorded' : 'pending' }}</span>
+                        <span class="ttw-check"><i class="{{ $hasCompleteNoObjectionEvidence ? 'feather-check-circle' : 'feather-circle' }}"></i> Supplemental formal evidence {{ $hasCompleteNoObjectionEvidence ? 'recorded' : 'not recorded (optional)' }}</span>
                     </div>
                 </section>
 
@@ -201,20 +283,49 @@
                     </section>
                 @endif
 
+                @if($canSyncStepStatus)
+                    <section class="ttw-action-box">
+                        <h3><i class="feather-refresh-cw"></i> Synchronize external STEP status</h3>
+                        <p>This records STEP's current Activity Status independently of the imported plan approval workflow. The imported Excel row, World Bank comment, and AUC comment remain unchanged.</p>
+                        <form method="POST" action="{{ route('think-tank-procurement.items.step-status', [$plan, $item]) }}" class="ttw-form-stack" data-step-sync-form>
+                            @csrf
+                            <input type="hidden" name="lock_version" value="{{ $item->portal_lock_version ?: 1 }}">
+                            <div>
+                                <label class="ttw-label" for="step-activity-status">Confirmed STEP Activity Status</label>
+                                <select class="ttw-input" id="step-activity-status" name="step_activity_status" aria-describedby="step-status-help">
+                                    <option value="">Keep current STEP status — add comment only</option>
+                                    @unless($hasExecutionRecord)
+                                        <option value="new" @selected(old('step_activity_status', Str::lower((string) $currentStepActivityStatus)) === 'new')>New</option>
+                                        <option value="returned" @selected(old('step_activity_status', Str::lower((string) $currentStepActivityStatus)) === 'returned')>Returned</option>
+                                    @endunless
+                                    <option value="cleared" @selected(old('step_activity_status', Str::lower((string) $currentStepActivityStatus)) === 'cleared')>Cleared</option>
+                                </select>
+                                <small id="step-status-help" class="text-muted">Select a status only from confirmed STEP information. Cleared records the World Bank no-objection and makes the item ready to execute; it never invents a decision date, reference, or document.</small>
+                            </div>
+                            <div>
+                                <label class="ttw-label" for="step-sync-comment">Update comment</label>
+                                <textarea class="ttw-input" id="step-sync-comment" name="comment" rows="4" minlength="3" maxlength="5000" required placeholder="State what was confirmed in STEP and why this update is being recorded.">{{ old('comment') }}</textarea>
+                                <small class="text-muted">Required. The comment is appended to the audit timeline with your identity and cannot overwrite imported comments.</small>
+                            </div>
+                            <button class="ttw-btn primary" type="submit" onclick="return confirm('Record this STEP update and append the audit comment?')"><i class="feather-save"></i> Record STEP update</button>
+                        </form>
+                    </section>
+                @endif
+
                 @if($canRecordNoObjection)
                     <section class="ttw-action-box">
-                        <h3><i class="feather-globe"></i> World Bank no-objection</h3>
-                        <p>Use the formal World Bank decision. This action records the no-objection and marks the item ready to execute.</p>
-                        <form method="POST" action="{{ route('think-tank-procurement.items.no-objection', [$plan, $item]) }}" enctype="multipart/form-data" class="ttw-form-stack" data-wb-decision-form>
+                        <h3><i class="feather-globe"></i> World Bank no-objection evidence</h3>
+                        <p>{{ in_array($item->status, ['no_objection_obtained', 'published'], true) ? 'STEP already records this item as Cleared. Add or update the supplemental formal decision evidence here.' : 'Use the formal World Bank decision. This action records the no-objection and marks the item ready to execute.' }}</p>
+                        <form method="POST" action="{{ route('think-tank-procurement.items.no-objection', [$plan, $item]) }}" enctype="multipart/form-data" class="ttw-form-stack" data-wb-decision-form data-existing-evidence="{{ $hasCompleteNoObjectionEvidence ? '1' : '0' }}">
                             @csrf
                             <div><label class="ttw-label" for="step-reference">STEP reference</label><input class="ttw-input" id="step-reference" name="step_reference" value="{{ old('step_reference', $item->step_reference) }}" required></div>
                             <div class="ttw-form-grid">
-                                <div><label class="ttw-label" for="decision-date">Decision date</label><input class="ttw-input" id="decision-date" type="date" name="no_objection_date" value="{{ old('no_objection_date', now()->toDateString()) }}" max="{{ now()->toDateString() }}" required></div>
-                                <div><label class="ttw-label" for="decision-reference">Decision reference <span class="text-muted">reference or document required</span></label><input class="ttw-input" id="decision-reference" name="no_objection_reference" value="{{ old('no_objection_reference') }}" data-wb-reference aria-describedby="wb-evidence-help"></div>
+                                <div><label class="ttw-label" for="decision-date">Decision date</label><input class="ttw-input" id="decision-date" type="date" name="no_objection_date" value="{{ old('no_objection_date', $item->no_objection_date?->toDateString()) }}" max="{{ now()->toDateString() }}" required></div>
+                                <div><label class="ttw-label" for="decision-reference">Decision reference <span class="text-muted">reference or document required</span></label><input class="ttw-input" id="decision-reference" name="no_objection_reference" value="{{ old('no_objection_reference', $item->no_objection_reference) }}" data-wb-reference aria-describedby="wb-evidence-help"></div>
                             </div>
                             <div><label class="ttw-label" for="decision-document">Decision document <span class="text-muted">PDF or Word, max 20 MB</span></label><input class="ttw-input" id="decision-document" type="file" name="no_objection_document" accept=".pdf,.doc,.docx" data-wb-document><small id="wb-evidence-help" class="text-muted">Provide the World Bank reference, the formal decision document, or both.</small></div>
-                            <div><label class="ttw-label" for="decision-notes">Decision notes</label><textarea class="ttw-input" id="decision-notes" name="no_objection_notes" rows="4" placeholder="Optional context included in the Think Tank notification">{{ old('no_objection_notes') }}</textarea></div>
-                            <button class="ttw-btn primary" type="submit" onclick="return confirm('Record this World Bank no-objection and mark the item ready to execute?')"><i class="feather-check-circle"></i> Record no-objection and mark ready to execute</button>
+                            <div><label class="ttw-label" for="decision-notes">Decision notes</label><textarea class="ttw-input" id="decision-notes" name="no_objection_notes" rows="4" placeholder="Optional context included in the Think Tank notification">{{ old('no_objection_notes', $item->no_objection_notes) }}</textarea></div>
+                            <button class="ttw-btn primary" type="submit" onclick="return confirm('Record this World Bank no-objection evidence?')"><i class="feather-check-circle"></i> Record no-objection evidence</button>
                         </form>
                     </section>
                 @elseif($item->status === 'approved' && !$planApproved)
@@ -223,7 +334,11 @@
 
                 @if(in_array($item->status, ['no_objection_obtained', 'published'], true))
                     <section class="ttw-action-box">
-                        <h3><i class="feather-check-circle"></i> Clearance record</h3>
+                        <h3><i class="{{ $readyToExecute ? 'feather-check-circle' : 'feather-alert-circle' }}"></i> Clearance record</h3>
+                        <p>STEP is recorded as Cleared and the item is ready to execute.</p>
+                        @unless($hasCompleteNoObjectionEvidence)
+                            <div class="ttw-permission-note evidence-pending"><i class="feather-info"></i><span>The Excel/STEP clearance is authoritative. A dated reference or decision document has not been added as supplemental evidence.</span></div>
+                        @endunless
                         <dl class="ttw-facts">
                             <div class="ttw-fact"><dt>STEP reference</dt><dd>{{ $item->step_reference ?: 'Not recorded' }}</dd></div>
                             <div class="ttw-fact"><dt>Decision reference</dt><dd>{{ $item->no_objection_reference ?: 'Not recorded' }}</dd></div>
@@ -233,7 +348,7 @@
                     </section>
                 @endif
 
-                @unless($canReviewNow || $canRecordNoObjection)
+                @unless($canReviewNow || $canRecordNoObjection || $canSyncStepStatus)
                     @if(!in_array($item->status, ['no_objection_obtained', 'published'], true))
                         <div class="ttw-permission-note"><i class="feather-info"></i><span>No transition is available for this item at its current status or under your assigned permissions. The worksheet remains available for authorized review.</span></div>
                     @endif
@@ -268,7 +383,7 @@ document.addEventListener('DOMContentLoaded', function () {
     reference.addEventListener('input', clearEvidenceError);
     documentInput.addEventListener('change', clearEvidenceError);
     form.addEventListener('submit', function (event) {
-        if (reference.value.trim() || documentInput.files.length) return;
+        if (form.dataset.existingEvidence === '1' || reference.value.trim() || documentInput.files.length) return;
         event.preventDefault();
         reference.setCustomValidity('Enter the World Bank decision reference or attach the formal decision document.');
         reference.reportValidity();

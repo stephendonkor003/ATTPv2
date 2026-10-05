@@ -13,6 +13,7 @@ use App\Models\NewsPost;
 use App\Models\SystemAuditLog;
 use App\Models\UserLoginOtp;
 use App\Services\Mail\MicrosoftGraphMailService;
+use App\Support\AuditorAccess;
 use App\Support\IpGeo;
 use App\Support\UserImpersonation;
 use Illuminate\Auth\Events\Failed;
@@ -55,6 +56,11 @@ class AppServiceProvider extends ServiceProvider
         Paginator::useBootstrapFive();
 
         Gate::before(function ($user, $ability) {
+            if ($user->isAuditor()) {
+                return app()->bound('request')
+                    && AuditorAccess::requestIsSafeReadAllowed(request());
+            }
+
             return $user->hasPermission($ability);
         });
 

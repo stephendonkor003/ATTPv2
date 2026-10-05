@@ -1024,7 +1024,7 @@ class GrmController extends Controller
 
     private function userCanSeeAll(?User $user): bool
     {
-        return (bool) ($user && ($user->isSuperAdmin() || $user->isAdmin()));
+        return (bool) ($user && $user->hasSystemWideReadAccess());
     }
 
     private function channels(): array

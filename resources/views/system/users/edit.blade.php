@@ -214,12 +214,13 @@
                                             <option value="{{ $role->id }}"
                                                 data-role-name="{{ $role->name }}"
                                                 {{ old('role_id', $user->role_id) == $role->id ? 'selected' : '' }}>
-                                                {{ $role->name }}
+                                                {{ $role->isReadOnlyAuditor() ? 'Auditor — full system, view only' : $role->name }}
                                             </option>
                                         @endforeach
                                     </select>
                                     <small class="text-muted">
-                                        Changing role updates the user’s permissions.
+                                        Changing role updates the user’s permissions. Auditor is enforced as staff with
+                                        system-wide view-only access and any direct permission overrides are removed.
                                     </small>
                                 @endif
                             </div>
@@ -684,7 +685,12 @@
             }
 
             userTypeSelect.addEventListener('change', toggleUserTypeFields);
-            roleSelect?.addEventListener('change', toggleUserTypeFields);
+            roleSelect?.addEventListener('change', () => {
+                if (selectedRoleName() === 'Auditor') {
+                    userTypeSelect.value = 'staff';
+                }
+                toggleUserTypeFields();
+            });
             [userTypeSelect, roleSelect, vendorCategorySelect, governanceSelect, memberStateSelect].forEach((field) => {
                 field?.addEventListener('change', resetConversionConfirmation);
             });

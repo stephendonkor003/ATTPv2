@@ -16,12 +16,12 @@ use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 /**
- * Persists the audited FY2026 Excel dataset without advancing procurement workflow.
+ * Persists the audited FY2026 Excel dataset and its source-declared workflow position.
  *
  * The workbook reader is deliberately separate and side-effect free. This class is
  * the guarded persistence boundary: it pins the audit invariants, archives every
  * source workbook privately, preserves every physical source record, and only
- * creates or updates draft records owned by this migration.
+ * creates or updates records owned by this migration without erasing later staff work.
  */
 final class ThinkTankProcurementSpreadsheetMigrationService
 {
@@ -35,7 +35,7 @@ final class ThinkTankProcurementSpreadsheetMigrationService
 
     public const MIGRATION_VERSION = 1;
 
-    private const EXPECTED_MANIFEST_SHA256 = '9531b4311e9cbf0d8bb169325f4452484c17e8572c02f23f3a1e8db304f78b05';
+    private const EXPECTED_MANIFEST_SHA256 = '6da2cfddb0c372adcf958c9c8028a094582cdf41967b492bae140ac9bc271c14';
 
     /** @var array<string, int> */
     private const EXPECTED_COUNTS = [
@@ -47,6 +47,27 @@ final class ThinkTankProcurementSpreadsheetMigrationService
         'physical_at_or_above_10000' => 57,
         'unique_below_10000' => 66,
         'unique_at_or_above_10000' => 51,
+    ];
+
+    /** @var array<string, int> */
+    private const EXPECTED_PHYSICAL_ACTIVITY_STATUSES = [
+        'New' => 67,
+        'Returned' => 8,
+        'Cleared' => 48,
+    ];
+
+    /** @var array<string, int> */
+    private const EXPECTED_UNIQUE_ACTIVITY_STATUSES = [
+        'New' => 67,
+        'Returned' => 5,
+        'Cleared' => 45,
+    ];
+
+    /** @var array<string, int> */
+    private const EXPECTED_UNIQUE_WORKFLOW_STATUSES = [
+        ThinkTankProcurementItem::STATUS_DRAFT => 67,
+        ThinkTankProcurementItem::STATUS_REVISION_REQUESTED => 5,
+        ThinkTankProcurementItem::STATUS_NO_OBJECTION => 45,
     ];
 
     /** @var array<string, string> */
@@ -235,6 +256,12 @@ final class ThinkTankProcurementSpreadsheetMigrationService
         if ($physicalExcluded !== 4) {
             throw new RuntimeException("Expected four physical hard-exclusion rows, got {$physicalExcluded}.");
         }
+        $this->assertStatusDistribution(
+            $records,
+            'source_activity_status',
+            self::EXPECTED_PHYSICAL_ACTIVITY_STATUSES,
+            'physical Activity Status',
+        );
 
         $identities = [];
         foreach ($unique as $record) {
@@ -259,6 +286,18 @@ final class ThinkTankProcurementSpreadsheetMigrationService
             $identities[$identity] = true;
         }
         $this->assertMemberBandDistribution($unique);
+        $this->assertStatusDistribution(
+            $unique,
+            'source_activity_status',
+            self::EXPECTED_UNIQUE_ACTIVITY_STATUSES,
+            'mapped Activity Status',
+        );
+        $this->assertStatusDistribution(
+            $unique,
+            'workflow_status',
+            self::EXPECTED_UNIQUE_WORKFLOW_STATUSES,
+            'mapped workflow status',
+        );
 
         $excludedReferences = array_values(array_unique(array_map(
             static fn (array $record): string => (string) ($record['source_reference'] ?? ''),
@@ -279,6 +318,37 @@ final class ThinkTankProcurementSpreadsheetMigrationService
             if (($manifestExpected[$band] ?? null) !== $expected) {
                 throw new RuntimeException("The manifest invariant for procurement band [{$band}] has drifted.");
             }
+        }
+        foreach ([
+            'physical_activity_statuses' => self::EXPECTED_PHYSICAL_ACTIVITY_STATUSES,
+            'mapped_activity_statuses' => self::EXPECTED_UNIQUE_ACTIVITY_STATUSES,
+            'mapped_workflow_statuses' => self::EXPECTED_UNIQUE_WORKFLOW_STATUSES,
+        ] as $key => $expected) {
+            if (($dataset['diagnostics']['expected'][$key] ?? null) !== $expected) {
+                throw new RuntimeException("The manifest invariant for procurement status distribution [{$key}] has drifted.");
+            }
+        }
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $records
+     * @param  array<string, int>  $expected
+     */
+    private function assertStatusDistribution(array $records, string $field, array $expected, string $label): void
+    {
+        $actual = [];
+        foreach ($records as $record) {
+            $value = $record[$field] ?? null;
+            if (! is_string($value) || $value === '') {
+                throw new RuntimeException("A procurement record has no {$label} value.");
+            }
+            $actual[$value] = ($actual[$value] ?? 0) + 1;
+        }
+        ksort($actual);
+        ksort($expected);
+
+        if ($actual !== $expected) {
+            throw new RuntimeException("Procurement {$label} distribution drifted: expected ".json_encode($expected).', got '.json_encode($actual).'.');
         }
     }
 
@@ -333,6 +403,7 @@ final class ThinkTankProcurementSpreadsheetMigrationService
         if (! in_array($record['threshold_band'] ?? null, [self::BAND_BELOW, self::BAND_AT_OR_ABOVE], true)) {
             throw new RuntimeException('A physical procurement record is outside the two audited threshold bands.');
         }
+        $this->seededWorkflowStatus($record);
     }
 
     /**
@@ -683,6 +754,17 @@ final class ThinkTankProcurementSpreadsheetMigrationService
         if ($plan->consortium_id !== $member->consortium_id || $plan->think_tank_member_id !== $member->id) {
             throw new RuntimeException("FY2026 plan [{$plan->plan_code}] is attached to an inconsistent tenant boundary.");
         }
+        if (! in_array($plan->currency, [null, '', 'USD'], true)) {
+            throw new RuntimeException("FY2026 plan [{$plan->plan_code}] is not a USD plan and was not modified.");
+        }
+
+        $items = ThinkTankProcurementItem::query()->where('plan_id', $plan->id)->lockForUpdate()->get();
+        $isMigrationPlan = str_contains((string) $plan->description, $this->planMarkerText())
+            || $items->contains(fn (ThinkTankProcurementItem $item): bool => $this->isOwnedImportedItem($item));
+        if ($isMigrationPlan) {
+            return;
+        }
+
         if ($plan->status !== ThinkTankProcurementPlan::STATUS_DRAFT
             || (int) ($plan->version ?? 1) > 1
             || (int) ($plan->portal_lock_version ?? 1) > 1
@@ -693,52 +775,34 @@ final class ThinkTankProcurementSpreadsheetMigrationService
             || $plan->last_resubmitted_at !== null
             || $plan->approved_at !== null
             || $plan->rejected_at !== null
-            || $plan->decision_reason !== null) {
-            throw new RuntimeException("FY2026 plan [{$plan->plan_code}] has workflow history and was not modified.");
+            || $plan->decision_reason !== null
+            || $plan->events()->exists()
+            || $plan->procurements()->exists()) {
+            throw new RuntimeException("FY2026 plan [{$plan->plan_code}] has workflow history and was not adopted or modified.");
         }
-        if (! in_array($plan->currency, [null, '', 'USD'], true)) {
-            throw new RuntimeException("FY2026 plan [{$plan->plan_code}] is not a USD plan and was not modified.");
-        }
-        if ($plan->events()->exists() || $plan->procurements()->exists()) {
-            throw new RuntimeException("FY2026 plan [{$plan->plan_code}] has workflow/execution records and was not modified.");
-        }
-
-        $items = ThinkTankProcurementItem::query()->where('plan_id', $plan->id)->lockForUpdate()->get();
         if ($items->isEmpty() && abs((float) $plan->estimated_budget) > 0.00001) {
             throw new RuntimeException("Empty FY2026 plan [{$plan->plan_code}] has a non-zero manual budget and was not adopted.");
         }
-        foreach ($items as $item) {
-            $this->assertOwnedDraftItem($item, $plan);
+        if ($items->isNotEmpty()) {
+            throw new RuntimeException("FY2026 plan [{$plan->plan_code}] contains manual items and was not adopted or modified.");
         }
     }
 
-    private function assertOwnedDraftItem(ThinkTankProcurementItem $item, ThinkTankProcurementPlan $plan): void
+    private function assertOwnedImportedItem(ThinkTankProcurementItem $item, ThinkTankProcurementPlan $plan): void
     {
-        $migration = data_get($item->source_payload, 'migration');
-        if (! is_array($migration)
-            || ($migration['key'] ?? null) !== self::MIGRATION_KEY
-            || ($migration['version'] ?? null) !== self::MIGRATION_VERSION
-            || ($migration['fiscal_year'] ?? null) !== self::FISCAL_YEAR) {
+        if (! $this->isOwnedImportedItem($item)) {
             throw new RuntimeException("FY2026 plan [{$plan->plan_code}] contains item [{$item->item_code}] not owned by this migration.");
         }
-        if ($item->status !== ThinkTankProcurementItem::STATUS_DRAFT
-            || (int) ($item->portal_lock_version ?? 1) > 1
-            || $item->review_reason !== null
-            || $item->reviewed_by !== null
-            || $item->reviewed_at !== null
-            || $item->step_reference !== null
-            || $item->step_exported_at !== null
-            || $item->step_exported_by !== null
-            || $item->no_objection_reference !== null
-            || $item->no_objection_date !== null
-            || $item->no_objection_notes !== null
-            || $item->no_objection_by !== null
-            || $item->no_objection_recorded_at !== null
-            || $item->procurement_id !== null
-            || $item->documents()->exists()
-            || $item->events()->exists()) {
-            throw new RuntimeException("Imported item [{$item->item_code}] has progressed beyond a pristine draft and was not modified.");
-        }
+    }
+
+    private function isOwnedImportedItem(ThinkTankProcurementItem $item): bool
+    {
+        $migration = data_get($item->source_payload, 'migration');
+
+        return is_array($migration)
+            && ($migration['key'] ?? null) === self::MIGRATION_KEY
+            && ($migration['version'] ?? null) === self::MIGRATION_VERSION
+            && ($migration['fiscal_year'] ?? null) === self::FISCAL_YEAR;
     }
 
     /**
@@ -767,12 +831,15 @@ final class ThinkTankProcurementSpreadsheetMigrationService
         /** @var ThinkTankProcurementItem|null $item */
         $item = $matches->first();
         $itemCode = $this->deterministicItemCode($plan, $record);
+        $isNew = $item === null;
+        $refreshImportedSnapshot = true;
         if ($item) {
-            $this->assertOwnedDraftItem($item, $plan);
+            $this->assertOwnedImportedItem($item, $plan);
             $markerIdentity = data_get($item->source_payload, 'migration.identity');
             if ($markerIdentity !== $this->recordIdentity($record)) {
                 throw new RuntimeException("Imported item [{$item->item_code}] has an inconsistent canonical migration identity.");
             }
+            $refreshImportedSnapshot = $this->isPristineImportedItem($item);
         } else {
             $collision = ThinkTankProcurementItem::query()->where('item_code', $itemCode)->lockForUpdate()->first();
             if ($collision) {
@@ -783,59 +850,107 @@ final class ThinkTankProcurementSpreadsheetMigrationService
         }
 
         $provenance = $record['provenance'];
+        $generatedSourcePayload = $this->itemSourcePayload($record, $dataset, $manifest, $band);
+        $existingSourcePayload = is_array($item->source_payload) ? $item->source_payload : [];
+        $existingMigrationMarker = is_array($existingSourcePayload['migration'] ?? null)
+            ? $existingSourcePayload['migration']
+            : [];
+        $sourcePayload = [
+            ...$existingSourcePayload,
+            ...$generatedSourcePayload,
+            'migration' => [
+                ...$existingMigrationMarker,
+                ...$generatedSourcePayload['migration'],
+            ],
+        ];
         $item->fill([
             'item_code' => $itemCode,
             'source_reference' => $record['source_reference'],
-            'loan_credit_no' => $record['loan_credit_no'],
-            'component' => $record['component'],
-            'source_in_process' => $record['source_in_process'],
-            'source_process_status' => $record['source_process_status'],
-            'source_activity_status' => $record['source_activity_status'],
-            'source_document_type' => $record['source_document_type'],
-            'source_sea_sh_risk' => $record['source_sea_sh_risk'],
-            'title' => $this->displayTitle($record),
-            'description' => $record['description'],
-            'procurement_category' => $record['procurement_category'],
-            'procurement_method' => $record['procurement_method'],
-            'market_approach' => $record['market_approach'],
-            'review_type' => $record['review_type'],
-            'quantity' => $this->decimalOrNull($record['quantity'], 4),
-            'unit' => $record['unit'],
-            'estimated_unit_cost' => $this->decimalOrNull($record['estimated_unit_cost'], 2),
-            'estimated_amount' => $record['estimated_amount'],
-            'currency' => 'USD',
-            'planned_quarter' => $record['planned_quarter'],
-            'planned_start_date' => $record['planned_start_date'],
-            'planned_end_date' => $record['planned_end_date'],
-            'status' => ThinkTankProcurementItem::STATUS_DRAFT,
-            'review_reason' => null,
-            'reviewed_by' => null,
-            'reviewed_at' => null,
-            'step_reference' => null,
-            'step_exported_at' => null,
-            'step_exported_by' => null,
-            'no_objection_reference' => null,
-            'no_objection_date' => null,
-            'no_objection_notes' => null,
-            'no_objection_by' => null,
-            'no_objection_recorded_at' => null,
-            'procurement_id' => null,
             'source_file' => $provenance['source_file'],
             'source_sheet' => $provenance['source_sheet'],
             'source_row' => $provenance['source_row'],
-            'source_payload' => $this->itemSourcePayload($record, $dataset, $manifest, $band),
-            'planned_milestones' => $record['planned_milestones'],
-            'created_by' => null,
-            'updated_by' => null,
-            'limited_selection_justification' => $record['limited_selection_justification'],
-            'budget_reference' => $record['budget_reference'],
-            'bank_comment' => $record['bank_comment'],
-            'action_taken' => $record['action_taken'],
-            'portal_lock_version' => 1,
+            'source_payload' => $sourcePayload,
         ]);
+        if ($refreshImportedSnapshot) {
+            $item->fill([
+                'loan_credit_no' => $record['loan_credit_no'],
+                'component' => $record['component'],
+                'source_in_process' => $record['source_in_process'],
+                'source_process_status' => $record['source_process_status'],
+                'source_activity_status' => $record['source_activity_status'],
+                'step_activity_status' => $record['source_activity_status'],
+                'source_document_type' => $record['source_document_type'],
+                'source_sea_sh_risk' => $record['source_sea_sh_risk'],
+                'title' => $this->displayTitle($record),
+                'description' => $record['description'],
+                'procurement_category' => $record['procurement_category'],
+                'procurement_method' => $record['procurement_method'],
+                'market_approach' => $record['market_approach'],
+                'review_type' => $record['review_type'],
+                'quantity' => $this->decimalOrNull($record['quantity'], 4),
+                'unit' => $record['unit'],
+                'estimated_unit_cost' => $this->decimalOrNull($record['estimated_unit_cost'], 2),
+                'estimated_amount' => $record['estimated_amount'],
+                'currency' => 'USD',
+                'planned_quarter' => $record['planned_quarter'],
+                'planned_start_date' => $record['planned_start_date'],
+                'planned_end_date' => $record['planned_end_date'],
+                'planned_milestones' => $record['planned_milestones'],
+                'limited_selection_justification' => $record['limited_selection_justification'],
+                'budget_reference' => $record['budget_reference'],
+                'bank_comment' => $record['bank_comment'],
+                'action_taken' => $record['action_taken'],
+            ]);
+            $item->status = $this->seededWorkflowStatus($record);
+        }
+        if ($isNew) {
+            $item->fill([
+                'review_reason' => null,
+                'reviewed_by' => null,
+                'reviewed_at' => null,
+                'step_reference' => null,
+                'step_exported_at' => null,
+                'step_exported_by' => null,
+                'no_objection_reference' => null,
+                'no_objection_date' => null,
+                'no_objection_notes' => null,
+                'no_objection_by' => null,
+                'no_objection_recorded_at' => null,
+                'procurement_id' => null,
+                'created_by' => null,
+                'updated_by' => null,
+                'portal_lock_version' => 1,
+            ]);
+        }
         $item->save();
 
         return $item;
+    }
+
+    private function isPristineImportedItem(ThinkTankProcurementItem $item): bool
+    {
+        $importedWorkflowStatus = data_get($item->source_payload, 'migration.imported_workflow_status');
+        $baselineStatus = is_string($importedWorkflowStatus) && $importedWorkflowStatus !== ''
+            ? $importedWorkflowStatus
+            : ThinkTankProcurementItem::STATUS_DRAFT;
+
+        return $item->status === $baselineStatus
+            && (int) ($item->portal_lock_version ?? 1) <= 1
+            && $item->review_reason === null
+            && $item->reviewed_by === null
+            && $item->reviewed_at === null
+            && $item->step_reference === null
+            && $item->step_exported_at === null
+            && $item->step_exported_by === null
+            && $item->no_objection_reference === null
+            && $item->no_objection_date === null
+            && $item->no_objection_notes === null
+            && $item->no_objection_by === null
+            && $item->no_objection_recorded_at === null
+            && $item->procurement_id === null
+            && $item->updated_by === null
+            && ! $item->documents()->exists()
+            && ! $item->events()->exists();
     }
 
     /** @param array<string, mixed> $record */
@@ -865,6 +980,21 @@ final class ThinkTankProcurementSpreadsheetMigrationService
         return number_format((float) $normalized, $scale, '.', '');
     }
 
+    /** @param array<string, mixed> $record */
+    private function seededWorkflowStatus(array $record): string
+    {
+        $status = $record['workflow_status'] ?? null;
+        if (! in_array($status, [
+            ThinkTankProcurementItem::STATUS_DRAFT,
+            ThinkTankProcurementItem::STATUS_REVISION_REQUESTED,
+            ThinkTankProcurementItem::STATUS_NO_OBJECTION,
+        ], true)) {
+            throw new RuntimeException('A procurement import record has an unsupported seeded workflow status ['.json_encode($status).'].');
+        }
+
+        return $status;
+    }
+
     /**
      * @param  array<string, mixed>  $record
      * @param  array<string, mixed>  $dataset
@@ -879,6 +1009,7 @@ final class ThinkTankProcurementSpreadsheetMigrationService
                 'identity' => $this->recordIdentity($record),
                 'member_key' => $record['member_key'],
                 'threshold_band' => $band,
+                'imported_workflow_status' => $this->seededWorkflowStatus($record),
             ],
             'canonical' => [
                 'source_reference' => $record['source_reference'],
@@ -1073,6 +1204,7 @@ final class ThinkTankProcurementSpreadsheetMigrationService
             'classification' => [
                 'is_seedable' => $record['is_seedable'],
                 'threshold_band' => $record['threshold_band'],
+                'workflow_status' => $this->seededWorkflowStatus($record),
                 'member_key' => $record['member_key'],
                 'consortium_code' => $record['consortium_code'],
                 'source_reference' => $record['source_reference'],
@@ -1105,7 +1237,6 @@ final class ThinkTankProcurementSpreadsheetMigrationService
         $plan->forceFill([
             'estimated_budget' => $plan->items()->sum('estimated_amount'),
             'currency' => 'USD',
-            'status' => ThinkTankProcurementPlan::STATUS_DRAFT,
         ])->save();
     }
 

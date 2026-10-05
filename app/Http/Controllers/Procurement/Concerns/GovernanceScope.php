@@ -24,7 +24,7 @@ trait GovernanceScope
             return $currentUser->governance_node_id ? [$currentUser->governance_node_id] : null;
         }
 
-        if (!$currentUser || $currentUser->isAdmin() || $currentUser->isSuperAdmin()) {
+        if (!$currentUser || $currentUser->hasSystemWideReadAccess()) {
             return null;
         }
 

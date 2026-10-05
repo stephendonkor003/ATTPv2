@@ -27,7 +27,12 @@
                             Role Name
                         </label>
                         <input type="text" name="name" class="form-control" value="{{ old('name', $role->name) }}"
-                            required>
+                            {{ $role->isReadOnlyAuditor() ? 'readonly' : '' }} required>
+                        @if ($role->isReadOnlyAuditor())
+                            <div class="form-text text-info">
+                                Auditor is the canonical system-managed read-only role and cannot be renamed.
+                            </div>
+                        @endif
                     </div>
 
                     <div class="mb-3">

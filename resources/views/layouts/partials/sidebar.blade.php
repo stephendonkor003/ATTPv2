@@ -75,7 +75,7 @@
         && collect($discussionSidebarPermissions)->contains(
             fn($permission) => $sidebarUser->hasPermission($permission)
         );
-    $isAdminSidebarUser = (bool) ($sidebarUser?->isSuperAdmin() || $sidebarUser?->isAdmin());
+    $isAdminSidebarUser = (bool) $sidebarUser?->hasSystemWideReadAccess();
     $thinkTankFinancePermissions = [
         'think_tanks.funding.view',
         'consortiums.view',

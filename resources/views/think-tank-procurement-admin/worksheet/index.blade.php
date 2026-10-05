@@ -12,7 +12,7 @@
         'revision_requested' => 'Returned for correction',
         'rejected' => 'Rejected',
         'approved' => 'Pending World Bank no-objection',
-        'no_objection_obtained' => 'No-objection received / ready to execute',
+        'no_objection_obtained' => 'STEP Cleared / no-objection recorded',
         'published' => 'Execution underway / published',
     ];
     $planStatusLabels = [
@@ -90,6 +90,9 @@
                         <tbody>
                         @foreach($items as $item)
                             @php
+                                $itemStatusLabel = $item->status === 'no_objection_obtained'
+                                    ? 'STEP Cleared / ready to execute'
+                                    : ($statusLabels[$item->status] ?? Str::headline($item->status));
                                 $nextAction = match($item->status) {
                                     'submitted' => 'Complete Secretariat review',
                                     'approved' => $item->plan?->status === 'approved' ? 'Record World Bank no-objection' : 'Await full plan approval',
@@ -107,7 +110,7 @@
                                 <td><strong>{{ $item->procurement_method ?: 'Not set' }}</strong><br><small>{{ $item->review_type ?: 'Review not set' }} · {{ Str::headline($item->procurement_category) ?: 'Category not set' }}</small></td>
                                 <td class="ttw-money"><small>{{ $item->currency ?: 'Unspecified' }}</small><br><strong>{{ number_format((float) $item->estimated_amount, 2) }}</strong></td>
                                 <td><div class="ttw-doc-summary"><span><i class="feather-file-text"></i> {{ $item->tor_documents_count }} TOR</span><span><i class="feather-paperclip"></i> {{ $item->documents_count }} total</span>@if($item->no_objection_documents_count)<span><i class="feather-check-circle"></i> Decision attached</span>@endif</div></td>
-                                <td><span class="ttw-status {{ $item->status }}">{{ $statusLabels[$item->status] ?? Str::headline($item->status) }}</span><span class="ttw-next">{{ $nextAction }}</span></td>
+                                <td><span class="ttw-status {{ $item->status }}">{{ $itemStatusLabel }}</span><span class="ttw-next">{{ $nextAction }}</span></td>
                                 <td><a class="ttw-btn" href="{{ route('think-tank-procurement.worksheet.show', [$item->plan, $item]) }}"><i class="feather-arrow-right"></i> Open worksheet</a></td>
                             </tr>
                         @endforeach

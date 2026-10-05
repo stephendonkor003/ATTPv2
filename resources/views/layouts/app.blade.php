@@ -390,11 +390,35 @@
             visibility: visible !important;
             display: block !important;
         }
+
+        .auditor-read-only-banner {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            padding: 0.9rem 1rem;
+            border: 1px solid #7dd3fc;
+            border-left: 5px solid #0369a1;
+            border-radius: 12px;
+            background: #f0f9ff;
+            color: #0c4a6e;
+            box-shadow: 0 8px 18px rgba(3, 105, 161, 0.08);
+        }
+
+        .auditor-read-only-banner strong {
+            display: block;
+            color: #082f49;
+        }
+
+        body.auditor-read-only [data-auditor-disabled="true"] {
+            cursor: not-allowed !important;
+            opacity: 0.55 !important;
+        }
     </style>
 </head>
 
-
-<body>
+@php($isReadOnlyAuditor = auth()->user()?->isAuditor() ?? false)
+<body @class(['auditor-read-only' => $isReadOnlyAuditor])>
     @include('layouts.partials.impersonation-banner')
 
 
@@ -412,6 +436,16 @@
 
             <!-- Main Content -->
             <div class="content p-4">
+                @if ($isReadOnlyAuditor)
+                    <div class="auditor-read-only-banner" role="status" aria-live="polite" id="auditor-read-only-notice">
+                        <i class="feather-eye" aria-hidden="true"></i>
+                        <div>
+                            <strong>Auditor read-only session</strong>
+                            You can inspect, search, and use available read-only reports across the back office. Creating,
+                            editing, submitting, approving, assigning, deleting, or running state-changing exports is disabled.
+                        </div>
+                    </div>
+                @endif
                 @yield('content')
             </div>
 
@@ -492,6 +526,62 @@
     <!-- Page-specific scripts -->
     @stack('scripts')
     @stack('modals')
+
+    @if ($isReadOnlyAuditor)
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                const allowedSecurityPaths = new Set([
+                    '/logout',
+                    '/impersonation/stop',
+                    '/security/password/change',
+                    '/security/otp/verify',
+                    '/security/otp/resend',
+                    '/password',
+                    '/change-password',
+                    '/email/verification-notification'
+                ]);
+                const notice = document.getElementById('auditor-read-only-notice');
+
+                document.querySelectorAll('form').forEach(function (form) {
+                    const override = form.querySelector('input[name="_method"]')?.value;
+                    const method = String(override || form.getAttribute('method') || 'GET').toUpperCase();
+                    const action = new URL(form.getAttribute('action') || window.location.href, window.location.origin);
+
+                    if (method === 'GET' || allowedSecurityPaths.has(action.pathname.replace(/\/$/, '') || '/')) {
+                        return;
+                    }
+
+                    form.setAttribute('data-auditor-disabled', 'true');
+                    form.addEventListener('submit', function (event) {
+                        event.preventDefault();
+                        notice?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    });
+
+                    form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach(function (control) {
+                        control.disabled = true;
+                        control.setAttribute('data-auditor-disabled', 'true');
+                        control.setAttribute('title', 'Auditor accounts have view-only access.');
+                    });
+                });
+
+                document.querySelectorAll('a[href]').forEach(function (link) {
+                    const target = new URL(link.getAttribute('href'), window.location.origin);
+                    if (target.origin !== window.location.origin
+                        || !/(?:^|\/)(?:create|edit)(?:\/|$)/i.test(target.pathname)) {
+                        return;
+                    }
+
+                    link.setAttribute('aria-disabled', 'true');
+                    link.setAttribute('data-auditor-disabled', 'true');
+                    link.setAttribute('title', 'Auditor accounts have view-only access.');
+                    link.addEventListener('click', function (event) {
+                        event.preventDefault();
+                        notice?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    });
+                });
+            });
+        </script>
+    @endif
 
     {{-- ATTP AI Guide Integration (Admin Controlled) --}}
     @php

@@ -60,8 +60,8 @@ it('downloads ZIP packages with a friendly name while allowing inline PDF viewin
         ->toContain("Str::slug(\$submission->procurement_submission_code ?: 'procurement-submission')")
         ->toContain(".(\$extension !== '' ? '.'.\$extension : '')")
         ->toContain("if (\$request->boolean('download') || \$extension === 'zip')")
-        ->toContain('return $privateDisk->download($path, $downloadName, $headers);')
-        ->toContain('return $privateDisk->response($path, $downloadName, $headers);');
+        ->toContain('return $disk->download($path, $downloadName, $headers);')
+        ->toContain('return $disk->response($path, $downloadName, $headers);');
 });
 
 it('renders relative format-aware document links for PDFs and ZIP packages', function () {
@@ -72,7 +72,7 @@ it('renders relative format-aware document links for PDFs and ZIP packages', fun
         ->toContain("...(\$isDocumentPackage ? ['download' => 1] : [])")
         ->toContain('], false);')
         ->toContain('@unless ($isDocumentPackage) target="_blank" rel="noopener" @endunless')
-        ->toContain("{{ \$isDocumentPackage ? 'Download document package' : 'View document' }}")
+        ->toContain("{{ \$isDocumentPackage ? 'Download document package' : (\$field->field_type === 'image' ? 'View image' : 'View document') }}")
         ->toContain("{{ \$isDocumentPackage ? 'feather-download' : 'feather-external-link' }}")
         ->toContain('ZIP package containing all documents uploaded for this submission.');
 });

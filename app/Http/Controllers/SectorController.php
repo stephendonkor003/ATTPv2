@@ -528,7 +528,7 @@ class SectorController extends Controller
     {
         $currentUser = Auth::user();
 
-        if (!$currentUser || $currentUser->isAdmin() || $currentUser->isSuperAdmin()) {
+        if (!$currentUser || $currentUser->hasSystemWideReadAccess()) {
             return null;
         }
 

@@ -6,6 +6,7 @@ use App\Notifications\ApplicationPasswordResetNotification;
 use App\Notifications\ApplicationVerifyEmailNotification;
 use App\Notifications\ThinkTankPortalPasswordResetNotification;
 use App\Services\ThinkTank\ThinkTankMailSecurityService;
+use App\Support\AuditorAccess;
 use App\Support\DiscussionAccountEmailPolicy;
 use Illuminate\Auth\MustVerifyEmail as MustVerifyEmailTrait;
 use Illuminate\Contracts\Auth\MustVerifyEmail as MustVerifyEmailContract;
@@ -22,6 +23,8 @@ use Illuminate\Validation\ValidationException;
 class User extends Authenticatable implements MustVerifyEmailContract
 {
     use HasFactory, HasUuids, MustVerifyEmailTrait, Notifiable;
+
+    public const AUDITOR_ROLE = Role::AUDITOR_NAME;
 
     public const THINK_TANK_ACCESS_ADMIN = 'think_tank_admin';
 
@@ -473,6 +476,15 @@ class User extends Authenticatable implements MustVerifyEmailContract
      */
     public function hasPermission(string $permission): bool
     {
+        // Auditor is an invariant, not a collection of optional grants. It can
+        // inspect every module on a safe read request, but direct grants and
+        // broad administrator grants can never authorize a mutation. Console
+        // and other request-less checks fail closed.
+        if ($this->isAuditor()) {
+            return app()->bound('request')
+                && AuditorAccess::requestIsSafeReadAllowed(request());
+        }
+
         if ($this->isSuperAdmin() || $this->isAdmin()) {
             return true;
         }
@@ -526,11 +538,32 @@ class User extends Authenticatable implements MustVerifyEmailContract
 
     public function isAdmin(): bool
     {
-        return $this->role && $this->role->name === 'System Admin';
+        return ! $this->isAuditor()
+            && $this->role
+            && $this->role->name === 'System Admin';
+    }
+
+    public function isAuditor(): bool
+    {
+        return (bool) ($this->role?->isReadOnlyAuditor());
+    }
+
+    public function hasSystemWideReadAccess(): bool
+    {
+        if ($this->isAuditor()) {
+            return app()->bound('request')
+                && AuditorAccess::requestIsSafeReadAllowed(request());
+        }
+
+        return $this->isAdmin() || $this->isSuperAdmin();
     }
 
     public function hasRole(string $roleName): bool
     {
+        if ($this->isAuditor()) {
+            return $roleName === self::AUDITOR_ROLE;
+        }
+
         return $this->role && $this->role->name === $roleName;
     }
 
@@ -758,6 +791,12 @@ class User extends Authenticatable implements MustVerifyEmailContract
      */
     public function isSuperAdmin(): bool
     {
+        // A stale user_type or an accidental administrator grant must never
+        // override the canonical read-only Auditor identity.
+        if ($this->isAuditor()) {
+            return false;
+        }
+
         // Check user_type first (admin users bypass security)
         if ($this->user_type === 'admin') {
             return true;

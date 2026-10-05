@@ -198,12 +198,13 @@
                                         <option value="{{ $role->id }}"
                                             data-role-name="{{ $role->name }}"
                                             {{ old('role_id') == $role->id ? 'selected' : '' }}>
-                                            {{ $role->name }}
+                                            {{ $role->isReadOnlyAuditor() ? 'Auditor — full system, view only' : $role->name }}
                                         </option>
                                     @endforeach
                                 </select>
                                 <small class="text-muted">
-                                    Determines what the user can access in the system. Vendor portal accounts do not use roles.
+                                    Determines what the user can access in the system. Auditor is enforced as staff with
+                                    system-wide view-only access and cannot create, edit, approve, or delete records.
                                 </small>
                             </div>
 
@@ -502,7 +503,12 @@
             }
 
             userTypeSelect.addEventListener('change', toggleUserTypeFields);
-            roleSelect?.addEventListener('change', toggleUserTypeFields);
+            roleSelect?.addEventListener('change', () => {
+                if (selectedRoleName() === 'Auditor') {
+                    userTypeSelect.value = 'staff';
+                }
+                toggleUserTypeFields();
+            });
             userTypeSelect.addEventListener('change', () => {
                 if (convertExistingVendorInput) {
                     convertExistingVendorInput.value = '0';

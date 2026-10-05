@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Permission;
 use App\Models\Role;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class PermissionController extends Controller
 {
@@ -35,6 +36,12 @@ class PermissionController extends Controller
      */
     public function storeAssign(Request $request, Role $role)
     {
+        if ($role->isReadOnlyAuditor()) {
+            throw ValidationException::withMessages([
+                'permissions' => ['Auditor permissions are system-managed and cannot be changed manually.'],
+            ]);
+        }
+
         $request->validate([
             'permissions' => 'array',
         ]);

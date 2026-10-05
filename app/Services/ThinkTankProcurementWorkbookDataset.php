@@ -155,6 +155,9 @@ final class ThinkTankProcurementWorkbookDataset
         'source_activity_status' => ['activity status'],
         'source_document_type' => ['procurement document type', 'document type'],
         'source_sea_sh_risk' => ['high sea sh risk', 'sea sh risk'],
+        'source_prequalification' => ['prequalification y n', 'prequalification'],
+        'source_procurement_process' => ['procurement process'],
+        'source_evaluation_options' => ['evaluation options'],
         'budget_reference' => ['budget reference', 'budget ref'],
         'limited_selection_justification' => [
             'limited selection justification', 'direct selection justification',
@@ -189,6 +192,9 @@ final class ThinkTankProcurementWorkbookDataset
     /** @var array<int, array<string, mixed>> */
     private array $reviewRequirements = [];
 
+    /** @var array<string, string> */
+    private array $activityStatusMapping = [];
+
     public function __construct(?string $manifestPath = null, ?string $basePath = null)
     {
         $this->basePath = rtrim($basePath ?? dirname(__DIR__, 2), '/\\');
@@ -216,6 +222,7 @@ final class ThinkTankProcurementWorkbookDataset
         $this->reviewRequirements = is_array($manifest['review_required'] ?? null)
             ? array_values(array_filter($manifest['review_required'], 'is_array'))
             : [];
+        $this->activityStatusMapping = $this->activityStatusMapping($manifest);
         $globalNormalizations = $this->recordRules($manifest);
         $explicitExclusions = $this->explicitExclusions($manifest);
         $priorityDirection = $manifest['source_priority']['direction']
@@ -394,6 +401,23 @@ final class ThinkTankProcurementWorkbookDataset
         }
 
         return $rules;
+    }
+
+    /** @return array<string, string> */
+    private function activityStatusMapping(array $manifest): array
+    {
+        $mapping = $manifest['activity_status_mapping'] ?? null;
+        $expected = [
+            'New' => 'draft',
+            'Returned' => 'revision_requested',
+            'Cleared' => 'no_objection_obtained',
+        ];
+
+        if ($mapping !== $expected) {
+            throw new RuntimeException('The procurement activity-status workflow mapping is missing or has drifted from the audited contract.');
+        }
+
+        return $mapping;
     }
 
     /**
@@ -983,6 +1007,25 @@ final class ThinkTankProcurementWorkbookDataset
     private function cellPayload(Worksheet $worksheet, string $coordinate): array
     {
         $cell = $worksheet->getCell($coordinate);
+        $comment = $worksheet->getComments()[$coordinate] ?? null;
+        $commentPayload = null;
+        if ($comment !== null) {
+            $rawComment = trim($comment->getText()->getPlainText());
+            $commentText = $rawComment;
+            $commentType = 'note';
+            if (str_starts_with($rawComment, '[Threaded comment]')
+                && preg_match('/(?:^|\R)Comment:\R(?<text>.*)\z/su', $rawComment, $matches) === 1) {
+                $commentText = trim((string) preg_replace('/^[ \t]{4}/m', '', $matches['text']));
+                $commentType = 'threaded';
+            }
+            $commentPayload = [
+                'type' => $commentType,
+                'author' => $comment->getAuthor(),
+                'text' => $commentText,
+                'raw_text' => $rawComment,
+                'visible' => $comment->getVisible(),
+            ];
+        }
         $raw = $this->scalarCellValue($cell->getValue());
         $formula = is_string($raw) && str_starts_with(ltrim($raw), '=') ? $raw : null;
         $cached = null;
@@ -1016,6 +1059,7 @@ final class ThinkTankProcurementWorkbookDataset
             'formula' => $formula,
             'cached' => $cached,
             'data_type' => $cell->getDataType(),
+            'comment' => $commentPayload,
         ];
     }
 
@@ -1406,6 +1450,7 @@ final class ThinkTankProcurementWorkbookDataset
             $rowNumber,
             $activityParts['source_reference'],
             $owner['member_key'],
+            $values['source_activity_status'] ?? null,
         );
         foreach ($reviewFlags as $reviewFlag) {
             $diagnostics['review_required'][] = [
@@ -1454,8 +1499,12 @@ final class ThinkTankProcurementWorkbookDataset
             'threshold_band' => $thresholdBand,
             'source_process_status' => $values['source_process_status'] ?? null,
             'source_activity_status' => $values['source_activity_status'] ?? null,
+            'workflow_status' => $this->workflowStatus($values['source_activity_status'] ?? null),
             'source_document_type' => $this->nullableString($values['source_document_type'] ?? null),
             'source_sea_sh_risk' => $seaShRisk,
+            'source_prequalification' => $this->nullableString($values['source_prequalification'] ?? null),
+            'source_procurement_process' => $this->nullableString($values['source_procurement_process'] ?? null),
+            'source_evaluation_options' => $this->nullableString($values['source_evaluation_options'] ?? null),
             'budget_reference' => $this->nullableString($values['budget_reference'] ?? null),
             'limited_selection_justification' => $this->nullableString($values['limited_selection_justification'] ?? null),
             'bank_comment' => $this->nullableString($values['bank_comment'] ?? null),
@@ -1899,6 +1948,7 @@ final class ThinkTankProcurementWorkbookDataset
         int $row,
         ?string $reference,
         ?string $memberKey,
+        mixed $sourceActivityStatus,
     ): array {
         $matches = [];
         foreach ($this->reviewRequirements as $definition) {
@@ -1909,6 +1959,10 @@ final class ThinkTankProcurementWorkbookDataset
                 continue;
             }
             if (isset($definition['owner_key']) && (string) $definition['owner_key'] !== (string) $memberKey) {
+                continue;
+            }
+            if (isset($definition['source_activity_status'])
+                && trim((string) $definition['source_activity_status']) !== trim((string) $sourceActivityStatus)) {
                 continue;
             }
             if (isset($definition['row']) && (int) $definition['row'] !== $row) {
@@ -1957,6 +2011,17 @@ final class ThinkTankProcurementWorkbookDataset
         }
 
         return $matches;
+    }
+
+    private function workflowStatus(mixed $sourceActivityStatus): string
+    {
+        $literal = trim((string) $sourceActivityStatus);
+        $workflowStatus = $this->activityStatusMapping[$literal] ?? null;
+        if (! is_string($workflowStatus) || $workflowStatus === '') {
+            throw new RuntimeException('Unsupported procurement Activity Status ['.$literal.']; workflow mapping is fail-closed.');
+        }
+
+        return $workflowStatus;
     }
 
     /** @param array<int, array<string, mixed>> $normalizations */

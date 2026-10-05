@@ -65,21 +65,22 @@ class ThinkTankProcurementWorkflowService
                 ]);
             }
 
-            $missingTor = $items->reject(fn (ThinkTankProcurementItem $item): bool => $item->hasTermsOfReference());
+            $terminalStatuses = [
+                ThinkTankProcurementItem::STATUS_NO_OBJECTION,
+                ThinkTankProcurementItem::STATUS_PUBLISHED,
+            ];
+            $activeItems = $items->whereNotIn('status', $terminalStatuses);
+            $missingTor = $activeItems->reject(fn (ThinkTankProcurementItem $item): bool => $item->hasTermsOfReference());
             if ($missingTor->isNotEmpty()) {
                 throw ValidationException::withMessages([
-                    'documents' => 'A Terms of Reference document is required for every item. Missing: '.$missingTor->pluck('item_code')->implode(', ').'.',
+                    'documents' => 'A Terms of Reference document is required for every item still entering review. Missing: '.$missingTor->pluck('item_code')->implode(', ').'.',
                 ]);
             }
 
-            $blocked = $items->whereIn('status', [
-                ThinkTankProcurementItem::STATUS_REJECTED,
-                ThinkTankProcurementItem::STATUS_NO_OBJECTION,
-                ThinkTankProcurementItem::STATUS_PUBLISHED,
-            ]);
+            $blocked = $items->where('status', ThinkTankProcurementItem::STATUS_REJECTED);
             if ($blocked->isNotEmpty()) {
                 throw ValidationException::withMessages([
-                    'plan' => 'Correct or remove rejected items before resubmission. Items already in execution cannot be resubmitted.',
+                    'plan' => 'Correct or remove rejected items before resubmission. Imported items already Cleared in STEP remain at their recorded terminal status.',
                 ]);
             }
 
@@ -96,6 +97,7 @@ class ThinkTankProcurementWorkflowService
                         'source_activity_status' => ThinkTankProcurementItem::ACTIVITY_STATUS_SUBMITTED,
                         'review_reason' => null,
                         'updated_by' => $actor->id,
+                        'portal_lock_version' => $item->nextPortalLockVersion(),
                     ]);
                     $this->event(
                         $lockedPlan,
@@ -191,6 +193,7 @@ class ThinkTankProcurementWorkflowService
                         'review_reason' => $reason,
                         'reviewed_by' => $actor->id,
                         'reviewed_at' => now(),
+                        'portal_lock_version' => $item->nextPortalLockVersion(),
                     ]);
                     $this->event(
                         $lockedPlan,
@@ -256,6 +259,7 @@ class ThinkTankProcurementWorkflowService
                 'review_reason' => $reason,
                 'reviewed_by' => $actor->id,
                 'reviewed_at' => now(),
+                'portal_lock_version' => $lockedItem->nextPortalLockVersion(),
             ]);
 
             if ($decision !== 'approve') {
@@ -300,12 +304,19 @@ class ThinkTankProcurementWorkflowService
                 ->with('documents')
                 ->lockForUpdate()
                 ->firstOrFail();
-            abort_unless($lockedItem->status === ThinkTankProcurementItem::STATUS_APPROVED, 422, 'Only approved items can receive a no-objection decision.');
-            abort_unless($lockedPlan->status === ThinkTankProcurementPlan::STATUS_APPROVED, 422, 'Approve the full annual plan before recording World Bank no-objection.');
+            abort_unless(in_array($lockedItem->status, [
+                ThinkTankProcurementItem::STATUS_APPROVED,
+                ThinkTankProcurementItem::STATUS_NO_OBJECTION,
+                ThinkTankProcurementItem::STATUS_PUBLISHED,
+            ], true), 422, 'Only an approved or already STEP-cleared item can receive no-objection evidence.');
+            if ($lockedItem->status === ThinkTankProcurementItem::STATUS_APPROVED) {
+                abort_unless($lockedPlan->status === ThinkTankProcurementPlan::STATUS_APPROVED, 422, 'Approve the full annual plan before recording World Bank no-objection.');
+            }
             if (blank($data['step_reference'] ?? null)) {
                 throw ValidationException::withMessages(['step_reference' => 'Enter the STEP reference before recording no-objection.']);
             }
             if (blank($data['no_objection_reference'] ?? null)
+                && blank($lockedItem->no_objection_reference)
                 && ! $lockedItem->documents->contains('document_type', 'no_objection')) {
                 throw ValidationException::withMessages([
                     'no_objection_reference' => 'Provide the World Bank reference or attach the no-objection decision document.',
@@ -320,23 +331,36 @@ class ThinkTankProcurementWorkflowService
                 throw ValidationException::withMessages(['no_objection_date' => 'The no-objection decision date cannot be in the future.']);
             }
             $previousStatus = $lockedItem->status;
+            $targetStatus = $previousStatus === ThinkTankProcurementItem::STATUS_PUBLISHED
+                ? ThinkTankProcurementItem::STATUS_PUBLISHED
+                : ThinkTankProcurementItem::STATUS_NO_OBJECTION;
 
-            $lockedItem->update([
-                'status' => ThinkTankProcurementItem::STATUS_NO_OBJECTION,
-                'source_activity_status' => ThinkTankProcurementItem::ACTIVITY_STATUS_WORLD_BANK_APPROVED,
+            $updates = [
+                'status' => $targetStatus,
                 'step_reference' => $data['step_reference'] ?? $lockedItem->step_reference,
-                'no_objection_reference' => $data['no_objection_reference'] ?? null,
+                'no_objection_reference' => $data['no_objection_reference'] ?? $lockedItem->no_objection_reference,
                 'no_objection_date' => $decisionDate->toDateString(),
-                'no_objection_notes' => $data['no_objection_notes'] ?? null,
+                'no_objection_notes' => $data['no_objection_notes'] ?? $lockedItem->no_objection_notes,
                 'no_objection_by' => $actor->id,
                 'no_objection_recorded_at' => now(),
-            ]);
+                'step_activity_status' => ThinkTankProcurementItem::STEP_STATUS_CLEARED,
+                'step_status_updated_at' => now(),
+                'step_status_updated_by' => $actor->id,
+                'updated_by' => $actor->id,
+                'portal_lock_version' => $lockedItem->nextPortalLockVersion(),
+            ];
+            if (blank(data_get($lockedItem->source_payload, 'source_statuses.activity_status'))) {
+                $updates['source_activity_status'] = ThinkTankProcurementItem::ACTIVITY_STATUS_WORLD_BANK_APPROVED;
+            }
+            $lockedItem->update($updates);
 
             $this->event(
                 $lockedPlan,
                 $lockedItem,
                 $actor,
-                'world_bank_no_objection_recorded',
+                $previousStatus === ThinkTankProcurementItem::STATUS_APPROVED
+                    ? 'world_bank_no_objection_recorded'
+                    : 'world_bank_no_objection_evidence_updated',
                 $previousStatus,
                 $lockedItem->status,
                 $lockedItem->no_objection_notes,
@@ -344,6 +368,186 @@ class ThinkTankProcurementWorkflowService
                     'step_reference' => $lockedItem->step_reference,
                     'no_objection_reference' => $lockedItem->no_objection_reference,
                     'no_objection_date' => $lockedItem->no_objection_date?->toDateString(),
+                ],
+            );
+        });
+
+        return ThinkTankProcurementItem::query()->findOrFail($itemId);
+    }
+
+    /**
+     * Mirror the externally managed STEP activity position without rewriting
+     * the immutable Excel source fields or fabricating World Bank evidence.
+     *
+     * A null STEP status records an append-only comment against the item's
+     * current system position. Every call advances the optimistic lock so a
+     * worksheet opened before this update cannot silently overwrite it.
+     */
+    public function syncExternalStepStatus(
+        ThinkTankProcurementItem $item,
+        User $actor,
+        ?string $stepActivityStatus,
+        string $comment,
+        int $expectedLockVersion,
+    ): ThinkTankProcurementItem {
+        $stepActivityStatus = filled($stepActivityStatus)
+            ? Str::lower(trim((string) $stepActivityStatus))
+            : null;
+        $comment = trim($comment);
+
+        if ($comment === '') {
+            throw ValidationException::withMessages([
+                'comment' => 'Add a comment explaining this STEP update.',
+            ]);
+        }
+        if (mb_strlen($comment) < 3) {
+            throw ValidationException::withMessages([
+                'comment' => 'The STEP update comment must contain at least 3 characters.',
+            ]);
+        }
+        if (mb_strlen($comment) > 5000) {
+            throw ValidationException::withMessages([
+                'comment' => 'The STEP update comment may not exceed 5,000 characters.',
+            ]);
+        }
+        if ($stepActivityStatus !== null && ! in_array($stepActivityStatus, ['new', 'returned', 'cleared'], true)) {
+            throw ValidationException::withMessages([
+                'step_activity_status' => 'Select New, Returned, Cleared, or keep the current status.',
+            ]);
+        }
+
+        $itemId = (string) $item->id;
+        $planId = (string) $item->plan_id;
+
+        DB::transaction(function () use (
+            $itemId,
+            $planId,
+            $actor,
+            $stepActivityStatus,
+            $comment,
+            $expectedLockVersion,
+        ): void {
+            $lockedPlan = ThinkTankProcurementPlan::query()
+                ->whereKey($planId)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedItem = ThinkTankProcurementItem::query()
+                ->where('plan_id', $lockedPlan->id)
+                ->whereKey($itemId)
+                ->with('documents')
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $currentLockVersion = max(1, (int) ($lockedItem->portal_lock_version ?: 1));
+            if ($expectedLockVersion !== $currentLockVersion) {
+                throw ValidationException::withMessages([
+                    'lock_version' => 'This procurement item changed after you opened it. Reload the worksheet before saving your STEP update.',
+                ]);
+            }
+
+            $previousStatus = (string) $lockedItem->status;
+            $previousPlanStatus = (string) $lockedPlan->status;
+            $previousStepStatus = $lockedItem->currentStepActivityStatus();
+            $targetStatus = $previousStatus;
+
+            if ($stepActivityStatus !== null) {
+                $targetStatus = match ($stepActivityStatus) {
+                    'new' => ThinkTankProcurementItem::STATUS_APPROVED,
+                    'returned' => ThinkTankProcurementItem::STATUS_REVISION_REQUESTED,
+                    'cleared' => $previousStatus === ThinkTankProcurementItem::STATUS_PUBLISHED
+                        ? ThinkTankProcurementItem::STATUS_PUBLISHED
+                        : ThinkTankProcurementItem::STATUS_NO_OBJECTION,
+                };
+
+                $hasExecution = filled($lockedItem->procurement_id)
+                    || $previousStatus === ThinkTankProcurementItem::STATUS_PUBLISHED;
+                if ($hasExecution && $stepActivityStatus !== 'cleared') {
+                    throw ValidationException::withMessages([
+                        'step_activity_status' => 'An item already in procurement execution cannot be moved back to New or Returned.',
+                    ]);
+                }
+            }
+
+            $stepLabel = match ($stepActivityStatus) {
+                'new' => ThinkTankProcurementItem::STEP_STATUS_NEW,
+                'returned' => ThinkTankProcurementItem::STEP_STATUS_RETURNED,
+                'cleared' => ThinkTankProcurementItem::STEP_STATUS_CLEARED,
+                default => null,
+            };
+            $nextLockVersion = $currentLockVersion + 1;
+            $updates = [
+                'status' => $targetStatus,
+                'updated_by' => $actor->id,
+                'portal_lock_version' => $nextLockVersion,
+            ];
+            if ($stepLabel !== null) {
+                $updates = [
+                    ...$updates,
+                    'step_activity_status' => $stepLabel,
+                    'step_status_updated_at' => now(),
+                    'step_status_updated_by' => $actor->id,
+                    'review_reason' => $stepActivityStatus === 'returned' ? $comment : null,
+                ];
+            }
+            $lockedItem->forceFill($updates)->save();
+
+            if ($stepActivityStatus === 'returned'
+                && ! in_array($lockedPlan->status, [
+                    ThinkTankProcurementPlan::STATUS_DRAFT,
+                    ThinkTankProcurementPlan::STATUS_REVISION_REQUESTED,
+                    ThinkTankProcurementPlan::STATUS_REJECTED,
+                ], true)) {
+                $lockedPlan->forceFill([
+                    'status' => ThinkTankProcurementPlan::STATUS_REVISION_REQUESTED,
+                    'review_notes' => $comment,
+                    'decision_reason' => $comment,
+                    'reviewed_by' => $actor->id,
+                    'reviewed_at' => now(),
+                    'approved_at' => null,
+                    'rejected_at' => null,
+                    'portal_lock_version' => max(1, (int) ($lockedPlan->portal_lock_version ?: 1)) + 1,
+                ])->save();
+                $this->event(
+                    $lockedPlan,
+                    null,
+                    $actor,
+                    'external_step_plan_revision_requested',
+                    $previousPlanStatus,
+                    $lockedPlan->status,
+                    'Plan reopened because STEP returned item '.$lockedItem->item_code.'.',
+                    [
+                        'notification_suppressed' => true,
+                        'notification_covered_by' => 'external_step_activity_status_synced',
+                        'item_id' => $lockedItem->id,
+                    ],
+                );
+            }
+            $hasFormalEvidence = $lockedItem->hasCompleteNoObjectionEvidence();
+
+            $this->event(
+                $lockedPlan,
+                $lockedItem,
+                $actor,
+                $stepActivityStatus === null
+                    ? 'external_step_comment_added'
+                    : 'external_step_activity_status_synced',
+                $previousStatus,
+                $targetStatus,
+                $comment,
+                [
+                    'external_system' => 'STEP',
+                    'external_activity_status' => $stepLabel,
+                    'previous_external_activity_status' => $previousStepStatus,
+                    'imported_excel_activity_status' => $lockedItem->importedActivityStatus(),
+                    'plan_status_from' => $previousPlanStatus,
+                    'plan_status_to' => $lockedPlan->status,
+                    'source_reference' => $lockedItem->source_reference,
+                    'source_file' => $lockedItem->source_file,
+                    'source_sheet' => $lockedItem->source_sheet,
+                    'source_row' => $lockedItem->source_row,
+                    'formal_no_objection_evidence_recorded' => $hasFormalEvidence,
+                    'portal_lock_version_from' => $currentLockVersion,
+                    'portal_lock_version_to' => $nextLockVersion,
                 ],
             );
         });

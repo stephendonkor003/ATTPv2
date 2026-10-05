@@ -38,6 +38,31 @@ return [
         'route_by_audited_amount' => true,
     ],
 
+    'activity_status_mapping' => [
+        'New' => 'draft',
+        'Returned' => 'revision_requested',
+        'Cleared' => 'no_objection_obtained',
+    ],
+
+    'activity_status_policy' => [
+        'source_field' => 'source_activity_status',
+        'workflow_field' => 'workflow_status',
+        'unknown_status' => 'fail_closed',
+        'preserve_source_literal' => true,
+        'no_objection_evidence' => 'never_synthesize_from_activity_status',
+        'notes' => 'Cleared records enter the matching portal workflow position, but the workbook supplies no formal no-objection date, reference, actor, or document.',
+    ],
+
+    'field_capture' => [
+        'named_values' => 'source_payload.source.source_fields',
+        'named_cell_payloads' => 'source_payload.source.source_field_payloads',
+        'named_cell_provenance' => 'source_payload.source.source_field_provenance',
+        'complete_row' => 'source_payload.source.row',
+        'header' => 'source_payload.source.header',
+        'subheader' => 'source_payload.source.subheader',
+        'preserve_formulas_and_cached_values' => true,
+    ],
+
     'source_priority' => [
         'direction' => 'higher_wins',
         'tie_breakers' => ['path_ascending', 'sheet_ascending', 'row_ascending'],
@@ -275,6 +300,10 @@ return [
                         'method_override' => 'RFB',
                         'milestones' => true,
                         'max_column' => 'AQ',
+                        'column_overrides' => [
+                            'H' => 'source_prequalification',
+                            'I' => 'source_procurement_process',
+                        ],
                     ]],
                 ],
                 'RFQ' => [
@@ -299,6 +328,9 @@ return [
                         'method_override' => 'DIR',
                         'milestones' => true,
                         'max_column' => 'Z',
+                        'column_overrides' => [
+                            'G' => 'source_evaluation_options',
+                        ],
                     ]],
                 ],
                 'QCBS - FBS - LCS' => [
@@ -481,6 +513,8 @@ return [
                             'milestones' => true,
                             'max_column' => 'AC',
                             'column_overrides' => [
+                                'G' => 'market_approach',
+                                'I' => 'limited_selection_justification',
                                 'K' => 'source_document_type',
                                 'L' => 'source_process_status',
                                 'M' => 'source_activity_status',
@@ -838,6 +872,18 @@ return [
             'notes' => 'Section/category evidence indicates RFQ/non-consulting, references indicate INDV, and no replacement milestone header exists.',
         ],
         [
+            'type' => 'milestone_columns_preserved_raw_only',
+            'workbook' => 'below_caceps',
+            'sheet' => 'Goods and Non Consulting servic',
+            'rows' => [16, 29],
+            'notes' => 'No RFQ milestone header exists for these rows. Preserve every populated cell and inherited header in the raw payload without assigning unsupported milestone meanings.',
+        ],
+        [
+            'type' => 'no_objection_evidence_not_supplied_in_workbook',
+            'source_activity_status' => 'Cleared',
+            'notes' => 'Cleared maps to the no-objection workflow position, but the workbook does not supply a formal decision date, reference, actor, or evidence document. Do not synthesize them.',
+        ],
+        [
             'type' => 'display_title_overflow',
             'workbook' => 'below_caceps',
             'sheet' => 'CACEPS Consultant Services',
@@ -870,6 +916,21 @@ return [
         'mapped_unique' => [
             'records' => 117,
             'amount_usd' => '1804958.38',
+        ],
+        'physical_activity_statuses' => [
+            'New' => 67,
+            'Returned' => 8,
+            'Cleared' => 48,
+        ],
+        'mapped_activity_statuses' => [
+            'New' => 67,
+            'Returned' => 5,
+            'Cleared' => 45,
+        ],
+        'mapped_workflow_statuses' => [
+            'draft' => 67,
+            'revision_requested' => 5,
+            'no_objection_obtained' => 45,
         ],
         'mapped_bands' => [
             'below_10000' => [

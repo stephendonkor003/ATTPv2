@@ -474,7 +474,7 @@ class ProgramController extends Controller
     {
         $currentUser = Auth::user();
 
-        return (bool) ($currentUser && ($currentUser->isAdmin() || $currentUser->isSuperAdmin()));
+        return (bool) ($currentUser && $currentUser->hasSystemWideReadAccess());
     }
 
     private function approvedProgramNames(?string $includeName = null)

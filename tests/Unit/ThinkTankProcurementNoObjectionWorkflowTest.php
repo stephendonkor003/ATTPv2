@@ -2,10 +2,12 @@
 
 use App\Jobs\SendThinkTankProcurementStatusNotification;
 use App\Models\ThinkTankProcurementItem;
+use App\Models\ThinkTankProcurementPlan;
 use App\Services\ThinkTankProcurementApiService;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Collection;
 
 it('maps the compatible statuses to the Secretariat and World Bank lifecycle', function (): void {
     $service = new ThinkTankProcurementApiService;
@@ -17,6 +19,46 @@ it('maps the compatible statuses to the Secretariat and World Bank lifecycle', f
         ->toBe('Pending World Bank no-objection')
         ->and($label->invoke($service, ThinkTankProcurementItem::STATUS_NO_OBJECTION))
         ->toBe('No-objection received — ready to execute');
+});
+
+it('treats an authoritative STEP Cleared row as ready while keeping formal evidence explicit', function (): void {
+    $item = (new ThinkTankProcurementItem)->forceFill([
+        'status' => ThinkTankProcurementItem::STATUS_NO_OBJECTION,
+        'source_activity_status' => 'Cleared',
+        'step_activity_status' => ThinkTankProcurementItem::STEP_STATUS_CLEARED,
+        'source_payload' => ['source_statuses' => ['activity_status' => 'Cleared']],
+        'no_objection_date' => null,
+        'no_objection_reference' => null,
+    ]);
+    $item->setRelation('documents', new Collection);
+    $item->setRelation('plan', (new ThinkTankProcurementPlan)->forceFill([
+        'status' => ThinkTankProcurementPlan::STATUS_DRAFT,
+    ]));
+
+    expect($item->hasCompleteNoObjectionEvidence())->toBeFalse()
+        ->and($item->isReadyToExecute())->toBeTrue()
+        ->and($item->currentStepActivityStatus())->toBe('Cleared');
+
+    $item->setRawAttributes(array_merge($item->getAttributes(), [
+        'no_objection_date' => '2026-10-01',
+        'no_objection_reference' => 'WB-NO-001',
+    ]));
+
+    expect($item->hasCompleteNoObjectionEvidence())->toBeTrue()
+        ->and($item->isReadyToExecute())->toBeTrue()
+        ->and($item->importedActivityStatus())->toBe('Cleared');
+});
+
+it('prefers an existing terminal workflow clearance over a stale imported STEP value', function (): void {
+    $item = (new ThinkTankProcurementItem)->forceFill([
+        'status' => ThinkTankProcurementItem::STATUS_NO_OBJECTION,
+        'source_activity_status' => 'New',
+        'step_activity_status' => null,
+        'source_payload' => ['source_statuses' => ['activity_status' => 'New']],
+    ]);
+
+    expect($item->importedActivityStatus())->toBe('New')
+        ->and($item->currentStepActivityStatus())->toBe('Cleared');
 });
 
 it('locks status transitions and stages one queued delivery per event recipient', function (): void {
@@ -60,7 +102,7 @@ it('locks status transitions and stages one queued delivery per event recipient'
         ->toContain(ShouldBeEncrypted::class);
 });
 
-it('requires dated World Bank evidence and attaches a recorded event PDF', function (): void {
+it('keeps supplemental World Bank evidence dated and attaches a recorded event PDF', function (): void {
     $root = dirname(__DIR__, 2);
     $controller = file_get_contents($root.'/app/Http/Controllers/AdminThinkTankProcurementController.php');
     $mail = file_get_contents($root.'/app/Mail/ThinkTankProcurementStatusMail.php');
@@ -68,8 +110,8 @@ it('requires dated World Bank evidence and attaches a recorded event PDF', funct
     $api = file_get_contents($root.'/app/Services/ThinkTankProcurementApiService.php');
 
     expect($controller)->toContain('before_or_equal:today')
-        ->toContain('required_without:no_objection_document')
-        ->toContain('required_without:no_objection_reference')
+        ->toContain("'no_objection_reference' => 'nullable|string|max:255'")
+        ->toContain("'no_objection_document' => 'nullable|file|mimes:pdf,doc,docx|max:20480'")
         ->toContain('lockForUpdate()')
         ->and($mail)->toContain('->attachData(')
         ->toContain('PdfPageNumbering::stamp')
@@ -78,6 +120,10 @@ it('requires dated World Bank evidence and attaches a recorded event PDF', funct
         ->and($pdf)->not->toContain('file_path')
         ->not->toContain('recipient_email')
         ->and($api)->toContain("'isReadyToExecute'")
+        ->toContain("'clearanceStatus'")
+        ->toContain("'formalEvidenceComplete'")
+        ->toContain("'currentStepActivityStatus'")
+        ->toContain("'importedActivityStatus'")
         ->toContain("'readyToExecuteAt'")
         ->toContain("'readyToExecuteBy'");
 });

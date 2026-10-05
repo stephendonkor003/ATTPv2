@@ -3,6 +3,7 @@
 @section('title', 'User Permissions')
 
 @section('content')
+    @php($isReadOnlyAuditor = $user->isAuditor())
     <div class="nxl-container">
 
         {{-- HEADER --}}
@@ -23,10 +24,16 @@
         </div>
 
         {{-- INFO --}}
-        <div class="alert alert-warning">
-            <strong>Note:</strong>
-            These permissions are applied <u>in addition</u> to the user’s role permissions.
-            Use sparingly for exceptions.
+        <div class="alert {{ $isReadOnlyAuditor ? 'alert-info' : 'alert-warning' }}">
+            @if ($isReadOnlyAuditor)
+                <strong>System-managed Auditor:</strong>
+                Direct permission overrides are disabled and removed for this account. Read-only enforcement applies
+                across all back-office modules.
+            @else
+                <strong>Note:</strong>
+                These permissions are applied <u>in addition</u> to the user’s role permissions.
+                Use sparingly for exceptions.
+            @endif
         </div>
 
         {{-- FORM --}}
@@ -47,6 +54,7 @@
                                     <label class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" name="permissions[]"
                                             value="{{ $permission->id }}"
+                                            {{ $isReadOnlyAuditor ? 'disabled' : '' }}
                                             {{ $user->permissions->contains('id', $permission->id) ? 'checked' : '' }}>
                                         <span class="form-check-label">
                                             {{ $permission->name }}
@@ -61,7 +69,7 @@
             @endforeach
 
             <div class="text-end mt-4">
-                <button class="btn btn-primary px-4">
+                <button class="btn btn-primary px-4" {{ $isReadOnlyAuditor ? 'disabled' : '' }}>
                     <i class="bi bi-save"></i>
                     Save Permissions
                 </button>

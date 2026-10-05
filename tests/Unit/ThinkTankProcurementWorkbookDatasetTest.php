@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\ThinkTankProcurementSpreadsheetMigrationService;
 use App\Services\ThinkTankProcurementWorkbookDataset;
 
 function procurementWorkbookRecord(array $dataset, string $recordKey): array
@@ -18,6 +19,17 @@ function procurementWorkbookDataset(): array
     static $dataset;
 
     return $dataset ??= (new ThinkTankProcurementWorkbookDataset)->load();
+}
+
+function procurementUniqueWorkbookRecord(array $dataset, string $recordKey): array
+{
+    foreach ($dataset['unique_records'] as $record) {
+        if ($record['record_key'] === $recordKey) {
+            return $record;
+        }
+    }
+
+    throw new \RuntimeException("Unique procurement workbook record [{$recordKey}] was not found.");
 }
 
 it('loads the pinned workbook manifest as an exact read-only dataset', function (): void {
@@ -54,6 +66,328 @@ it('loads the pinned workbook manifest as an exact read-only dataset', function 
             }
         }
     }
+});
+
+it('maps each literal workbook activity status to the audited seeded workflow state', function (): void {
+    $dataset = procurementWorkbookDataset();
+    $expected = [
+        'Cleared' => [
+            'workflow_status' => 'no_objection_obtained',
+            'records' => 45,
+            'amount_minor' => 143_908_500,
+        ],
+        'Returned' => [
+            'workflow_status' => 'revision_requested',
+            'records' => 5,
+            'amount_minor' => 11_730_000,
+        ],
+        'New' => [
+            'workflow_status' => 'draft',
+            'records' => 67,
+            'amount_minor' => 24_857_338,
+        ],
+    ];
+    $actual = array_map(
+        static fn (array $group): array => [
+            'workflow_status' => $group['workflow_status'],
+            'records' => 0,
+            'amount_minor' => 0,
+        ],
+        $expected,
+    );
+
+    foreach ($dataset['unique_records'] as $record) {
+        $sourceStatus = $record['source_activity_status'];
+        expect($expected)->toHaveKey($sourceStatus)
+            ->and($record['source_fields']['source_activity_status'])->toBe($sourceStatus)
+            ->and($record['workflow_status'])->toBe($expected[$sourceStatus]['workflow_status']);
+
+        $actual[$sourceStatus]['records']++;
+        $actual[$sourceStatus]['amount_minor'] += $record['estimated_amount_minor'];
+
+        $reviewFlags = array_column($record['review_flags'], 'type');
+        if ($sourceStatus === 'Cleared') {
+            expect($reviewFlags)->toContain('no_objection_evidence_not_supplied_in_workbook');
+        } else {
+            expect($reviewFlags)->not->toContain('no_objection_evidence_not_supplied_in_workbook');
+        }
+    }
+
+    expect($actual)->toBe($expected);
+
+    $migration = new ThinkTankProcurementSpreadsheetMigrationService(
+        new ThinkTankProcurementWorkbookDataset,
+    );
+    $seededWorkflowStatus = new ReflectionMethod($migration, 'seededWorkflowStatus');
+    foreach ($dataset['unique_records'] as $record) {
+        expect($seededWorkflowStatus->invoke($migration, $record))
+            ->toBe($record['workflow_status']);
+    }
+});
+
+it('preserves the Cleared source literal and imports no invented no-objection evidence', function (): void {
+    $dataset = procurementWorkbookDataset();
+    $record = procurementUniqueWorkbookRecord($dataset, 'above_caceps|DIR|4');
+    $manifest = require $dataset['manifest']['path'];
+    $migration = new ThinkTankProcurementSpreadsheetMigrationService(
+        new ThinkTankProcurementWorkbookDataset,
+    );
+    $payloadMethod = new ReflectionMethod($migration, 'itemSourcePayload');
+    $payload = $payloadMethod->invoke(
+        $migration,
+        $record,
+        $dataset,
+        $manifest,
+        $record['threshold_band'],
+    );
+    $physicalPayloadMethod = new ReflectionMethod($migration, 'physicalRowPayload');
+    $physicalPayload = $physicalPayloadMethod->invoke($migration, $record);
+
+    expect($record['source_activity_status'])->toBe('Cleared')
+        ->and($record['source_fields']['source_activity_status'])->toBe('Cleared')
+        ->and($record['workflow_status'])->toBe('no_objection_obtained')
+        ->and($payload['migration']['imported_workflow_status'])->toBe('no_objection_obtained')
+        ->and($payload['source_statuses']['activity_status'])->toBe('Cleared')
+        ->and($payload['source']['source_fields']['source_activity_status'])->toBe('Cleared')
+        ->and(array_column($payload['review_flags'], 'type'))
+        ->toContain('no_objection_evidence_not_supplied_in_workbook')
+        ->and($physicalPayload['classification']['workflow_status'])->toBe('no_objection_obtained')
+        ->and($physicalPayload['source_fields']['source_activity_status'])->toBe('Cleared')
+        ->and(array_column($physicalPayload['review_flags'], 'type'))
+        ->toContain('no_objection_evidence_not_supplied_in_workbook');
+
+    $valuesForKey = function (mixed $value, string $key) use (&$valuesForKey): array {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $matches = [];
+        foreach ($value as $candidateKey => $candidateValue) {
+            if ($candidateKey === $key) {
+                $matches[] = $candidateValue;
+            }
+            array_push($matches, ...$valuesForKey($candidateValue, $key));
+        }
+
+        return $matches;
+    };
+
+    foreach ([$payload, $physicalPayload] as $persistedSourcePayload) {
+        foreach ([
+            'no_objection_reference',
+            'no_objection_date',
+            'no_objection_notes',
+            'no_objection_by',
+            'no_objection_recorded_at',
+        ] as $evidenceField) {
+            expect(array_values(array_filter(
+                $valuesForKey($persistedSourcePayload, $evidenceField),
+                static fn (mixed $value): bool => $value !== null && $value !== '',
+            )))->toBe([]);
+        }
+    }
+});
+
+it('promotes the three Bridge direct-selection columns without losing their source cells', function (): void {
+    $dataset = procurementWorkbookDataset();
+    $expected = [
+        14 => [
+            'reference' => 'ET-AUC-034-NC-DIR',
+            'market_source' => 'Direct - National',
+            'justification_sha256' => 'a35d898ba7662c3a62514c12aa343898afeeabc4f56c08d3f371703082fab9d5',
+            'estimate_comment' => 'Please revise the estimate to less than 10,000 or Shift to above 10,000',
+        ],
+        15 => [
+            'reference' => 'ET-AUC-035-CS-CDS',
+            'market_source' => 'Direct - national',
+            'justification_sha256' => 'e9e2df4d8f50b71390500f8a23cf4931ecbba3e427a18815108c965fc5c2d1fb',
+            'estimate_comment' => null,
+        ],
+        16 => [
+            'reference' => 'ET-AUC-036',
+            'market_source' => 'Direct - national',
+            'justification_sha256' => '05aafd024f7aa07c77acfe03b83d63f6696d893fe0d5df899106e01eb5f6659a',
+            'estimate_comment' => null,
+        ],
+    ];
+
+    foreach ($expected as $row => $values) {
+        $record = procurementUniqueWorkbookRecord(
+            $dataset,
+            "below_bridge|Goods and Non consultancy |{$row}",
+        );
+        $marketCell = $record['row_payload']['cells']['G'];
+        $justificationCell = $record['row_payload']['cells']['I'];
+
+        expect($record['source_reference'])->toBe($values['reference'])
+            ->and($record['header_payload']['cells']['G']['formatted'])->toBe('Market apporch ')
+            ->and($record['header_payload']['cells']['I']['formatted'])->toBe('Justfication')
+            ->and($marketCell['coordinate'])->toBe("G{$row}")
+            ->and($marketCell['formatted'])->toBe($values['market_source'])
+            ->and($record['source_fields']['market_approach'])->toBe($values['market_source'])
+            ->and($record['source_field_provenance']['market_approach']['column'])->toBe('G')
+            ->and($record['market_approach'])->toBe('Direct - National')
+            ->and($justificationCell['coordinate'])->toBe("I{$row}")
+            ->and(hash('sha256', $justificationCell['formatted']))
+            ->toBe($values['justification_sha256'])
+            ->and($record['source_fields']['limited_selection_justification'])
+            ->toBe($justificationCell['formatted'])
+            ->and($record['source_field_provenance']['limited_selection_justification']['column'])
+            ->toBe('I')
+            ->and($record['limited_selection_justification'])->toBe($justificationCell['formatted'])
+            ->and(data_get($record, 'row_payload.cells.H.comment.text'))->toBe($values['estimate_comment']);
+
+        if ($values['estimate_comment'] !== null) {
+            expect($record['row_payload']['cells']['H']['comment'])
+                ->toHaveKeys(['type', 'author', 'text', 'raw_text', 'visible'])
+                ->and($record['row_payload']['cells']['H']['comment']['type'])->toBe('threaded')
+                ->and($record['row_payload']['cells']['H']['comment']['raw_text'])
+                ->toContain($values['estimate_comment']);
+        }
+    }
+});
+
+it('captures the CACEPS RFB and direct-selection auxiliary fields canonically and raw', function (): void {
+    $dataset = procurementWorkbookDataset();
+    $cases = [
+        'above_caceps|RFB|4' => [
+            'reference' => 'ET-AUC-563630-GO-RFB',
+            'fields' => [
+                'source_prequalification' => ['column' => 'H', 'header' => 'Prequalification (Y/N)', 'value' => 'N'],
+                'source_procurement_process' => ['column' => 'I', 'header' => 'Procurement Process', 'value' => 'Single Stage One Envelope'],
+            ],
+        ],
+        'above_caceps|DIR|4' => [
+            'reference' => 'ET-AUC-563624-NC-DIR',
+            'fields' => [
+                'source_evaluation_options' => ['column' => 'G', 'header' => 'Evaluation Options', 'value' => 'Direct - National'],
+            ],
+        ],
+    ];
+
+    foreach ($cases as $recordKey => $case) {
+        $record = procurementUniqueWorkbookRecord($dataset, $recordKey);
+        expect($record['source_reference'])->toBe($case['reference']);
+
+        foreach ($case['fields'] as $field => $source) {
+            expect($record[$field])->toBe($source['value'])
+                ->and($record['source_fields'][$field])->toBe($source['value'])
+                ->and($record['source_field_provenance'][$field]['column'])->toBe($source['column'])
+                ->and($record['header_payload']['cells'][$source['column']]['formatted'])
+                ->toBe($source['header'])
+                ->and($record['row_payload']['cells'][$source['column']]['formatted'])
+                ->toBe($source['value']);
+        }
+    }
+});
+
+it('keeps all fourteen inherited RFQ schedules raw and explicitly review flagged', function (): void {
+    $dataset = procurementWorkbookDataset();
+    $references = [
+        16 => 'ET-AUC-007-CS-INDV',
+        17 => 'ET-AUC-008-CS-INDV',
+        18 => 'ET-AUC-009-CS-INDV',
+    ];
+    foreach (range(19, 29) as $row) {
+        $references[$row] = sprintf('ET-AUC-%03d-NC', $row - 9);
+    }
+    $earlyDates = [
+        16 => ['K' => '2026-07-27', 'M' => '2026-08-16', 'O' => '2026-08-26', 'S' => '2026-08-29', 'U' => '2026-09-08', 'W' => '2026-09-18'],
+        17 => ['K' => '2026-07-22', 'M' => '2026-08-11', 'O' => '2026-08-21', 'S' => '2026-08-24', 'U' => '2026-09-03', 'W' => '2026-09-13'],
+        18 => ['K' => '2026-07-22', 'M' => '2026-08-11', 'O' => '2026-08-21', 'S' => '2026-08-24', 'U' => '2026-09-03', 'W' => '2026-09-13'],
+    ];
+    $laterDates = [
+        'K' => '2026-09-07',
+        'M' => '2026-09-12',
+        'O' => '2026-09-22',
+        'Q' => '2026-09-29',
+        'S' => '2026-10-09',
+        'V' => '2026-11-08',
+    ];
+
+    foreach ($references as $row => $reference) {
+        $record = procurementUniqueWorkbookRecord(
+            $dataset,
+            "below_caceps|Goods and Non Consulting servic|{$row}",
+        );
+        $expectedDates = $earlyDates[$row] ?? $laterDates;
+        $capturedDates = [];
+        foreach (['K', 'M', 'O', 'Q', 'S', 'U', 'V', 'W'] as $column) {
+            $cell = $record['row_payload']['cells'][$column] ?? null;
+            if ($cell !== null && ($cell['formatted'] ?? '') !== '') {
+                $capturedDates[$column] = $cell['formatted'];
+            }
+        }
+
+        expect($record['source_reference'])->toBe($reference)
+            ->and($capturedDates)->toBe($expectedDates)
+            ->and($record['planned_milestones'])->toBe([])
+            ->and($record['planned_start_date'])->toBeNull()
+            ->and($record['planned_end_date'])->toBeNull();
+
+        foreach ($expectedDates as $column => $date) {
+            expect($record['row_payload']['cells'][$column])
+                ->toHaveKeys(['coordinate', 'raw', 'formatted', 'formula', 'cached', 'data_type'])
+                ->and($record['row_payload']['cells'][$column]['coordinate'])->toBe("{$column}{$row}")
+                ->and($record['row_payload']['cells'][$column]['formatted'])->toBe($date);
+        }
+
+        $reviewFlags = array_column($record['review_flags'], 'type');
+        expect($reviewFlags)->toContain('milestone_columns_preserved_raw_only');
+        if ($row <= 18) {
+            expect($reviewFlags)->toContain('method_and_milestone_ambiguity');
+        } else {
+            expect($reviewFlags)->not->toContain('method_and_milestone_ambiguity');
+        }
+    }
+
+    $headerRecord = procurementUniqueWorkbookRecord(
+        $dataset,
+        'below_caceps|Goods and Non Consulting servic|19',
+    );
+    expect([
+        'K' => [
+            $headerRecord['header_payload']['cells']['K']['formatted'],
+            $headerRecord['subheader_payload']['cells']['K']['formatted'],
+        ],
+        'M' => [
+            $headerRecord['header_payload']['cells']['M']['formatted'],
+            $headerRecord['subheader_payload']['cells']['M']['formatted'],
+        ],
+        'O' => [
+            $headerRecord['header_payload']['cells']['O']['formatted'],
+            $headerRecord['subheader_payload']['cells']['O']['formatted'],
+        ],
+        'Q' => [
+            $headerRecord['header_payload']['cells']['Q']['formatted'],
+            $headerRecord['subheader_payload']['cells']['Q']['formatted'],
+        ],
+        'S' => [
+            $headerRecord['header_payload']['cells']['S']['formatted'],
+            $headerRecord['subheader_payload']['cells']['S']['formatted'],
+        ],
+        'U' => [
+            $headerRecord['header_payload']['cells']['U']['formatted'],
+            $headerRecord['subheader_payload']['cells']['U']['formatted'],
+        ],
+        'V' => [
+            $headerRecord['header_payload']['cells']['V']['formatted'],
+            $headerRecord['subheader_payload']['cells']['V']['formatted'],
+        ],
+        'W' => [
+            $headerRecord['header_payload']['cells']['W']['formatted'] ?? null,
+            $headerRecord['subheader_payload']['cells']['W']['formatted'],
+        ],
+    ])->toBe([
+        'K' => ['Justification for Direct Procurement', 'Planned'],
+        'M' => ['Invitation to Supplier / Contractor ', 'Planned'],
+        'O' => ['Draft Contract', 'Planned'],
+        'Q' => ['Notification of Intention of Award', 'Planned'],
+        'S' => ['Signed Contract', 'Planned'],
+        'U' => ['Contract Amendments', 'Actual'],
+        'V' => ['Contract Completion', 'Planned'],
+        'W' => [null, 'Actual'],
+    ]);
 });
 
 it('applies audited owner, method, reference, review, merge, and title rules', function (): void {
@@ -190,6 +524,7 @@ it('fails closed before parsing when a pinned workbook is changed', function ():
             'schema_version' => 1,
             'workbooks' => ['tampered' => $definition],
             'owners' => $manifest['owners'],
+            'activity_status_mapping' => $manifest['activity_status_mapping'],
         ];
 
         expect(fn () => (new ThinkTankProcurementWorkbookDataset)->load($tampered))

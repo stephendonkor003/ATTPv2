@@ -160,7 +160,7 @@
                                                 @foreach ($roles as $role)
                                                     <option value="{{ $role->id }}"
                                                         {{ $user->role_id === $role->id ? 'selected' : '' }}>
-                                                        {{ $role->name }}
+                                                        {{ $role->isReadOnlyAuditor() ? 'Auditor — view only' : $role->name }}
                                                     </option>
                                                 @endforeach
                                             </select>
@@ -239,11 +239,18 @@
                                             @endif
 
                                             @if (! $isThinkTankUser)
-                                            <a href="{{ route('system.users.permissions', $user->id) }}"
-                                                class="btn btn-sm btn-outline-primary"
-                                                title="Assign Direct Permissions">
-                                                <i class="feather-lock"></i>
-                                            </a>
+                                                @if ($user->isAuditor())
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled
+                                                        title="Auditor direct permissions are system-managed">
+                                                        <i class="feather-eye"></i>
+                                                    </button>
+                                                @else
+                                                    <a href="{{ route('system.users.permissions', $user->id) }}"
+                                                        class="btn btn-sm btn-outline-primary"
+                                                        title="Assign Direct Permissions">
+                                                        <i class="feather-lock"></i>
+                                                    </a>
+                                                @endif
                                             @endif
 
                                             <button type="button"

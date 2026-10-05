@@ -50,6 +50,11 @@
                             <tr>
                                 <td class="ps-4">
                                     <div class="fw-semibold">{{ $role->name }}</div>
+                                    @if ($role->isReadOnlyAuditor())
+                                        <span class="badge bg-info-subtle text-info mt-1">
+                                            <i class="feather-eye me-1"></i>System-managed read only
+                                        </span>
+                                    @endif
                                 </td>
 
                                 <td class="text-muted">
@@ -64,7 +69,8 @@
 
                                 <td class="text-center">
                                     <a href="{{ route('system.permissions.assign', $role->id) }}"
-                                        class="btn btn-sm btn-outline-primary" title="Assign Permissions">
+                                        class="btn btn-sm btn-outline-primary"
+                                        title="{{ $role->isReadOnlyAuditor() ? 'View system-managed permissions' : 'Assign Permissions' }}">
                                         <i class="feather-lock"></i>
                                     </a>
 

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Mail\EvaluationAssigned;
-use App\Mail\VendorProcurementLifecycleMail;
 use App\Models\ConsortiumThinkTank;
 use App\Models\DynamicForm;
 use App\Models\DynamicFormField;
@@ -530,6 +529,7 @@ class ThinkTankProcurementPlanController extends Controller
                     'source_activity_status' => ThinkTankProcurementItem::ACTIVITY_STATUS_DRAFT,
                     'review_reason' => null,
                     'updated_by' => $request->user()->id,
+                    'portal_lock_version' => $lockedItem->nextPortalLockVersion(),
                 ]);
                 $this->storeItemDocuments($request, $lockedItem, $storedPaths);
                 $this->workflow->syncPlanBudget($lockedPlan);
@@ -850,6 +850,7 @@ class ThinkTankProcurementPlanController extends Controller
                     'status' => ThinkTankProcurementItem::STATUS_PUBLISHED,
                     'source_activity_status' => ThinkTankProcurementItem::ACTIVITY_STATUS_WORLD_BANK_APPROVED,
                     'updated_by' => $request->user()->id,
+                    'portal_lock_version' => $lockedItem->nextPortalLockVersion(),
                 ]);
                 $this->workflow->event($lockedPlan, $lockedItem, $request->user(), 'item_execution_created', ThinkTankProcurementItem::STATUS_NO_OBJECTION, $lockedItem->status, null, [
                     'procurement_id' => $procurement->id,

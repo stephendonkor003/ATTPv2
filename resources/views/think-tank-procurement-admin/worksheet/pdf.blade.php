@@ -13,7 +13,7 @@
         'draft' => 'Draft at Think Tank', 'submitted' => 'Submitted to AUC-ATTP',
         'revision_requested' => 'Returned for correction', 'rejected' => 'Rejected',
         'approved' => 'Pending World Bank no-objection',
-        'no_objection_obtained' => 'No-objection received / ready to execute',
+        'no_objection_obtained' => 'STEP Cleared / ready to execute',
         'published' => 'Execution underway / published',
     ];
     $milestones = collect($item->planned_milestones ?? [])->filter(fn ($row) => is_array($row));
@@ -46,7 +46,7 @@
         <tr><td><span class="label">Market approach</span><span class="value">{{ $item->market_approach ?: 'Not set' }}</span></td><td><span class="label">Document type</span><span class="value">{{ $item->source_document_type ?: 'Not set' }}</span></td><td><span class="label">SEA / SH risk</span><span class="value">{{ $item->source_sea_sh_risk ?: 'Not set' }}</span></td></tr>
         <tr><td><span class="label">Loan / credit no.</span><span class="value">{{ $item->loan_credit_no ?: 'Not set' }}</span></td><td><span class="label">Component</span><span class="value">{{ $item->component ?: 'Not set' }}</span></td><td><span class="label">Source reference</span><span class="value">{{ $item->source_reference ?: 'Not set' }}</span></td></tr>
         <tr><td><span class="label">Planned quarter</span><span class="value">{{ $item->planned_quarter ?: 'Not set' }}</span></td><td><span class="label">Planned start</span><span class="value">{{ $item->planned_start_date?->format('d M Y') ?: 'Not set' }}</span></td><td><span class="label">Planned end</span><span class="value">{{ $item->planned_end_date?->format('d M Y') ?: 'Not set' }}</span></td></tr>
-        <tr><td><span class="label">Process status</span><span class="value">{{ $item->source_process_status ?: 'Not set' }}</span></td><td><span class="label">Activity status</span><span class="value">{{ $item->source_activity_status ?: $item->workflowActivityStatus() }}</span></td><td><span class="label">In process</span><span class="value">{{ $item->source_in_process ?: 'Not set' }}</span></td></tr>
+        <tr><td><span class="label">Process status</span><span class="value">{{ $item->source_process_status ?: 'Not set' }}</span></td><td><span class="label">Imported / current STEP Activity Status</span><span class="value">{{ $item->importedActivityStatus() ?: 'Not supplied' }} / {{ $item->currentStepActivityStatus() ?: 'Not synchronized' }}</span></td><td><span class="label">In process</span><span class="value">{{ $item->source_in_process ?: 'Not set' }}</span></td></tr>
     </table>
 </div>
 
@@ -90,7 +90,7 @@
 @if(in_array($item->status, ['no_objection_obtained', 'published'], true))
 <div class="section">
     <div class="section-title">World Bank no-objection and readiness record</div>
-    <div class="clearance"><strong>No-objection received / ready to execute</strong><br>STEP reference: {{ $item->step_reference ?: 'Not recorded' }} · Decision reference: {{ $item->no_objection_reference ?: 'Not recorded' }} · Decision date: {{ $item->no_objection_date?->format('d M Y') ?: 'Not recorded' }}@if($item->no_objection_notes)<br>{{ $item->no_objection_notes }}@endif</div>
+    <div class="clearance"><strong>STEP Cleared / ready to execute</strong><br>Supplemental formal evidence: {{ $item->hasCompleteNoObjectionEvidence() ? 'recorded' : 'not recorded' }} · STEP reference: {{ $item->step_reference ?: 'Not recorded' }} · Decision reference: {{ $item->no_objection_reference ?: 'Not recorded' }} · Decision date: {{ $item->no_objection_date?->format('d M Y') ?: 'Not recorded' }}@if($item->no_objection_notes)<br>{{ $item->no_objection_notes }}@endif</div>
 </div>
 @endif
 

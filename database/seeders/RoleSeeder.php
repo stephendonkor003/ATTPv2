@@ -29,7 +29,16 @@ class RoleSeeder extends Seeder
         ];
 
         foreach ($roles as $role) {
-            Role::firstOrCreate(['name' => $role]);
+            $attributes = [];
+
+            if ($role === Role::AUDITOR_NAME) {
+                $attributes = [
+                    'description' => 'System-wide read-only audit access. Business data and workflow actions cannot be changed.',
+                    'is_read_only_auditor' => true,
+                ];
+            }
+
+            Role::updateOrCreate(['name' => $role], $attributes);
         }
     }
 }

@@ -751,7 +751,7 @@ public function update(Request $request, $id)
     {
         $currentUser = Auth::user();
 
-        if (!$currentUser || $currentUser->isAdmin() || $currentUser->isSuperAdmin()) {
+        if (!$currentUser || $currentUser->hasSystemWideReadAccess()) {
             return null;
         }
 

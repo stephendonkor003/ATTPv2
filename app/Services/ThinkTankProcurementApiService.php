@@ -424,12 +424,12 @@ class ThinkTankProcurementApiService
         $usageRows = $this->usageRows(collect([$plan]));
         $rowsByItem = $usageRows->keyBy('id');
         $canManage = $viewer->hasPermission('think_tank.procurement_plans.manage');
-        $missingTor = $plan->items->filter(fn (ThinkTankProcurementItem $item): bool => ! $item->hasTermsOfReference());
-        $blockedItems = $plan->items->whereIn('status', [
-            ThinkTankProcurementItem::STATUS_REJECTED,
+        $activeItems = $plan->items->whereNotIn('status', [
             ThinkTankProcurementItem::STATUS_NO_OBJECTION,
             ThinkTankProcurementItem::STATUS_PUBLISHED,
         ]);
+        $missingTor = $activeItems->filter(fn (ThinkTankProcurementItem $item): bool => ! $item->hasTermsOfReference());
+        $blockedItems = $activeItems->where('status', ThinkTankProcurementItem::STATUS_REJECTED);
         $currencyReviewItems = $plan->items->filter(
             fn (ThinkTankProcurementItem $item): bool => Str::upper(trim((string) $item->currency)) !== 'USD'
         );
@@ -472,10 +472,10 @@ class ThinkTankProcurementApiService
                 ],
                 [
                     'key' => 'terms_of_reference',
-                    'label' => 'Terms of Reference for every item',
+                    'label' => 'Terms of Reference for every item entering review',
                     'complete' => $plan->items->isNotEmpty() && $missingTor->isEmpty(),
                     'message' => $missingTor->isEmpty()
-                        ? 'Every item has a Terms of Reference document.'
+                        ? 'Every active item has a Terms of Reference document; terminal STEP-cleared items are retained.'
                         : 'Missing TOR: '.$missingTor->pluck('item_code')->implode(', '),
                 ],
                 [
@@ -491,8 +491,8 @@ class ThinkTankProcurementApiService
                     'label' => 'Items are ready for submission',
                     'complete' => $blockedItems->isEmpty(),
                     'message' => $blockedItems->isEmpty()
-                        ? 'No item is blocked by its current workflow state.'
-                        : 'Correct rejected items; items already in execution cannot be resubmitted.',
+                        ? 'No active item is blocked by its current workflow state.'
+                        : 'Correct rejected items before submission.',
                 ],
             ],
         ];
@@ -538,12 +538,14 @@ class ThinkTankProcurementApiService
             'highSeaShRisk' => $item->source_sea_sh_risk ?: null,
             'procurementDocumentType' => $item->source_document_type ?: null,
             'processStatus' => $item->source_process_status ?: null,
-            'activityStatus' => $item->source_activity_status ?: $item->workflowActivityStatus(),
+            'activityStatus' => $item->currentStepActivityStatus() ?: $item->importedActivityStatus() ?: $item->workflowActivityStatus(),
+            'currentStepActivityStatus' => $item->currentStepActivityStatus(),
+            'importedActivityStatus' => $item->importedActivityStatus(),
             'budgetReference' => $item->budget_reference ?: null,
             'bankComment' => $item->bank_comment ?: null,
             'actionTaken' => $item->action_taken ?: null,
             'status' => (string) $item->status,
-            'statusLabel' => $this->itemStatusLabel($item->status),
+            'statusLabel' => $this->itemStatusLabelFor($item),
             'reviewReason' => $item->review_reason ?: null,
             'roadmap' => $this->roadmap($item, $methodCode)['stages'],
             'documents' => $item->documents->map(fn (ThinkTankProcurementDocument $document): array => [
@@ -574,11 +576,12 @@ class ThinkTankProcurementApiService
                 'noObjectionDate' => $this->date($item->no_objection_date),
                 'noObjectionNotes' => $item->no_objection_notes ?: null,
                 'noObjectionRecordedAt' => $this->dateTime($item->no_objection_recorded_at),
-                'isReadyToExecute' => in_array($item->status, [
-                    ThinkTankProcurementItem::STATUS_NO_OBJECTION,
-                    ThinkTankProcurementItem::STATUS_PUBLISHED,
-                ], true),
-                'readyToExecuteAt' => $this->dateTime($item->no_objection_recorded_at),
+                'isReadyToExecute' => $item->isReadyToExecute(),
+                'clearanceStatus' => $item->isReadyToExecute() ? 'received_complete' : 'not_received',
+                'formalEvidenceComplete' => $item->hasCompleteNoObjectionEvidence(),
+                'readyToExecuteAt' => $item->isReadyToExecute()
+                    ? $this->dateTime($item->no_objection_recorded_at)
+                    : null,
                 'readyToExecuteBy' => $item->noObjectionRecorder ? [
                     'id' => (string) $item->noObjectionRecorder->id,
                     'name' => (string) $item->noObjectionRecorder->name,
@@ -825,9 +828,7 @@ class ThinkTankProcurementApiService
     private function usageRows(Collection $plans): Collection
     {
         $plans->each(function (ThinkTankProcurementPlan $plan): void {
-            if (! $plan->relationLoaded('items')) {
-                $plan->load('items');
-            }
+            $plan->loadMissing(['items.documents:id,item_id,document_type']);
         });
         $items = $plans->flatMap(fn (ThinkTankProcurementPlan $plan) => $plan->items)->values();
         $plansById = $plans->keyBy(fn (ThinkTankProcurementPlan $plan): string => (string) $plan->id);
@@ -874,6 +875,7 @@ class ThinkTankProcurementApiService
         ): array {
             /** @var ThinkTankProcurementPlan $plan */
             $plan = $plansById->get((string) $item->plan_id);
+            $item->setRelation('plan', $plan);
             $procurementId = $item->procurement_id ? (string) $item->procurement_id : null;
             $orders = $procurementId
                 ? $purchaseOrders->where('procurement_id', $procurementId)
@@ -914,8 +916,10 @@ class ThinkTankProcurementApiService
                 'sourceAmount' => (float) $item->estimated_amount,
                 'band' => $band['code'],
                 'status' => (string) $item->status,
-                'statusLabel' => $this->itemStatusLabel($item->status),
-                'activityStatus' => $item->source_activity_status ?: $item->workflowActivityStatus(),
+                'statusLabel' => $this->itemStatusLabelFor($item),
+                'activityStatus' => $item->currentStepActivityStatus() ?: $item->importedActivityStatus() ?: $item->workflowActivityStatus(),
+                'currentStepActivityStatus' => $item->currentStepActivityStatus(),
+                'importedActivityStatus' => $item->importedActivityStatus(),
                 'approvalReference' => $item->no_objection_reference ?: $item->step_reference ?: null,
                 'approvedAt' => $this->dateTime($item->no_objection_recorded_at ?: $item->reviewed_at),
                 'currencyReviewRequired' => ! $isExplicitUsd || $nonUsdOrders->isNotEmpty() || $nonUsdPayments->isNotEmpty(),
@@ -1088,6 +1092,11 @@ class ThinkTankProcurementApiService
             ThinkTankProcurementItem::STATUS_PUBLISHED => 'Published for applications',
             default => 'Draft',
         };
+    }
+
+    private function itemStatusLabelFor(ThinkTankProcurementItem $item): string
+    {
+        return $this->itemStatusLabel($item->status);
     }
 
     private function date(mixed $value): ?string

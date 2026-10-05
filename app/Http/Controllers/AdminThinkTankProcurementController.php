@@ -56,7 +56,6 @@ class AdminThinkTankProcurementController extends Controller
             ->values();
         $items = $plans->flatMap->items;
         $stepReadyItems = $plans
-            ->where('status', ThinkTankProcurementPlan::STATUS_APPROVED)
             ->flatMap->items
             ->whereIn('status', [
                 ThinkTankProcurementItem::STATUS_APPROVED,
@@ -170,10 +169,10 @@ class AdminThinkTankProcurementController extends Controller
         ]);
         $data = $request->validate([
             'step_reference' => 'required|string|max:255',
-            'no_objection_reference' => 'required_without:no_objection_document|nullable|string|max:255',
+            'no_objection_reference' => 'nullable|string|max:255',
             'no_objection_date' => 'required|date|before_or_equal:today',
             'no_objection_notes' => 'nullable|string|max:5000',
-            'no_objection_document' => 'required_without:no_objection_reference|nullable|file|mimes:pdf,doc,docx|max:20480',
+            'no_objection_document' => 'nullable|file|mimes:pdf,doc,docx|max:20480',
         ]);
 
         $storedPath = null;
@@ -188,8 +187,14 @@ class AdminThinkTankProcurementController extends Controller
                     ->whereKey($item->id)
                     ->lockForUpdate()
                     ->firstOrFail();
-                abort_unless($lockedPlan->status === ThinkTankProcurementPlan::STATUS_APPROVED, 422, 'Approve the full annual plan before recording World Bank no-objection.');
-                abort_unless($lockedItem->status === ThinkTankProcurementItem::STATUS_APPROVED, 422, 'Only an approved item can receive a World Bank no-objection decision.');
+                abort_unless(in_array($lockedItem->status, [
+                    ThinkTankProcurementItem::STATUS_APPROVED,
+                    ThinkTankProcurementItem::STATUS_NO_OBJECTION,
+                    ThinkTankProcurementItem::STATUS_PUBLISHED,
+                ], true), 422, 'Only an approved or already STEP-cleared item can receive no-objection evidence.');
+                if ($lockedItem->status === ThinkTankProcurementItem::STATUS_APPROVED) {
+                    abort_unless($lockedPlan->status === ThinkTankProcurementPlan::STATUS_APPROVED, 422, 'Approve the full annual plan before recording World Bank no-objection.');
+                }
 
                 if ($request->hasFile('no_objection_document')) {
                     $file = $request->file('no_objection_document');
@@ -216,7 +221,36 @@ class AdminThinkTankProcurementController extends Controller
             throw $exception;
         }
 
-        return back()->with('success', 'World Bank no-objection recorded. The item is ready to execute and status emails were queued.');
+        return back()->with('success', 'World Bank no-objection and any supplied formal evidence were recorded.');
+    }
+
+    public function syncStepStatus(Request $request, ThinkTankProcurementPlan $plan, ThinkTankProcurementItem $item)
+    {
+        $this->assertItem($item, $plan);
+        $request->merge([
+            'step_activity_status' => trim((string) $request->input('step_activity_status')) ?: null,
+            'comment' => trim((string) $request->input('comment')),
+        ]);
+        $data = $request->validate([
+            'step_activity_status' => 'nullable|in:new,returned,cleared',
+            'comment' => 'required|string|min:3|max:5000',
+            'lock_version' => 'required|integer|min:1',
+        ]);
+
+        $this->workflow->syncExternalStepStatus(
+            $item,
+            $request->user(),
+            $data['step_activity_status'] ?? null,
+            $data['comment'],
+            (int) $data['lock_version'],
+        );
+
+        return back()->with(
+            'success',
+            filled($data['step_activity_status'] ?? null)
+                ? 'The STEP activity status and append-only comment were recorded.'
+                : 'The append-only STEP comment was recorded without changing the status.',
+        );
     }
 
     public function downloadDocument(

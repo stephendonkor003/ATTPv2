@@ -2,14 +2,22 @@
 
 namespace App\Models;
 
-use App\Models\BaseModel;
-
 class Role extends BaseModel
 {
+    public const AUDITOR_NAME = 'Auditor';
+
     protected $fillable = [
         'name',
         'description',
+        'is_read_only_auditor',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'is_read_only_auditor' => 'boolean',
+        ];
+    }
 
     /* ===============================
      | RELATIONSHIPS
@@ -35,5 +43,16 @@ class Role extends BaseModel
     public function hasPermission(string $permission): bool
     {
         return $this->permissions->contains('name', $permission);
+    }
+
+    /**
+     * The persisted flag is the canonical identity and survives a role rename.
+     * The name check keeps existing installations safe until the flag migration
+     * has been applied.
+     */
+    public function isReadOnlyAuditor(): bool
+    {
+        return (bool) $this->is_read_only_auditor
+            || trim((string) $this->name) === self::AUDITOR_NAME;
     }
 }

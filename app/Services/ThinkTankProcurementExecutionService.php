@@ -10,7 +10,6 @@ use App\Models\ThinkTankProcurementItem;
 use App\Models\User;
 use App\Support\DynamicProcurementFormCatalog;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 class ThinkTankProcurementExecutionService
@@ -405,16 +404,7 @@ class ThinkTankProcurementExecutionService
         $vendorAudienceReady = ($procurement->visibility_type ?: 'public') !== 'vendor_group'
             || count((array) $procurement->tenant_vendor_category_ids) > 0
             || count((array) $procurement->tenant_vendor_ids) > 0;
-        $hasNoObjectionEvidence = $item?->documents?->contains(
-            fn ($document): bool => (string) $document->document_type === 'no_objection'
-        ) ?? false;
-        $noObjectionReady = $item
-            && in_array($item->status, [
-                ThinkTankProcurementItem::STATUS_NO_OBJECTION,
-                ThinkTankProcurementItem::STATUS_PUBLISHED,
-            ], true)
-            && filled($item->no_objection_date)
-            && (filled($item->no_objection_reference) || $hasNoObjectionEvidence);
+        $noObjectionReady = $item?->isReadyToExecute() ?? false;
 
         return [
             [
@@ -422,8 +412,8 @@ class ThinkTankProcurementExecutionService
                 'label' => 'World Bank no-objection recorded',
                 'complete' => (bool) $noObjectionReady,
                 'message' => $noObjectionReady
-                    ? 'The approved planning item is authorized for execution.'
-                    : 'A valid World Bank no-objection record is required.',
+                    ? 'The planning item is recorded as Cleared in STEP and is authorized for execution.'
+                    : 'A confirmed STEP Cleared status is required.',
             ],
             [
                 'key' => 'opportunity_details',

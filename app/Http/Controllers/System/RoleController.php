@@ -4,7 +4,9 @@ namespace App\Http\Controllers\System;
 
 use App\Http\Controllers\Controller;
 use App\Models\Role;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class RoleController extends Controller
 {
@@ -22,12 +24,18 @@ class RoleController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|unique:roles,name',
             'description' => 'nullable|string',
         ]);
 
-        Role::create($request->only('name', 'description'));
+        if (strcasecmp(trim($validated['name']), User::AUDITOR_ROLE) === 0) {
+            throw ValidationException::withMessages([
+                'name' => ['The canonical Auditor role is managed by the system and cannot be recreated.'],
+            ]);
+        }
+
+        Role::create($validated);
 
         return redirect()
             ->route('system.roles.index')
@@ -46,12 +54,30 @@ class RoleController extends Controller
 
     public function update(Request $request, Role $role)
     {
-        $request->validate([
-            'name' => 'required|unique:roles,name,' . $role->id,
+        $validated = $request->validate([
+            'name' => 'required|unique:roles,name,'.$role->id,
             'description' => 'nullable|string',
         ]);
 
-        $role->update($request->only('name', 'description'));
+        $isReadOnlyAuditor = $role->isReadOnlyAuditor();
+        $requestedName = trim($validated['name']);
+
+        if ($isReadOnlyAuditor && $requestedName !== User::AUDITOR_ROLE) {
+            throw ValidationException::withMessages([
+                'name' => ['The canonical Auditor role cannot be renamed.'],
+            ]);
+        }
+
+        if (! $isReadOnlyAuditor && strcasecmp($requestedName, User::AUDITOR_ROLE) === 0) {
+            throw ValidationException::withMessages([
+                'name' => ['The Auditor role name is reserved for the system-managed read-only role.'],
+            ]);
+        }
+
+        $role->update([
+            'name' => $requestedName,
+            'description' => $validated['description'] ?? null,
+        ]);
 
         return redirect()
             ->route('system.roles.index')

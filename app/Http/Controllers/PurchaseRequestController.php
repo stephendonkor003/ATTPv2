@@ -870,7 +870,7 @@ class PurchaseRequestController extends Controller
     {
         $currentUser = Auth::user();
 
-        if (!$currentUser || $currentUser->isAdmin() || $currentUser->isSuperAdmin()) {
+        if (!$currentUser || $currentUser->hasSystemWideReadAccess()) {
             return null;
         }
 

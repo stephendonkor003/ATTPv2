@@ -29,6 +29,12 @@ class ThinkTankProcurementItem extends BaseModel
 
     public const ACTIVITY_STATUS_WORLD_BANK_APPROVED = 'Approved by World Bank — No Objection';
 
+    public const STEP_STATUS_NEW = 'New';
+
+    public const STEP_STATUS_RETURNED = 'Returned';
+
+    public const STEP_STATUS_CLEARED = 'Cleared';
+
     protected $table = 'attp_think_tank_procurement_items';
 
     protected $fillable = [
@@ -44,7 +50,8 @@ class ThinkTankProcurementItem extends BaseModel
         'no_objection_recorded_at', 'procurement_id', 'source_file', 'source_sheet',
         'source_row', 'source_payload', 'planned_milestones', 'created_by', 'updated_by',
         'limited_selection_justification', 'budget_reference', 'bank_comment',
-        'action_taken', 'portal_lock_version',
+        'action_taken', 'portal_lock_version', 'step_activity_status',
+        'step_status_updated_at', 'step_status_updated_by',
     ];
 
     protected $casts = [
@@ -60,6 +67,7 @@ class ThinkTankProcurementItem extends BaseModel
         'source_payload' => 'array',
         'planned_milestones' => 'array',
         'portal_lock_version' => 'integer',
+        'step_status_updated_at' => 'datetime',
     ];
 
     public function plan(): BelongsTo
@@ -127,5 +135,75 @@ class ThinkTankProcurementItem extends BaseModel
     public function workflowActivityStatus(): string
     {
         return self::activityStatusFor($this->status);
+    }
+
+    public function importedActivityStatus(): ?string
+    {
+        $status = data_get($this->source_payload, 'source_statuses.activity_status');
+        if (is_string($status) && trim($status) !== '') {
+            return trim($status);
+        }
+
+        $compatibilityStatus = trim((string) $this->source_activity_status);
+
+        return $compatibilityStatus !== '' ? $compatibilityStatus : null;
+    }
+
+    public function currentStepActivityStatus(): ?string
+    {
+        $current = trim((string) $this->step_activity_status);
+        if (in_array($current, [
+            self::STEP_STATUS_NEW,
+            self::STEP_STATUS_RETURNED,
+            self::STEP_STATUS_CLEARED,
+        ], true)) {
+            return $current;
+        }
+
+        if (in_array($this->status, [self::STATUS_NO_OBJECTION, self::STATUS_PUBLISHED], true)) {
+            return self::STEP_STATUS_CLEARED;
+        }
+
+        $imported = $this->importedActivityStatus();
+        if (in_array($imported, [
+            self::STEP_STATUS_NEW,
+            self::STEP_STATUS_RETURNED,
+            self::STEP_STATUS_CLEARED,
+        ], true)) {
+            return $imported;
+        }
+
+        return match ($this->status) {
+            self::STATUS_APPROVED => self::STEP_STATUS_NEW,
+            default => null,
+        };
+    }
+
+    public function nextPortalLockVersion(): int
+    {
+        return max(1, (int) ($this->portal_lock_version ?: 1)) + 1;
+    }
+
+    /**
+     * Formal dated evidence is tracked independently from the authoritative
+     * STEP Cleared state and may be added later as supplemental evidence.
+     */
+    public function hasCompleteNoObjectionEvidence(): bool
+    {
+        $attributes = $this->getAttributes();
+        $hasEvidenceDocument = $this->relationLoaded('documents')
+            ? $this->documents->contains('document_type', 'no_objection')
+            : $this->documents()->where('document_type', 'no_objection')->exists();
+
+        return filled($attributes['no_objection_date'] ?? null)
+            && (filled($attributes['no_objection_reference'] ?? null) || $hasEvidenceDocument);
+    }
+
+    public function isReadyToExecute(): bool
+    {
+        return in_array($this->status, [
+            self::STATUS_NO_OBJECTION,
+            self::STATUS_PUBLISHED,
+        ], true);
     }
 }

@@ -159,7 +159,7 @@
                 <td>{{ $item->planned_quarter ?: 'N/A' }}<br><span class="muted">{{ $item->planned_start_date?->format('d M Y') ?: 'Start TBC' }}</span></td>
                 <td class="num"><strong>{{ $item->currency }} {{ number_format((float) $item->estimated_amount, 2) }}</strong></td>
                 <td class="center">{{ $item->documents->where('document_type', 'tor')->count() }} TOR<br>{{ $item->documents->where('document_type', 'supporting')->count() }} support</td>
-                <td><span class="status-pill {{ $item->status }}">{{ $item->workflowActivityStatus() }}</span>@if($item->step_reference)<br><span class="muted">STEP {{ $item->step_reference }}</span>@endif @if($item->no_objection_date)<br><span class="muted">No-objection {{ $item->no_objection_date->format('d M Y') }}</span>@endif</td>
+                <td><span class="status-pill {{ $item->status }}">{{ $item->currentStepActivityStatus() ?: $item->importedActivityStatus() ?: $item->workflowActivityStatus() }}</span>@if($item->step_reference)<br><span class="muted">STEP {{ $item->step_reference }}</span>@endif @if($item->no_objection_date)<br><span class="muted">No-objection {{ $item->no_objection_date->format('d M Y') }}</span>@endif</td>
             </tr>
         @endforeach
         </tbody>

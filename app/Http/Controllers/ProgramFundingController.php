@@ -540,7 +540,7 @@ public function edit(ProgramFunding $programFunding)
     {
         $currentUser = Auth::user();
 
-        return (bool) ($currentUser && ($currentUser->isAdmin() || $currentUser->isSuperAdmin()));
+        return (bool) ($currentUser && $currentUser->hasSystemWideReadAccess());
     }
 
     private function assertFundingInScope(ProgramFunding $funding): void

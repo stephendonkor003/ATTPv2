@@ -206,7 +206,7 @@
                                     </div>
                                 </td>
                                 <td data-order="{{ $item->status }}">
-                                    <span class="atp-status {{ $item->status }}">{{ $item->workflowActivityStatus() }}</span>
+                                    <span class="atp-status {{ $item->status }}">{{ $item->currentStepActivityStatus() ?: $item->importedActivityStatus() ?: $item->workflowActivityStatus() }}</span>
                                     <div class="atp-register-plan-status">Plan: {{ Str::headline($item->plan?->status ?: 'unknown') }}</div>
                                     @if($item->step_reference)<small class="atp-register-step-ref">STEP {{ $item->step_reference }}</small>@endif
                                 </td>

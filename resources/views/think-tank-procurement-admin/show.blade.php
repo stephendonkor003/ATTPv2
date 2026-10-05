@@ -138,7 +138,7 @@
                                     <div><dt>High SEA/SH risk</dt><dd>{{ $item->source_sea_sh_risk ?: 'Not set' }}</dd></div>
                                     <div><dt>Document type</dt><dd>{{ $item->source_document_type ?: 'Not set' }}</dd></div>
                                     <div><dt>Process status</dt><dd>{{ $item->source_process_status ?: 'Not set' }}</dd></div>
-                                    <div><dt>Activity status</dt><dd>{{ $item->workflowActivityStatus() }}</dd></div>
+                                    <div><dt>Current STEP / activity status</dt><dd>{{ $item->currentStepActivityStatus() ?: $item->importedActivityStatus() ?: $item->workflowActivityStatus() }}</dd></div>
                                     <div><dt>Schedule</dt><dd>{{ $item->planned_quarter ?: ($item->planned_start_date?->format('d M Y') ?: 'Not scheduled') }}</dd></div>
                                     <div><dt>Documents</dt><dd>{{ $item->documents->count() }} attached</dd></div>
                                 </dl>
@@ -157,7 +157,7 @@
                             </div>
                             <aside class="atp-item-side">
                                 <div class="atp-value">{{ $item->currency }} {{ number_format((float) $item->estimated_amount, 2) }}</div>
-                                <span class="atp-status {{ $item->status }}">{{ $item->workflowActivityStatus() }}</span>
+                                <span class="atp-status {{ $item->status }}">{{ $item->currentStepActivityStatus() ?: $item->importedActivityStatus() ?: $item->workflowActivityStatus() }}</span>
                             </aside>
                         </div>
 
@@ -174,7 +174,7 @@
                             </div>
                         @endif
 
-                        @if($item->status === 'submitted' || $item->status === 'approved')
+                        @if(in_array($item->status, ['submitted', 'approved', 'no_objection_obtained', 'published'], true))
                             <div class="atp-item-actions">
                                 @if($item->status === 'submitted')
                                     <div class="atp-action-box">
@@ -189,7 +189,7 @@
                                             </div>
                                         </form>
                                     </div>
-                                @else
+                                @elseif($item->status === 'approved')
                                     <div class="atp-action-box atp-step-box">
                                         <h4><i class="feather-upload-cloud"></i> STEP handoff</h4>
                                         @if($plan->status === 'approved')
@@ -201,19 +201,19 @@
                                     </div>
                                 @endif
 
-                                @if($item->status === 'approved' && $plan->status === 'approved')
+                                @if(($item->status === 'approved' && $plan->status === 'approved') || in_array($item->status, ['no_objection_obtained', 'published'], true))
                                     <div class="atp-action-box">
-                                        <h4><i class="feather-globe"></i> Record World Bank no-objection</h4>
+                                        <h4><i class="feather-globe"></i> Record World Bank no-objection evidence</h4>
                                         <form method="POST" action="{{ route('think-tank-procurement.items.no-objection', [$plan, $item]) }}" enctype="multipart/form-data">
                                             @csrf
                                             <div class="atp-form-grid">
                                                 <div><label class="atp-label">STEP reference</label><input class="atp-input" name="step_reference" value="{{ $item->step_reference }}" required></div>
-                                                <div><label class="atp-label">Decision date</label><input class="atp-input" type="date" name="no_objection_date" value="{{ now()->toDateString() }}" required></div>
-                                                <div><label class="atp-label">No-objection reference</label><input class="atp-input" name="no_objection_reference"></div>
+                                                <div><label class="atp-label">Decision date</label><input class="atp-input" type="date" name="no_objection_date" value="{{ $item->no_objection_date?->toDateString() }}" max="{{ now()->toDateString() }}" required></div>
+                                                <div><label class="atp-label">No-objection reference</label><input class="atp-input" name="no_objection_reference" value="{{ $item->no_objection_reference }}"></div>
                                                 <div><label class="atp-label">Decision document</label><input class="atp-input" type="file" name="no_objection_document" accept=".pdf,.doc,.docx"></div>
                                             </div>
-                                            <textarea class="atp-input mt-2" name="no_objection_notes" placeholder="Notes included in the notification to the Think Tank"></textarea>
-                                            <button class="atp-btn primary mt-2" type="submit"><i class="feather-check-circle"></i> Confirm and notify Think Tank</button>
+                                            <textarea class="atp-input mt-2" name="no_objection_notes" placeholder="Notes included in the audit trail">{{ $item->no_objection_notes }}</textarea>
+                                            <button class="atp-btn primary mt-2" type="submit"><i class="feather-check-circle"></i> Record evidence</button>
                                         </form>
                                     </div>
                                 @endif

@@ -310,6 +310,14 @@ class ThinkTankProcurementStatusNotificationService
                 'World Bank no-objection received — ready to execute',
                 'The AUC-ATTP Secretariat recorded the World Bank no-objection for this procurement item. It is now ready for the Think Tank procurement team to begin execution.',
             ],
+            'external_step_activity_status_synced' => [
+                'STEP activity status synchronized: '.(data_get($event->metadata, 'external_activity_status') ?: 'Updated'),
+                'An authorized AUC-ATTP Secretariat user synchronized this item from STEP. Review the recorded status and append-only comment in the procurement worksheet.',
+            ],
+            'world_bank_no_objection_evidence_updated' => [
+                'World Bank no-objection evidence updated',
+                'Supplemental formal evidence was added to an item already recorded as Cleared in STEP.',
+            ],
             'item_execution_created' => [
                 'Procurement item moved into execution',
                 'The approved procurement item has been moved into execution and its procurement opportunity has been published for applications.',

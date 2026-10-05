@@ -115,7 +115,7 @@
                         <div class="ttpp-item-side">
                             <span class="ttpp-item-value-label">Estimated value</span>
                             <div class="ttpp-item-value">{{ $item->currency }} {{ number_format((float)$item->estimated_amount,2) }}</div>
-                            <span class="ttpp-status {{ $item->status }}">{{ $item->workflowActivityStatus() }}</span>
+                            <span class="ttpp-status {{ $item->status }}">{{ $item->currentStepActivityStatus() ?: $item->importedActivityStatus() ?: $item->workflowActivityStatus() }}</span>
                         </div>
                     </div>
 
@@ -128,7 +128,7 @@
                         <div><span>High SEA/SH risk</span><strong>{{ $item->source_sea_sh_risk ?: 'Not specified' }}</strong></div>
                         <div class="is-wide"><span>Procurement document type</span><strong>{{ $item->source_document_type ?: 'Not specified' }}</strong></div>
                         <div><span>Process status</span><strong>{{ $item->source_process_status ?: 'Not specified' }}</strong></div>
-                        <div><span>Activity status</span><strong>{{ $item->workflowActivityStatus() }}</strong></div>
+                        <div><span>Current STEP / activity status</span><strong>{{ $item->currentStepActivityStatus() ?: $item->importedActivityStatus() ?: $item->workflowActivityStatus() }}</strong></div>
                     </div>
 
                     <div class="ttpp-item-documents">

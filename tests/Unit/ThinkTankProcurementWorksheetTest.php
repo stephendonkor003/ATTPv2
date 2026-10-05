@@ -54,6 +54,8 @@ it('registers the worksheet and private evidence routes behind Secretariat permi
             ->not->toContain('think_tank.procurement.step')
             ->and(implode('|', $routes->getByName('think-tank-procurement.items.no-objection')->middleware()))
             ->toContain('think_tank.procurement.step')
+            ->and(implode('|', $routes->getByName('think-tank-procurement.items.step-status')->middleware()))
+            ->toContain('think_tank.procurement.step')
             ->and(implode('|', $routes->getByName('think-tank-procurement.reports')->middleware()))
             ->toContain('think_tank.procurement.step');
     } finally {
@@ -91,12 +93,21 @@ it('uses STEP export and no-objection state as distinct worksheet stages', funct
     $item->step_exported_at = now();
     $afterStep = $method->invoke($controller, $plan, $item);
     $item->status = 'no_objection_obtained';
+    $item->setRelation('documents', collect());
+    $item->setRelation('plan', $plan);
+    $clearedWithoutSupplementalEvidence = $method->invoke($controller, $plan, $item);
+    $item->setRawAttributes(array_merge($item->getAttributes(), [
+        'no_objection_date' => '2026-10-01',
+        'no_objection_reference' => 'WB-NO-001',
+    ]));
     $ready = $method->invoke($controller, $plan, $item);
 
     expect($beforeStep[2])->toMatchArray(['label' => 'STEP handoff', 'state' => 'current'])
         ->and($beforeStep[3])->toMatchArray(['label' => 'World Bank review', 'state' => 'upcoming'])
         ->and($afterStep[2])->toMatchArray(['label' => 'STEP handoff', 'state' => 'complete'])
         ->and($afterStep[3])->toMatchArray(['label' => 'World Bank review', 'state' => 'current'])
+        ->and($clearedWithoutSupplementalEvidence[3])->toMatchArray(['label' => 'World Bank review', 'state' => 'complete'])
+        ->and($clearedWithoutSupplementalEvidence[4])->toMatchArray(['label' => 'Ready to execute', 'state' => 'current'])
         ->and($ready[4])->toMatchArray(['label' => 'Ready to execute', 'state' => 'current']);
 });
 
@@ -111,7 +122,9 @@ it('presents item context transitions controlled PDFs and aggregate notification
 
     expect($controller)
         ->toContain("'world_bank_pending'")
-        ->toContain("->where('status', 'no_objection_obtained')")
+        ->toContain('readyToExecuteQuery')
+        ->toContain("->where('status', ThinkTankProcurementItem::STATUS_NO_OBJECTION)")
+        ->not->toContain("->whereNotNull('no_objection_date')")
         ->toContain("'statusNotifications as notifications_queued_count'")
         ->toContain("['pending', 'processing', 'sending']")
         ->toContain("'statusNotifications as notifications_sent_count'")
@@ -129,7 +142,7 @@ it('presents item context transitions controlled PDFs and aggregate notification
         ->and($index)
         ->toContain('Submitted to AUC-ATTP')
         ->toContain('Pending World Bank no-objection')
-        ->toContain('No-objection received / ready to execute')
+        ->toContain('STEP Cleared / ready to execute')
         ->toContain('name="think_tank_member_id"')
         ->toContain('name="fiscal_year"')
         ->toContain('name="queue"')
@@ -137,7 +150,15 @@ it('presents item context transitions controlled PDFs and aggregate notification
         ->and($show)
         ->toContain("route('think-tank-procurement.items.decision'")
         ->toContain("route('think-tank-procurement.items.no-objection'")
-        ->toContain('Record no-objection and mark ready to execute')
+        ->toContain("route('think-tank-procurement.items.step-status'")
+        ->toContain('Complete imported Excel source row')
+        ->toContain('Imported Excel {{ data_get($cellComment')
+        ->toContain("'threaded' ? 'threaded comment' : 'note'")
+        ->toContain('Imported Excel Activity Status')
+        ->toContain('Current STEP Activity Status')
+        ->toContain('name="lock_version"')
+        ->toContain('name="comment"')
+        ->toContain('Record no-objection evidence')
         ->toContain('max="{{ now()->toDateString() }}"')
         ->toContain('data-wb-reference')
         ->toContain('data-wb-document')

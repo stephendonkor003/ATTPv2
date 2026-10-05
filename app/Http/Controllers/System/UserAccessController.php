@@ -9,12 +9,13 @@ use App\Models\GovernanceReportingLine;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
-use App\Notifications\ApplicationPasswordResetNotification;
 use App\Models\VendorCategory;
+use App\Notifications\ApplicationPasswordResetNotification;
 use App\Services\AccountSetupInvitationService;
 use App\Services\ThinkTank\ThinkTankUserManagementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
@@ -148,6 +149,8 @@ class UserAccessController extends Controller
         $role = ! $isVendor && ! empty($validated['role_id'])
             ? Role::find($validated['role_id'])
             : null;
+        $isReadOnlyAuditor = $this->isReadOnlyAuditorRole($role);
+        $effectiveUserType = $isReadOnlyAuditor ? 'staff' : $validated['user_type'];
 
         if ($role?->name === 'Monitoring and Evaluation Manager' && ! $request->filled('governance_node_id')) {
             return back()
@@ -157,17 +160,33 @@ class UserAccessController extends Controller
 
         $invitations = app(AccountSetupInvitationService::class);
 
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => $invitations->unknownPasswordHash(),
-            'role_id' => $isVendor ? null : $request->role_id,
-            'governance_node_id' => $isVendor ? null : $request->input('governance_node_id'),
-            'member_state_id' => $validated['user_type'] === 'member_state' ? $request->input('member_state_id') : null,
-            'user_type' => $validated['user_type'],
-            'vendor_category' => $isVendor ? ($validated['vendor_category'] ?? null) : null,
-            'must_change_password' => true,
-        ]);
+        $user = DB::transaction(function () use (
+            $effectiveUserType,
+            $invitations,
+            $isReadOnlyAuditor,
+            $isVendor,
+            $request,
+            $role,
+            $validated
+        ): User {
+            $user = User::create([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'password' => $invitations->unknownPasswordHash(),
+                'role_id' => $isVendor ? null : $role?->getKey(),
+                'governance_node_id' => $isVendor ? null : $request->input('governance_node_id'),
+                'member_state_id' => $effectiveUserType === 'member_state' ? $request->input('member_state_id') : null,
+                'user_type' => $effectiveUserType,
+                'vendor_category' => $isVendor ? ($validated['vendor_category'] ?? null) : null,
+                'must_change_password' => true,
+            ]);
+
+            if ($isReadOnlyAuditor) {
+                $user->permissions()->detach();
+            }
+
+            return $user;
+        });
 
         $invitationSent = $invitations->send(
             $user,
@@ -235,19 +254,20 @@ class UserAccessController extends Controller
         ]);
 
         $isVendor = $validated['user_type'] === 'vendor';
+        $role = ! $isVendor && ! empty($validated['role_id'])
+            ? Role::find($validated['role_id'])
+            : null;
+        $isReadOnlyAuditor = $this->isReadOnlyAuditorRole($role);
+        $effectiveUserType = $isReadOnlyAuditor ? 'staff' : $validated['user_type'];
         $changesVendorBoundary = ($user->user_type === 'vendor') !== $isVendor;
 
         if ($changesVendorBoundary && ! $request->boolean('confirm_user_type_conversion')) {
-            $targetRole = ! $isVendor && ! empty($validated['role_id'])
-                ? Role::find($validated['role_id'])
-                : null;
-
             return back()
                 ->withInput()
                 ->with('user_type_conversion_prompt', $this->userTypeConversionPromptData(
                     $user,
-                    $validated['user_type'],
-                    $targetRole,
+                    $effectiveUserType,
+                    $role,
                     $validated['vendor_category'] ?? null
                 ));
         }
@@ -256,25 +276,35 @@ class UserAccessController extends Controller
             $this->assertNodeInScope((string) $request->governance_node_id);
         }
 
-        $role = ! $isVendor && ! empty($validated['role_id'])
-            ? Role::find($validated['role_id'])
-            : null;
-
         if ($role?->name === 'Monitoring and Evaluation Manager' && ! $request->filled('governance_node_id')) {
             return back()
                 ->withErrors(['governance_node_id' => 'A governance node is required for Monitoring and Evaluation Manager users.'])
                 ->withInput();
         }
 
-        $user->update([
-            'name' => $request->name,
-            'email' => $request->email,
-            'role_id' => $isVendor ? null : $request->role_id,
-            'user_type' => $validated['user_type'],
-            'governance_node_id' => $isVendor ? null : $request->input('governance_node_id'),
-            'member_state_id' => $validated['user_type'] === 'member_state' ? $request->input('member_state_id') : null,
-            'vendor_category' => $isVendor ? ($validated['vendor_category'] ?? null) : null,
-        ]);
+        DB::transaction(function () use (
+            $effectiveUserType,
+            $isReadOnlyAuditor,
+            $isVendor,
+            $request,
+            $role,
+            $user,
+            $validated
+        ): void {
+            $user->update([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'role_id' => $isVendor ? null : $role?->getKey(),
+                'user_type' => $effectiveUserType,
+                'governance_node_id' => $isVendor ? null : $request->input('governance_node_id'),
+                'member_state_id' => $effectiveUserType === 'member_state' ? $request->input('member_state_id') : null,
+                'vendor_category' => $isVendor ? ($validated['vendor_category'] ?? null) : null,
+            ]);
+
+            if ($isReadOnlyAuditor) {
+                $user->permissions()->detach();
+            }
+        });
 
         return redirect()
             ->route('system.users.index')
@@ -476,15 +506,35 @@ class UserAccessController extends Controller
             return back()->with('error', 'Vendor portal accounts do not use system roles.');
         }
 
-        $request->validate([
+        $validated = $request->validate([
             'role_id' => 'required|exists:roles,id',
         ]);
+        $role = Role::findOrFail($validated['role_id']);
+        $isReadOnlyAuditor = $this->isReadOnlyAuditorRole($role);
 
-        $user->update([
-            'role_id' => $request->role_id,
-        ]);
+        DB::transaction(function () use ($isReadOnlyAuditor, $role, $user): void {
+            $attributes = [
+                'role_id' => $role->getKey(),
+            ];
 
-        return back()->with('success', 'User role updated successfully.');
+            if ($isReadOnlyAuditor) {
+                $attributes = array_merge($attributes, [
+                    'user_type' => 'staff',
+                    'member_state_id' => null,
+                    'vendor_category' => null,
+                ]);
+            }
+
+            $user->update($attributes);
+
+            if ($isReadOnlyAuditor) {
+                $user->permissions()->detach();
+            }
+        });
+
+        return back()->with('success', $isReadOnlyAuditor
+            ? 'User assigned the read-only Auditor role. Direct permissions were removed.'
+            : 'User role updated successfully.');
     }
 
     /* ======================================================
@@ -504,6 +554,13 @@ class UserAccessController extends Controller
     {
         $this->assertUserInScope($user);
 
+        $user->loadMissing('role');
+        if ($this->isReadOnlyAuditorRole($user->role)) {
+            $user->permissions()->detach();
+
+            return back()->with('error', 'Direct permissions cannot be assigned to a read-only Auditor account.');
+        }
+
         $user->permissions()->sync(
             $request->input('permissions', [])
         );
@@ -515,7 +572,7 @@ class UserAccessController extends Controller
     {
         $currentUser = Auth::user();
 
-        if (! $currentUser || $currentUser->isAdmin() || $currentUser->isSuperAdmin()) {
+        if (! $currentUser || $currentUser->hasSystemWideReadAccess()) {
             return null;
         }
 
@@ -531,6 +588,11 @@ class UserAccessController extends Controller
         // Think Tank identities are tenant-bound and may only be created or
         // changed through the dedicated, audited portal-user service.
         return ['admin', 'staff', 'member_state', 'vendor', 'funding_partner', 'evaluator', 'ttl'];
+    }
+
+    private function isReadOnlyAuditorRole(?Role $role): bool
+    {
+        return (bool) $role?->isReadOnlyAuditor();
     }
 
     private function availableNodes()
@@ -633,5 +695,4 @@ class UserAccessController extends Controller
 
         return array_keys($seen);
     }
-
 }

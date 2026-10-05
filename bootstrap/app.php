@@ -5,6 +5,7 @@ use App\Http\Middleware\AuthenticateApiSync;
 use App\Http\Middleware\AuthenticateApiSyncV2;
 use App\Http\Middleware\AuthenticateDiscussionParticipant;
 use App\Http\Middleware\CheckPermission;
+use App\Http\Middleware\EnforceAuditorReadOnly;
 use App\Http\Middleware\EnsureAdministrativeAssistant;
 use App\Http\Middleware\EnsureEmailIsVerifiedOrImpersonating;
 use App\Http\Middleware\EnsureFundingPartner;
@@ -155,6 +156,7 @@ return Application::configure(basePath: dirname(__DIR__))
             SecurityHeaders::class,
             SetLocale::class,
             ValidateUserImpersonation::class,
+            EnforceAuditorReadOnly::class,
             EnsurePasswordNotExpired::class,
             EnsureOtpVerified::class,
             RedirectAdministrativeAssistantToPortal::class,
@@ -163,6 +165,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->api(append: [
             SecurityHeaders::class,
+            EnforceAuditorReadOnly::class,
         ]);
 
         // Recovery must run after the session starts but before route-level

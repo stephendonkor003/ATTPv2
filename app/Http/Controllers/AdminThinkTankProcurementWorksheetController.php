@@ -91,7 +91,7 @@ class AdminThinkTankProcurementWorksheetController extends Controller
                 ->where('status', 'approved')
                 ->whereHas('plan', fn (Builder $plan) => $plan->where('status', 'approved'))
                 ->count(),
-            'ready_to_execute' => (clone $query)->where('status', 'no_objection_obtained')->count(),
+            'ready_to_execute' => $this->readyToExecuteQuery(clone $query)->count(),
             'published' => (clone $query)->where('status', 'published')->count(),
             'action_required' => (clone $query)->whereIn('status', ['revision_requested', 'rejected'])->count(),
         ];
@@ -194,12 +194,9 @@ class AdminThinkTankProcurementWorksheetController extends Controller
                         });
                 });
             })
-            ->when($filters['think_tank_member_id'], fn (Builder $query, string $id) =>
-                $query->whereHas('plan', fn (Builder $plan) => $plan->where('think_tank_member_id', $id)))
-            ->when($filters['fiscal_year'], fn (Builder $query, string $year) =>
-                $query->whereHas('plan', fn (Builder $plan) => $plan->where('fiscal_year', $year)))
-            ->when($filters['plan_status'], fn (Builder $query, string $status) =>
-                $query->whereHas('plan', fn (Builder $plan) => $plan->where('status', $status)))
+            ->when($filters['think_tank_member_id'], fn (Builder $query, string $id) => $query->whereHas('plan', fn (Builder $plan) => $plan->where('think_tank_member_id', $id)))
+            ->when($filters['fiscal_year'], fn (Builder $query, string $year) => $query->whereHas('plan', fn (Builder $plan) => $plan->where('fiscal_year', $year)))
+            ->when($filters['plan_status'], fn (Builder $query, string $status) => $query->whereHas('plan', fn (Builder $plan) => $plan->where('status', $status)))
             ->when($filters['item_status'], fn (Builder $query, string $status) => $query->where('status', $status))
             ->when($filters['queue'], fn (Builder $query, string $queue) => $this->applyQueue($query, $queue))
             ->when($filters['documents'], function (Builder $query, string $documents): void {
@@ -221,10 +218,15 @@ class AdminThinkTankProcurementWorksheetController extends Controller
             'world_bank_pending' => $query
                 ->where('status', 'approved')
                 ->whereHas('plan', fn (Builder $plan) => $plan->where('status', 'approved')),
-            'ready_to_execute' => $query->where('status', 'no_objection_obtained'),
+            'ready_to_execute' => $this->readyToExecuteQuery($query),
             'published' => $query->where('status', 'published'),
             'action_required' => $query->whereIn('status', ['revision_requested', 'rejected']),
         };
+    }
+
+    private function readyToExecuteQuery(Builder $query): Builder
+    {
+        return $query->where('status', ThinkTankProcurementItem::STATUS_NO_OBJECTION);
     }
 
     /** @return array<string, mixed> */
@@ -241,6 +243,7 @@ class AdminThinkTankProcurementWorksheetController extends Controller
             'reviewer:id,name',
             'procurement:id,title,slug,status,application_start_date,application_end_date',
         ]);
+        $item->setRelation('plan', $plan);
         $timeline = ThinkTankProcurementEvent::query()
             ->where('plan_id', $plan->id)
             ->where(fn (Builder $events) => $events->whereNull('item_id')->orWhere('item_id', $item->id))

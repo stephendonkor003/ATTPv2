@@ -3,6 +3,7 @@
 @section('title', 'Assign Permissions')
 
 @section('content')
+    @php($isReadOnlyAuditorRole = $role->isReadOnlyAuditor())
     <div class="nxl-container">
 
         {{-- ================= PAGE HEADER ================= --}}
@@ -23,6 +24,19 @@
                 Back to Roles
             </a>
         </div>
+
+        @if ($isReadOnlyAuditorRole)
+            <div class="alert alert-info d-flex align-items-start mb-4">
+                <i class="feather-eye me-2 mt-1"></i>
+                <div>
+                    <strong>System-managed Auditor access</strong>
+                    <p class="mb-0 small">
+                        This role can inspect every back-office module on read requests. Its permission set cannot be
+                        edited manually, and the server blocks every business-data write regardless of direct grants.
+                    </p>
+                </div>
+            </div>
+        @endif
 
         {{-- ================= SECURITY NOTICE ================= --}}
         <div class="alert alert-info d-flex align-items-start mb-4">
@@ -94,7 +108,7 @@
 
 	                        <div class="d-flex align-items-center gap-2">
 	                            <button type="button" class="btn btn-sm btn-outline-primary js-module-toggle"
-	                                data-module="{{ $moduleKey }}">
+	                                data-module="{{ $moduleKey }}" {{ $isReadOnlyAuditorRole ? 'disabled' : '' }}>
 	                                Select all
 	                            </button>
 
@@ -115,6 +129,7 @@
 	                                        <input class="form-check-input mt-1" type="checkbox" name="permissions[]"
 	                                            data-module="{{ $moduleKey }}"
 	                                            value="{{ $permission->id }}"
+	                                            {{ $isReadOnlyAuditorRole ? 'disabled' : '' }}
 	                                            {{ $role->permissions->contains('id', $permission->id) ? 'checked' : '' }}>
 
                                         <span class="form-check-label" title="{{ $permission->name }}">
@@ -137,7 +152,7 @@
 	                    Cancel
 	                </a>
 
-                <button type="submit" class="btn btn-primary px-4">
+                <button type="submit" class="btn btn-primary px-4" {{ $isReadOnlyAuditorRole ? 'disabled' : '' }}>
                     <i class="feather-save me-1"></i>
                     Save Permissions
                 </button>

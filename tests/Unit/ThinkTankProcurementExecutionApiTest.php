@@ -6,10 +6,10 @@ use App\Models\Procurement;
 use App\Models\ProcurementDocument;
 use App\Models\ThinkTankProcurementItem;
 use App\Models\ThinkTankProcurementPlan;
+use App\Services\DynamicProcurementSubmissionFileService;
+use App\Services\DynamicProcurementSubmissionValidation;
 use App\Services\ThinkTankProcurementApiService;
 use App\Services\ThinkTankProcurementExecutionService;
-use App\Services\DynamicProcurementSubmissionValidation;
-use App\Services\DynamicProcurementSubmissionFileService;
 use App\Support\DynamicProcurementFormCatalog;
 use Carbon\Carbon;
 use Illuminate\Container\Container;
@@ -91,7 +91,7 @@ it('provides method-specific bidder forms and a stable imported method fallback'
     }
 });
 
-it('accepts dated no-objection evidence when a textual reference is unavailable', function () {
+it('accepts authoritative STEP clearance with or without supplemental evidence', function () {
     [, $bootedHere] = bootThinkTankProcurementExecutionApplication();
 
     try {
@@ -149,7 +149,7 @@ it('accepts dated no-objection evidence when a textual reference is unavailable'
 
         $item->setRelation('documents', new EloquentCollection);
         $stepsWithoutEvidence = collect($service->publishChecklist($procurement))->keyBy('key');
-        expect($stepsWithoutEvidence['no_objection']['complete'])->toBeFalse();
+        expect($stepsWithoutEvidence['no_objection']['complete'])->toBeTrue();
     } finally {
         Carbon::setTestNow();
         if ($bootedHere) {
@@ -207,7 +207,7 @@ it('registers a tenant-scoped draft build and publication API with private and b
         "Route::post('executions/{execution}/recall'",
         "Route::post('executions/{execution}/republish'",
         "Route::get('executions/{execution}/cover'",
-        "permission:think_tank.procurement_plans.manage",
+        'permission:think_tank.procurement_plans.manage',
     )->and($controller)->toContain(
         "->where('think_tank_member_id', \$member->id)",
         "->where('procurement_owner_type', 'think_tank')",
@@ -222,7 +222,7 @@ it('registers a tenant-scoped draft build and publication API with private and b
     )->and($service)->toContain(
         "'tenantVendorCategoryOptions'",
         "'tenantVendorOptions'",
-        "document_type === 'no_objection'",
+        'isReadyToExecute()',
     )->and($publicController)->toContain('bidderFacing()', 'AUDIENCE_BIDDER')
         ->and($vendorController)->toContain('bidderFacing()', 'AUDIENCE_BIDDER')
         ->and($publicationNotifications)->toContain("->where('user_type', 'vendor')", 'VendorProcurementLifecycleMail')
@@ -532,8 +532,8 @@ it('contains tenant application review behind an explicit capability and hardene
         "Route::get('executions/{execution}/applications'",
         "Route::get('executions/{execution}/applications/{submission}'",
         "Route::get('executions/{execution}/applications/{submission}/values/{value}/download'",
-        "permission:think_tank.procurement.evaluate",
-        "executions.applications.values.download",
+        'permission:think_tank.procurement.evaluate',
+        'executions.applications.values.download',
     )->and($controller)->toContain(
         "->where('think_tank_member_id', \$member->id)",
         "->where('procurement_owner_type', 'think_tank')",
@@ -547,8 +547,8 @@ it('contains tenant application review behind an explicit capability and hardene
         '! is_readable($absolutePath)',
         "'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0'",
         "'X-Content-Type-Options' => 'nosniff'",
-        "answer outside the configured choices",
+        'answer outside the configured choices',
     )->and($executionService)->toContain("'canReviewApplications' => \$canReviewApplications")
         ->and(substr_count($user, "'think_tank.procurement.evaluate'"))->toBeGreaterThanOrEqual(2)
-        ->and($notPartner)->toContain("if (\$request->expectsJson())", "abort(403");
+        ->and($notPartner)->toContain('if ($request->expectsJson())', 'abort(403');
 });

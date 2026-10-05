@@ -12,7 +12,6 @@ use App\Models\Procurement;
 use App\Models\ProcurementDocument;
 use App\Models\SystemAuditLog;
 use App\Models\ThinkTankProcurementItem;
-use App\Models\ThinkTankProcurementPlan;
 use App\Services\EvaluationReworkGuard;
 use App\Services\ProcurementPublicationNotificationService;
 use App\Services\ProcurementRichTextService;
@@ -301,10 +300,12 @@ class ProcurementExecutionController extends Controller
                     ->firstOrFail();
                 $plan = $item->plan()->where('think_tank_member_id', $member->id)->lockForUpdate()->firstOrFail();
                 $this->planning->assertLockToken($item, $data['lock_token']);
-                abort_unless($plan->status === ThinkTankProcurementPlan::STATUS_APPROVED, 422, 'Only an approved annual procurement plan can enter execution.');
-                abort_unless($item->status === ThinkTankProcurementItem::STATUS_NO_OBJECTION, 422, 'Only an item with World Bank no-objection can enter procurement execution.');
+                abort_unless(
+                    $item->status === ThinkTankProcurementItem::STATUS_NO_OBJECTION && $item->isReadyToExecute(),
+                    422,
+                    'Only an item recorded as Cleared in STEP can enter procurement execution.',
+                );
                 abort_if($item->procurement_id, 422, 'This planning item already has a procurement execution record.');
-                abort_unless($item->no_objection_date && ($item->no_objection_reference || $item->documents->contains('document_type', 'no_objection')), 422, 'The no-objection decision date and its reference or evidence document are required.');
 
                 $visibility = (string) ($data['visibility_type'] ?? 'public');
                 $targets = $visibility === 'vendor_group'
@@ -350,6 +351,7 @@ class ProcurementExecutionController extends Controller
                 $item->update([
                     'procurement_id' => $procurement->id,
                     'updated_by' => $request->user()->id,
+                    'portal_lock_version' => $item->nextPortalLockVersion(),
                 ]);
                 $this->workflow->event(
                     $plan,
@@ -736,7 +738,11 @@ class ProcurementExecutionController extends Controller
                 ->with(['plan', 'documents'])
                 ->lockForUpdate()
                 ->firstOrFail();
-            abort_unless($item->status === ThinkTankProcurementItem::STATUS_NO_OBJECTION, 422, 'The source item is no longer ready for execution.');
+            abort_unless(
+                $item->status === ThinkTankProcurementItem::STATUS_NO_OBJECTION && $item->isReadyToExecute(),
+                422,
+                'The source item is no longer recorded as Cleared in STEP.',
+            );
             if ($procurement->visibility_type === 'vendor_group') {
                 $this->vendorDirectory->validateTargets(
                     $member,
@@ -772,6 +778,7 @@ class ProcurementExecutionController extends Controller
                 'status' => ThinkTankProcurementItem::STATUS_PUBLISHED,
                 'source_activity_status' => ThinkTankProcurementItem::ACTIVITY_STATUS_WORLD_BANK_APPROVED,
                 'updated_by' => $request->user()->id,
+                'portal_lock_version' => $item->nextPortalLockVersion(),
             ]);
             $this->workflow->event($item->plan, $item, $request->user(), 'item_execution_created', $previous, $item->status, null, [
                 'procurement_id' => $procurement->id,
@@ -1155,16 +1162,8 @@ class ProcurementExecutionController extends Controller
         return ThinkTankProcurementItem::query()
             ->where('status', ThinkTankProcurementItem::STATUS_NO_OBJECTION)
             ->whereNull('procurement_id')
-            ->whereNotNull('no_objection_date')
-            ->where(function ($ready): void {
-                $ready->where(function ($reference): void {
-                    $reference->whereNotNull('no_objection_reference')
-                        ->where('no_objection_reference', '<>', '');
-                })->orWhereHas('documents', fn ($documents) => $documents->where('document_type', 'no_objection'));
-            })
             ->whereHas('plan', fn ($plans) => $plans
-                ->where('think_tank_member_id', $member->id)
-                ->where('status', ThinkTankProcurementPlan::STATUS_APPROVED));
+                ->where('think_tank_member_id', $member->id));
     }
 
     private function ownedExecution(Request $request, string $id): Procurement
@@ -1365,7 +1364,7 @@ class ProcurementExecutionController extends Controller
     }
 
     /** @param array<int, string> $localPaths
-     * @param array<int, string> $publicPaths
+     * @param  array<int, string>  $publicPaths
      */
     private function deleteStoredPaths(array $localPaths, array $publicPaths = []): void
     {
