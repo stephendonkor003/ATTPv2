@@ -417,7 +417,15 @@
     </style>
 </head>
 
-@php($isReadOnlyAuditor = auth()->user()?->isAuditor() ?? false)
+@php
+    // Keep all layout state in one paired Blade block. Mixing inline and block
+    // PHP directives can make Blade consume the intervening markup as raw PHP.
+    $isReadOnlyAuditor = auth()->user()?->isAuditor() ?? false;
+    $useLeanAdminScripts = request()->routeIs('system.discussions.moderation.live')
+        || trim($__env->yieldContent('lean_admin_scripts')) === '1';
+    $aiGuideSettings = $useLeanAdminScripts ? null : \App\Models\AttpAiGuideSetting::active();
+    $showAIGuide = $aiGuideSettings && $aiGuideSettings->isAvailableForUser();
+@endphp
 <body @class(['auditor-read-only' => $isReadOnlyAuditor])>
     @include('layouts.partials.impersonation-banner')
 
@@ -455,11 +463,6 @@
     </div>
 
     <!-- Scripts -->
-    @php
-        $useLeanAdminScripts = request()->routeIs('system.discussions.moderation.live')
-            || trim($__env->yieldContent('lean_admin_scripts')) === '1';
-    @endphp
-
     @if ($useLeanAdminScripts)
         {{-- The live monitor intentionally avoids duplicate and page-specific bundles.
              Re-loading jQuery/vendors/common initializers on a polling screen caused
@@ -584,11 +587,6 @@
     @endif
 
     {{-- ATTP AI Guide Integration (Admin Controlled) --}}
-    @php
-        $aiGuideSettings = $useLeanAdminScripts ? null : \App\Models\AttpAiGuideSetting::active();
-        $showAIGuide = $aiGuideSettings && $aiGuideSettings->isAvailableForUser();
-    @endphp
-
     @if ($showAIGuide && $aiGuideSettings->tawk_property_id && $aiGuideSettings->tawk_widget_id)
         <!--Start of Tawk.to Script-->
         <script type="text/javascript">

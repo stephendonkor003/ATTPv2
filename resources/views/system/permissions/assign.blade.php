@@ -3,7 +3,9 @@
 @section('title', 'Assign Permissions')
 
 @section('content')
-    @php($isReadOnlyAuditorRole = $role->isReadOnlyAuditor())
+    @php
+        $isReadOnlyAuditorRole = $role->isReadOnlyAuditor();
+    @endphp
     <div class="nxl-container">
 
         {{-- ================= PAGE HEADER ================= --}}

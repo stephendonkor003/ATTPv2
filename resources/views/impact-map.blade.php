@@ -3687,8 +3687,6 @@
                     dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip'
                 });
             }
-
-            console.log('Impact Map loaded with real data from Program Funding');
         });
     </script>
 

@@ -72,7 +72,8 @@ The following identities must remain in the source-row audit with their exclusio
 - Keep a reference used by different owners as separate items. The intentional cross-owner collisions are `ET-AUC-007-CS-INDV` (SAIIA/CIP), `ET-AUC-009-CS-INDV` (SAIIA/IPAR), and `ET-AUC-024-CS-INDV` (AFIDEP/CIP).
 - Normalize only for identity matching: uppercase, trim/collapse whitespace, remove whitespace inside the prefix, and normalize spacing around hyphens. Preserve the literal source reference and activity wording in the raw payload.
 - Both seeders contribute to the same FY2026 plan for a member. They must not create separate “above” and “below” annual plans.
-- Imported plans and items remain `draft`. Source statuses and Bank/AUC comments are evidence, not authorization to manufacture an approval, no-objection, procurement, contract, or workflow transition.
+- Imported plans remain `draft`. Item workflow status is initialized from the audited **Activity Status** value: 67 `New` rows become `draft`, five `Returned` rows become `revision_requested`, and 45 `Cleared` rows become `no_objection_obtained`. The source value is also preserved verbatim in `source_activity_status` and `step_activity_status`.
+- A `Cleared` source status records the World Bank STEP outcome supplied in the workbook, but it must not fabricate supporting evidence. The import therefore leaves the no-objection reference, date, notes, actor, recorded timestamp, and document fields empty for an authorized back-office user to complete and comment on in this system.
 
 ## Source conflicts and review-required flags
 
@@ -102,6 +103,7 @@ Recommended order:
 
 ```powershell
 php artisan migrate:status
+php artisan migrate --force
 
 php artisan db:seed --class='Database\Seeders\AboveTenThousandThinkTankProcurementSeeder' --force
 php artisan db:seed --class='Database\Seeders\BelowTenThousandThinkTankProcurementSeeder' --force
@@ -111,6 +113,7 @@ Linux uses the same targeted class names:
 
 ```bash
 php artisan migrate:status
+php artisan migrate --force
 
 php artisan db:seed --class='Database\Seeders\AboveTenThousandThinkTankProcurementSeeder' --force
 php artisan db:seed --class='Database\Seeders\BelowTenThousandThinkTankProcurementSeeder' --force
@@ -122,9 +125,9 @@ Run production seeders as the normal application/PHP user and against the intend
 
 An unchanged rerun must be idempotent: it reuses the same FY2026 member plans and canonical item identities, updates only migration-owned draft data, preserves alternate source provenance, and creates no duplicate items. It must also recompute plan totals from canonical items rather than incrementing totals.
 
-A rerun is not permission to overwrite human work. Abort if an importer-owned plan or item has progressed beyond draft, if a matching item is not demonstrably owned by this migration, if the source hash or audited inventory has changed, or if tenant ownership is ambiguous. Never delete/recreate an import batch merely to make a rerun pass. Review a changed workbook as a new controlled migration and update the manifest only after re-audit.
+A rerun is not permission to overwrite human work. Only a pristine imported item that still matches its recorded imported status baseline and has no review, evidence, event, execution, or editor history may have its workbook snapshot refreshed; human-progressed fields are preserved. Abort if a matching item is not demonstrably owned by this migration, if the source hash or audited inventory has changed, or if tenant ownership is ambiguous. Never delete/recreate an import batch merely to make a rerun pass. Review a changed workbook as a new controlled migration and update the manifest only after re-audit.
 
-The seeders must not send email, queue notifications, assign reviewers, create procurement executions, or approve/submit plans. A successful run is data staging into the correct draft tenant plans only.
+The seeders must not send email, queue notifications, assign reviewers, create procurement executions, or approve/submit plans. A successful run creates the correct draft tenant plans and imports the audited item-status snapshot described above; it does not synthesize no-objection evidence or advance a plan-level approval workflow.
 
 ## Post-migration verification checklist
 
@@ -137,7 +140,8 @@ The seeders must not send email, queue notifications, assign reviewers, create p
 - [ ] The two same-owner mapped duplicates create one item each, while all three cross-owner reference collisions create two tenant-specific items each.
 - [ ] REPRC receives its two activities under RAISED Africa; no record is routed by workbook filename alone.
 - [ ] Each mapped member has one FY2026 plan receiving both bands, with no duplicate annual plan and no placeholder plan/item for ERF or PEP.
-- [ ] Item and plan statuses remain draft; no approval, no-objection, execution, contract, email, or notification was generated.
+- [ ] All plans remain draft, while item statuses match the audited distribution: 67 draft, five revision requested, and 45 no objection obtained.
+- [ ] No no-objection reference/date/document, plan approval, execution, contract, email, or notification was fabricated by the import.
 - [ ] Full source descriptions, literal references, worksheet coordinates, source statuses, reviewer comments, normalizations, exclusions, and alternate provenance remain inspectable.
 - [ ] The tenant UI/API shows each distribution and total above without leaking another think tank's records.
 - [ ] A controlled unchanged rerun leaves canonical plan/item counts, amounts, and identities unchanged.

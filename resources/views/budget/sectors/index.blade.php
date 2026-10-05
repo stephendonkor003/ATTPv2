@@ -2,6 +2,52 @@
 @section('title', 'Portfolios')
 
 @section('content')
+    @php
+        // Keep markup strings out of the component tag itself. A literal closing
+        // angle bracket inside a bound attribute can terminate Blade's opening
+        // component parser before it sees the matching closing component tag.
+        $sectorTableConfig = [
+            'order' => [[1, 'asc']],
+            'pageLength' => 25,
+            'lengthMenu' => [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
+            'dom' => 'Bfrtip',
+            'buttons' => [
+                [
+                    'extend' => 'copy',
+                    'text' => '<i class="feather-copy"></i> Copy',
+                    'className' => 'btn btn-sm btn-secondary',
+                ],
+                [
+                    'extend' => 'excel',
+                    'text' => '<i class="feather-file"></i> Excel',
+                    'className' => 'btn btn-sm btn-success',
+                    'exportOptions' => ['columns' => ':visible:not(:last-child)'],
+                ],
+                [
+                    'extend' => 'pdf',
+                    'text' => '<i class="feather-file-text"></i> PDF',
+                    'className' => 'btn btn-sm btn-danger',
+                    'exportOptions' => ['columns' => ':visible:not(:last-child)'],
+                ],
+                [
+                    'extend' => 'print',
+                    'text' => '<i class="feather-printer"></i> Print',
+                    'className' => 'btn btn-sm btn-info',
+                    'exportOptions' => ['columns' => ':visible:not(:last-child)'],
+                ],
+                [
+                    'extend' => 'colvis',
+                    'text' => '<i class="feather-eye"></i> Columns',
+                    'className' => 'btn btn-sm btn-primary',
+                ],
+            ],
+            'columnDefs' => [
+                ['orderable' => false, 'targets' => [0, -1]],
+                ['searchable' => false, 'targets' => [0, -1]],
+            ],
+        ];
+    @endphp
+
     <main class="nxl-container">
         <div class="nxl-content">
 
@@ -23,46 +69,7 @@
                 <div class="card-body">
                     <x-data-table
                         id="sectorsTable"
-                        :config="[
-                            'order' => [[1, 'asc']],
-                            'pageLength' => 25,
-                            'lengthMenu' => [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
-                            'dom' => 'Bfrtip',
-                            'buttons' => [
-                                [
-                                    'extend' => 'copy',
-                                    'text' => '<i class=\"feather-copy\"></i> Copy',
-                                    'className' => 'btn btn-sm btn-secondary'
-                                ],
-                                [
-                                    'extend' => 'excel',
-                                    'text' => '<i class=\"feather-file\"></i> Excel',
-                                    'className' => 'btn btn-sm btn-success',
-                                    'exportOptions' => ['columns' => ':visible:not(:last-child)']
-                                ],
-                                [
-                                    'extend' => 'pdf',
-                                    'text' => '<i class=\"feather-file-text\"></i> PDF',
-                                    'className' => 'btn btn-sm btn-danger',
-                                    'exportOptions' => ['columns' => ':visible:not(:last-child)']
-                                ],
-                                [
-                                    'extend' => 'print',
-                                    'text' => '<i class=\"feather-printer\"></i> Print',
-                                    'className' => 'btn btn-sm btn-info',
-                                    'exportOptions' => ['columns' => ':visible:not(:last-child)']
-                                ],
-                                [
-                                    'extend' => 'colvis',
-                                    'text' => '<i class=\"feather-eye\"></i> Columns',
-                                    'className' => 'btn btn-sm btn-primary'
-                                ]
-                            ],
-                            'columnDefs' => [
-                                ['orderable' => false, 'targets' => [0, -1]],
-                                ['searchable' => false, 'targets' => [0, -1]]
-                            ]
-                        ]"
+                        :config="$sectorTableConfig"
                     >
                         <thead class="table-light">
                             <tr>
