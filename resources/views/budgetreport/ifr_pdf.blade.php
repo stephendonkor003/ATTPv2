@@ -49,13 +49,13 @@
         <strong>Funding Partners:</strong>
         {{ $funders->pluck('name')->implode(', ') ?: 'N/A' }}
         <br>
-        <strong>Global Commitments:</strong> {{ $currency }} {{ number_format($totals['global_commitment'] ?? $totals['committed'] ?? 0, 2) }}
+        <strong>Submitted / Approved Commitments:</strong> {{ $currency }} {{ number_format($totals['global_commitment'] ?? $totals['committed'] ?? 0, 2) }}
         &nbsp;&nbsp;
-        <strong>Planned Commitments:</strong> {{ $currency }} {{ number_format($totals['planned_commitment'] ?? 0, 2) }}
+        <strong>Planned Pipeline Commitments:</strong> {{ $currency }} {{ number_format($totals['planned_commitment'] ?? 0, 2) }}
         &nbsp;&nbsp;
         <strong>Cumulative Disbursed:</strong> {{ $currency }} {{ number_format($totals['disbursed'] ?? 0, 2) }}
         <br>
-        <strong>Commitment Rate:</strong> {{ number_format($totals['commitment_rate'] ?? 0, 2) }}%
+        <strong>Pipeline Coverage Rate:</strong> {{ number_format($totals['commitment_rate'] ?? 0, 2) }}%
         &nbsp;&nbsp;
         <strong>Disbursement Rate:</strong> {{ number_format($totals['disbursement_rate'] ?? $totals['utilization'] ?? 0, 2) }}%
     </div>
@@ -67,11 +67,11 @@
                 <tr>
                     <th rowspan="2">Project / Activity / Sub-Activity</th>
                     <th rowspan="2">PR Reference No</th>
-                    <th rowspan="2" class="right">Global Commitments</th>
-                    <th rowspan="2" class="right">Planned Commitments</th>
+                    <th rowspan="2" class="right">Submitted / Approved Commitments</th>
+                    <th rowspan="2" class="right">Planned Pipeline Commitments</th>
                     <th rowspan="2" class="right">Cumulative Disbursement</th>
                     <th rowspan="2" class="right">Variance</th>
-                    <th rowspan="2" class="right">Commitment Rate</th>
+                    <th rowspan="2" class="right">Pipeline Coverage Rate</th>
                     <th rowspan="2" class="right">Disbursement Rate</th>
                     @foreach ($filters['year_range'] as $year)
                         <th colspan="3" class="right">{{ $year }}</th>
@@ -79,7 +79,7 @@
                 </tr>
                 <tr>
                     @foreach ($filters['year_range'] as $year)
-                        <th class="right">Global Commitments</th>
+                        <th class="right">Submitted / Approved Commitments</th>
                         <th class="right">Cumulative Disbursed</th>
                         <th class="right">Variance</th>
                     @endforeach

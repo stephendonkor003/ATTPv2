@@ -13,6 +13,7 @@ class ConsortiumFundAllocation extends BaseModel
         'consortium_id',
         'think_tank_member_id',
         'program_funding_id',
+        'source_purchase_order_id',
         'budget_line',
         'currency',
         'amount_allocated',
@@ -43,5 +44,15 @@ class ConsortiumFundAllocation extends BaseModel
     public function disbursementRequests(): HasMany
     {
         return $this->hasMany(ConsortiumDisbursementRequest::class, 'fund_allocation_id');
+    }
+
+    public function budgetLines(): HasMany
+    {
+        return $this->hasMany(ThinkTankBudgetLine::class, 'fund_allocation_id');
+    }
+
+    public function sourcePurchaseOrder(): BelongsTo
+    {
+        return $this->belongsTo(ProcurementPurchaseOrder::class, 'source_purchase_order_id');
     }
 }

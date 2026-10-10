@@ -123,9 +123,12 @@ class ImpactMapController extends Controller
                         'country_name' => (string) ($statusRow['country_name'] ?? ''),
                         'is_signed' => (bool) ($statusRow['is_signed'] ?? false),
                         'is_ratified' => (bool) ($statusRow['is_ratified'] ?? false),
+                        'is_acceded' => (bool) ($statusRow['is_acceded'] ?? false),
                         'is_original_submitted' => (bool) ($statusRow['is_original_submitted'] ?? false),
                         'signed_at' => $statusRow['signed_at'] ?? null,
                         'ratified_at' => $statusRow['ratified_at'] ?? null,
+                        'acceded_at' => $statusRow['acceded_at'] ?? null,
+                        'instrument_deposited_at' => $statusRow['instrument_deposited_at'] ?? null,
                         'original_submitted_at' => $statusRow['original_submitted_at'] ?? null,
                     ];
                 });
@@ -844,9 +847,12 @@ class ImpactMapController extends Controller
                             'country_name' => $row->memberState->name,
                             'is_signed' => (bool) $row->is_signed,
                             'is_ratified' => (bool) $row->is_ratified,
+                            'is_acceded' => (bool) $row->is_acceded,
                             'is_original_submitted' => (bool) $row->is_original_submitted,
                             'signed_at' => optional($row->signed_at)->toDateString(),
                             'ratified_at' => optional($row->ratified_at)->toDateString(),
+                            'acceded_at' => optional($row->acceded_at)->toDateString(),
+                            'instrument_deposited_at' => optional($row->instrument_deposited_at)->toDateString(),
                             'original_submitted_at' => optional($row->original_submitted_at)->toDateString(),
                         ];
                     })
@@ -868,7 +874,7 @@ class ImpactMapController extends Controller
                     'monitoring_and_reporting' => $treaty->monitoring_and_reporting,
                     'read_more_url' => $treaty->read_more_url,
                     'signed_count' => collect($statusRows)->where('is_signed', true)->count(),
-                    'ratified_count' => collect($statusRows)->where('is_ratified', true)->count(),
+                    'ratified_count' => collect($statusRows)->filter(fn ($row) => $row['is_ratified'] || $row['is_acceded'])->count(),
                     'original_submitted_count' => collect($statusRows)->where('is_original_submitted', true)->count(),
                     'statuses' => $statusRows,
                 ];

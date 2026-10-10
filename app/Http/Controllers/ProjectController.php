@@ -7,6 +7,7 @@ use App\Models\Program;
 use App\Models\Project;
 use App\Models\ProjectAllocation;
 use App\Models\Sector;
+use App\Services\FinancialHierarchyDeletionGuard;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -330,6 +331,17 @@ public function update(Request $request, $id)
         'allocations.*'=> 'nullable|numeric|min:0',
     ]);
 
+    if (
+        (string) $project->program_id !== (string) $program->id
+        && $this->projectHasFinancialHistory($project)
+    ) {
+        return back()
+            ->withErrors([
+                'program_id' => 'This project cannot be moved to a different programme because its hierarchy already has financial history. Keep it in its current programme.',
+            ])
+            ->withInput();
+    }
+
     // Validate years inside program range
     if ($request->start_year < $program->start_year) {
         return back()->with('error', 'Project start year cannot be earlier than program start year.')
@@ -519,44 +531,62 @@ public function update(Request $request, $id)
         $project = Project::findOrFail($id);
         $this->assertProjectInScope($project);
 
-        DB::beginTransaction();
-
         try {
-            $project->load('activities.subActivities.allocations', 'activities.allocations');
+            DB::transaction(function () use ($id): void {
+                $lockedProject = Project::query()
+                    ->lockForUpdate()
+                    ->findOrFail($id);
+                $this->assertProjectInScope($lockedProject);
 
-            // Remove descendants first.
-            foreach ($project->activities as $activity) {
-                foreach ($activity->subActivities as $subActivity) {
-                    $subActivity->allocations()->delete();
-                    \App\Models\Indicator::where('indicatorable_type', \App\Models\SubActivity::class)
-                        ->where('indicatorable_id', $subActivity->id)
-                        ->delete();
-                    $subActivity->delete();
+                $activities = $lockedProject->activities()
+                    ->lockForUpdate()
+                    ->get();
+                foreach ($activities as $activity) {
+                    $activity->setRelation(
+                        'subActivities',
+                        $activity->subActivities()->lockForUpdate()->get(),
+                    );
                 }
 
-                $activity->allocations()->delete();
-                \App\Models\Indicator::where('indicatorable_type', \App\Models\Activity::class)
-                    ->where('indicatorable_id', $activity->id)
+                // Nothing below this point is removed until all direct and
+                // descendant financial and audit dependencies are ruled out.
+                $lockedProject->assertHasNoFinancialDependencies();
+
+                foreach ($activities as $activity) {
+                    foreach ($activity->subActivities as $subActivity) {
+                        $subActivity->allocations()->delete();
+                        \App\Models\Indicator::where('indicatorable_type', \App\Models\SubActivity::class)
+                            ->where('indicatorable_id', $subActivity->id)
+                            ->delete();
+                        $subActivity->delete();
+                    }
+
+                    $activity->allocations()->delete();
+                    \App\Models\Indicator::where('indicatorable_type', \App\Models\Activity::class)
+                        ->where('indicatorable_id', $activity->id)
+                        ->delete();
+                    $activity->delete();
+                }
+
+                \App\Models\Indicator::where('indicatorable_type', Project::class)
+                    ->where('indicatorable_id', $lockedProject->id)
                     ->delete();
-                $activity->delete();
-            }
 
-            \App\Models\Indicator::where('indicatorable_type', \App\Models\Project::class)
-                ->where('indicatorable_id', $project->id)
-                ->delete();
-
-            ProjectAllocation::where('project_id', $id)->delete();
-            $project->delete();
-
-            DB::commit();
+                ProjectAllocation::where('project_id', $id)->delete();
+                $lockedProject->delete();
+            });
 
             return redirect()->route('budget.projects.index')
                 ->with('success', 'Project deleted successfully.');
+        } catch (\DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
 
-        } catch (\Throwable $e) {
-
-            DB::rollBack();
-            return back()->with('error', 'Unable to delete project: ' . $e->getMessage());
+            return back()->with(
+                'error',
+                'The project could not be deleted. No project hierarchy records were removed.'
+            );
         }
     }
 
@@ -745,6 +775,12 @@ public function update(Request $request, $id)
                 ]
             );
         }
+    }
+
+    private function projectHasFinancialHistory(Project $project): bool
+    {
+        return collect(app(FinancialHierarchyDeletionGuard::class)->projectDependencies($project))
+            ->contains(static fn (int $count): bool => $count > 0);
     }
 
     private function scopedNodeIds(): ?array

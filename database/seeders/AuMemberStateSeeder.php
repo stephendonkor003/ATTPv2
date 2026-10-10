@@ -71,10 +71,20 @@ class AuMemberStateSeeder extends Seeder
             ['name' => 'Zimbabwe', 'code' => 'ZWE', 'code_alpha2' => 'ZW'],
         ];
 
+        foreach ($memberStates as &$memberState) {
+            if ($memberState['code'] === 'CIV') {
+                $memberState['name'] = "Côte d'Ivoire";
+            } elseif ($memberState['code'] === 'STP') {
+                $memberState['name'] = 'São Tomé and Príncipe';
+            }
+        }
+        unset($memberState);
+
         foreach ($memberStates as $index => $state) {
             AuMemberState::updateOrCreate(
-                ['name' => $state['name']],
+                ['code' => $state['code']],
                 [
+                    'name' => $state['name'],
                     'code' => $state['code'],
                     'code_alpha2' => $state['code_alpha2'],
                     'is_active' => true,

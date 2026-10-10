@@ -519,6 +519,7 @@
         @else
             <form method="POST" action="{{ route($assistantMode ? 'administrative-assistant.disbursements.store' : 'procurement.disbursements.store') }}" enctype="multipart/form-data" id="disbursementForm">
                 @csrf
+                <input type="hidden" name="idempotency_key" value="{{ old('idempotency_key', $idempotencyKey) }}">
 
                 <div class="po-document mt-4">
                     <div class="po-document-header d-flex flex-column flex-lg-row justify-content-between gap-3">

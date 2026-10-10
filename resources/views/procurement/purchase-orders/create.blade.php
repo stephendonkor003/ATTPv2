@@ -449,6 +449,8 @@
                 @csrf
                 @if ($isEdit)
                     @method('PUT')
+                @else
+                    <input type="hidden" name="idempotency_key" value="{{ old('idempotency_key', $idempotencyKey) }}">
                 @endif
                 <input type="hidden" name="purchase_request_id" id="purchaseRequestIdInput" value="{{ $oldPurchaseRequestId }}">
                 <input type="hidden" name="budget_commitment_id" id="budgetCommitmentIdInput" value="{{ $oldCommitmentId }}">

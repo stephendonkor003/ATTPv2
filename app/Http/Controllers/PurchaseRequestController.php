@@ -11,6 +11,7 @@ use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestAttachment;
 use App\Models\PurchaseRequestIntake;
 use App\Models\PurchaseRequestIntakeDocument;
+use App\Services\ThinkTankProcurementBudgetGuard;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -24,6 +25,10 @@ use Illuminate\Validation\ValidationException;
 class PurchaseRequestController extends Controller
 {
     use ScopesAssignedPortfolios;
+
+    public function __construct(
+        private readonly ThinkTankProcurementBudgetGuard $thinkTankBudgetGuard,
+    ) {}
 
     private const PURCHASE_REQUEST_STATUS_TABS = [
         'submitted' => 'Submitted',
@@ -636,6 +641,7 @@ class PurchaseRequestController extends Controller
 
     private function deletePurchaseOrderCascade(ProcurementPurchaseOrder $po): void
     {
+        $po = $this->thinkTankBudgetGuard->lockHardDeleteBoundary($po);
         $invoiceId     = $po->invoice_id;
         $negotiationId = $po->negotiation_id;
 

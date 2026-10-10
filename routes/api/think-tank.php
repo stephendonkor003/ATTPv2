@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\ThinkTank\AccessLevelController;
 use App\Http\Controllers\Api\V1\ThinkTank\AuthenticationController;
+use App\Http\Controllers\Api\V1\ThinkTank\FinanceController;
 use App\Http\Controllers\Api\V1\ThinkTank\MeController;
 use App\Http\Controllers\Api\V1\ThinkTank\MfaController;
 use App\Http\Controllers\Api\V1\ThinkTank\MonitoringAssignmentsController;
@@ -186,6 +187,38 @@ Route::prefix('v1/think-tank')
                                         ->whereUuid('vendor')
                                         ->middleware('throttle:5,1,think-tank-vendor-invitation')
                                         ->name('vendors.invitation');
+                                });
+                        });
+
+                    Route::prefix('finance')
+                        ->name('finance.')
+                        ->middleware('think.tank.area:finance')
+                        ->group(function (): void {
+                            Route::middleware('permission:think_tank.finance.view|think_tank.finance.manage')
+                                ->group(function (): void {
+                                    Route::get('overview', [FinanceController::class, 'overview'])->name('overview');
+                                    Route::get('funds', [FinanceController::class, 'funds'])->name('funds.index');
+                                    Route::get('budget-lines', [FinanceController::class, 'budgetLines'])->name('budget-lines.index');
+                                    Route::get('execution', [FinanceController::class, 'execution'])->name('execution.index');
+                                    Route::get('reports', [FinanceController::class, 'reports'])->name('reports.index');
+                                });
+
+                            Route::middleware('permission:think_tank.finance.manage')
+                                ->group(function (): void {
+                                    Route::post('funding-requests', [FinanceController::class, 'fundingRequest'])
+                                        ->middleware('throttle:10,1,think-tank-finance-funding-request')
+                                        ->name('funding-requests.store');
+                                    Route::post('transfers/{disbursement}/confirm', [FinanceController::class, 'confirmTransfer'])
+                                        ->whereUuid('disbursement')
+                                        ->middleware('throttle:20,1,think-tank-finance-receipt-confirm')
+                                        ->name('transfers.confirm');
+                                    Route::post('budget-lines', [FinanceController::class, 'storeBudgetLine'])
+                                        ->middleware('throttle:20,1,think-tank-finance-budget-line-create')
+                                        ->name('budget-lines.store');
+                                    Route::patch('budget-lines/{line}', [FinanceController::class, 'updateBudgetLine'])
+                                        ->whereUuid('line')
+                                        ->middleware('throttle:30,1,think-tank-finance-budget-line-update')
+                                        ->name('budget-lines.update');
                                 });
                         });
 

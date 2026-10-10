@@ -22,12 +22,14 @@ use App\Models\ThinkTankResearchOutput;
 use App\Models\User;
 use App\Services\ThinkTank\ThinkTankInvitationService;
 use App\Services\ThinkTank\ThinkTankUserManagementService;
+use App\Services\ThinkTankFundingSourceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class ConsortiumOperationsController extends Controller
@@ -44,7 +46,7 @@ class ConsortiumOperationsController extends Controller
                 'funder',
                 'programFunding.program',
                 'secretariatManager',
-                'transferPurchaseOrders' => fn ($purchaseOrderQuery) => $purchaseOrderQuery
+                'transferPurchaseOrders' => fn ($purchaseOrderQuery) => $this->currentFundingPurchaseOrders($purchaseOrderQuery)
                     ->with([
                         'purchaseRequest',
                         'budgetCommitment.purchaseRequest',
@@ -65,22 +67,18 @@ class ConsortiumOperationsController extends Controller
                 'activityReports as reports_approved_count' => fn ($reportQuery) => $reportQuery->where('status', 'approved'),
                 'activityReports as reports_rejected_count' => fn ($reportQuery) => $reportQuery->whereIn('status', ['rejected', 'revisions_requested']),
                 'riskFlags',
-                'transferPurchaseOrders',
+                'transferPurchaseOrders' => fn ($purchaseOrderQuery) => $this->currentFundingPurchaseOrders($purchaseOrderQuery),
                 'transferDisbursements as transfer_count' => fn ($transferQuery) => $this->paidTransferDisbursements($transferQuery),
-                'transferDisbursements as confirmed_transfer_count' => fn ($transferQuery) => $transferQuery
-                    ->whereNotNull('think_tank_member_id')
-                    ->whereNotNull('paid_at')
-                    ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
-                    ->whereHas('purchaseOrder', fn ($purchaseOrderQuery) => $purchaseOrderQuery->where('po_type', 'think_tank_transfer'))
-                    ->where('recipient_confirmation_status', 'confirmed'),
+                'transferDisbursements as confirmed_transfer_count' => fn ($transferQuery) => $this->confirmedTransferDisbursements($transferQuery),
             ])
-            ->withSum('transferPurchaseOrders as po_allocated_amount', 'amount')
+            ->withSum([
+                'transferPurchaseOrders as po_allocated_amount' => fn ($purchaseOrderQuery) => $this->currentFundingPurchaseOrders($purchaseOrderQuery),
+            ], 'amount')
             ->withSum([
                 'transferDisbursements as transferred_amount' => fn ($transferQuery) => $this->paidTransferDisbursements($transferQuery),
             ], 'amount')
             ->withSum([
-                'transferDisbursements as receipted_amount' => fn ($transferQuery) => $this->paidTransferDisbursements($transferQuery)
-                    ->where('recipient_confirmation_status', 'confirmed'),
+                'transferDisbursements as receipted_amount' => fn ($transferQuery) => $this->confirmedTransferDisbursements($transferQuery),
             ], 'amount');
 
         if ($request->filled('status')) {
@@ -349,10 +347,14 @@ class ConsortiumOperationsController extends Controller
     public function addAllocation(Request $request, Consortium $consortium)
     {
         $data = $request->validate([
-            'think_tank_member_id' => 'nullable|exists:attp_consortium_think_tanks,id',
+            'think_tank_member_id' => [
+                'nullable',
+                Rule::exists('attp_consortium_think_tanks', 'id')
+                    ->where(fn ($query) => $query->where('consortium_id', $consortium->id)),
+            ],
             'budget_line' => 'required|string|max:255',
             'currency' => 'nullable|string|max:10',
-            'amount_allocated' => 'required|numeric|min:0',
+            'amount_allocated' => 'required|numeric|decimal:0,2|min:0|max:9999999999999999.99',
             'notes' => 'nullable|string',
         ]);
 
@@ -369,21 +371,105 @@ class ConsortiumOperationsController extends Controller
     public function requestDisbursement(Request $request, Consortium $consortium)
     {
         $data = $request->validate([
-            'think_tank_member_id' => 'nullable|exists:attp_consortium_think_tanks,id',
-            'fund_allocation_id' => 'nullable|exists:attp_fund_allocations,id',
-            'amount_requested' => 'required|numeric|min:0.01',
+            'think_tank_member_id' => [
+                'nullable',
+                Rule::exists('attp_consortium_think_tanks', 'id')
+                    ->where(fn ($query) => $query->where('consortium_id', $consortium->id)),
+            ],
+            'fund_allocation_id' => [
+                'nullable',
+                Rule::exists('attp_fund_allocations', 'id')
+                    ->where(fn ($query) => $query->where('consortium_id', $consortium->id)),
+            ],
+            'amount_requested' => 'required|numeric|decimal:0,2|min:0.01|max:9999999999999999.99',
             'currency' => 'nullable|string|max:10',
             'purpose' => 'nullable|string',
         ]);
 
-        ConsortiumDisbursementRequest::create([
-            ...$data,
-            'consortium_id' => $consortium->id,
-            'request_code' => $this->nextCode('ATTP-DISB'),
-            'currency' => $data['currency'] ?? $consortium->currency,
-            'requested_by' => $request->user()?->id,
-            'requested_at' => now(),
-        ]);
+        DB::transaction(function () use ($data, $consortium, $request): void {
+            $allocationIdentity = filled($data['fund_allocation_id'] ?? null)
+                ? ConsortiumFundAllocation::query()
+                    ->select(['id', 'consortium_id', 'think_tank_member_id'])
+                    ->whereKey($data['fund_allocation_id'])
+                    ->where('consortium_id', $consortium->id)
+                    ->firstOrFail()
+                : null;
+            $requestedMemberId = filled($data['think_tank_member_id'] ?? null)
+                ? (string) $data['think_tank_member_id']
+                : null;
+            $memberId = $requestedMemberId ?: ($allocationIdentity?->think_tank_member_id
+                ? (string) $allocationIdentity->think_tank_member_id
+                : null);
+            $member = $memberId
+                ? ConsortiumThinkTank::query()
+                    ->whereKey($memberId)
+                    ->where('consortium_id', $consortium->id)
+                    ->where('status', 'active')
+                    ->lockForUpdate()
+                    ->firstOrFail()
+                : null;
+            $allocation = $allocationIdentity
+                ? ConsortiumFundAllocation::query()
+                    ->whereKey($allocationIdentity->id)
+                    ->where('consortium_id', $consortium->id)
+                    ->where('status', 'active')
+                    ->when($member, fn ($query, ConsortiumThinkTank $lockedMember) => $query
+                        ->where('think_tank_member_id', $lockedMember->id))
+                    ->lockForUpdate()
+                    ->firstOrFail()
+                : null;
+            if ($requestedMemberId && $allocation?->think_tank_member_id
+                && $requestedMemberId !== (string) $allocation->think_tank_member_id) {
+                throw ValidationException::withMessages([
+                    'fund_allocation_id' => ['The selected allocation belongs to a different consortium member.'],
+                ]);
+            }
+            $currency = Str::upper(trim((string) ($data['currency'] ?? $consortium->currency)));
+            if ($allocation && Str::upper(trim((string) $allocation->currency)) !== $currency) {
+                throw ValidationException::withMessages([
+                    'currency' => ['The request currency must match the selected fund allocation.'],
+                ]);
+            }
+            if ($allocation) {
+                $allocationRequests = ConsortiumDisbursementRequest::query()
+                    ->where('consortium_id', $consortium->id)
+                    ->where('fund_allocation_id', $allocation->id)
+                    ->whereIn('status', ['submitted', 'under_review', 'approved', 'partially_paid', 'paid'])
+                    ->lockForUpdate()
+                    ->get();
+                $paid = $allocationRequests->where('status', 'paid')
+                    ->sum(fn (ConsortiumDisbursementRequest $row): int => $this->decimalCents(
+                        $this->decimalCents($row->amount_approved) > 0
+                            ? $row->amount_approved
+                            : $row->amount_requested
+                    ));
+                $outstanding = $allocationRequests
+                    ->whereIn('status', ['submitted', 'under_review', 'approved', 'partially_paid'])
+                    ->sum(fn (ConsortiumDisbursementRequest $row): int => $this->decimalCents(
+                        $this->decimalCents($row->amount_approved) > 0
+                            ? $row->amount_approved
+                            : $row->amount_requested
+                    ));
+                $usedAfter = max($this->decimalCents($allocation->amount_disbursed), $paid)
+                    + $outstanding
+                    + $this->decimalCents($data['amount_requested']);
+                if ($usedAfter > $this->decimalCents($allocation->amount_allocated)) {
+                    throw ValidationException::withMessages([
+                        'amount_requested' => ['The request exceeds the unreserved balance of the selected fund allocation.'],
+                    ]);
+                }
+            }
+
+            ConsortiumDisbursementRequest::create([
+                ...$data,
+                'consortium_id' => $consortium->id,
+                'think_tank_member_id' => $member?->id,
+                'request_code' => $this->nextCode('ATTP-DISB'),
+                'currency' => $currency,
+                'requested_by' => $request->user()?->id,
+                'requested_at' => now(),
+            ]);
+        }, 3);
 
         return back()->with('success', 'Disbursement request submitted.');
     }
@@ -392,32 +478,166 @@ class ConsortiumOperationsController extends Controller
     {
         $data = $request->validate([
             'status' => 'required|in:approved,rejected,paid',
-            'amount_approved' => 'nullable|numeric|min:0',
-            'review_notes' => 'nullable|string',
+            'amount_approved' => 'nullable|numeric|decimal:0,2|min:0|max:9999999999999999.99',
+            'review_notes' => 'nullable|string|max:3000',
         ]);
+        $idempotent = DB::transaction(function () use ($request, $disbursement, $data): bool {
+            $identity = ConsortiumDisbursementRequest::query()
+                ->select(['id', 'consortium_id', 'think_tank_member_id', 'fund_allocation_id'])
+                ->whereKey($disbursement->id)
+                ->firstOrFail();
+            $member = null;
+            if ($identity->think_tank_member_id) {
+                $member = ConsortiumThinkTank::query()
+                    ->whereKey($identity->think_tank_member_id)
+                    ->where('consortium_id', $identity->consortium_id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+            }
+            $locked = ConsortiumDisbursementRequest::query()
+                ->whereKey($identity->id)
+                ->where('consortium_id', $identity->consortium_id)
+                ->when($identity->think_tank_member_id, fn ($query, $memberId) => $query
+                    ->where('think_tank_member_id', $memberId), fn ($query) => $query
+                    ->whereNull('think_tank_member_id'))
+                ->when($identity->fund_allocation_id, fn ($query, $allocationId) => $query
+                    ->where('fund_allocation_id', $allocationId), fn ($query) => $query
+                    ->whereNull('fund_allocation_id'))
+                ->lockForUpdate()
+                ->firstOrFail();
+            $allocation = null;
+            if ($locked->fund_allocation_id) {
+                $allocationQuery = ConsortiumFundAllocation::query()
+                    ->whereKey($locked->fund_allocation_id)
+                    ->where('consortium_id', $locked->consortium_id);
+                if ($member) {
+                    $allocationQuery->where('think_tank_member_id', $member->id);
+                }
+                $allocation = $allocationQuery->lockForUpdate()->firstOrFail();
+            }
 
-        $disbursement->update([
-            'status' => $data['status'],
-            'amount_approved' => $data['amount_approved'] ?? $disbursement->amount_requested,
-            'review_notes' => $data['review_notes'] ?? null,
-            'reviewed_by' => $request->user()?->id,
-            'reviewed_at' => now(),
-            'paid_at' => $data['status'] === 'paid' ? now() : $disbursement->paid_at,
-        ]);
+            $targetStatus = $data['status'];
+            $existingApprovedCents = $this->decimalCents($locked->amount_approved);
+            $approvedCents = $targetStatus === 'rejected'
+                ? 0
+                : $this->decimalCents(
+                    $data['amount_approved']
+                        ?? ($existingApprovedCents > 0 ? $locked->amount_approved : $locked->amount_requested)
+                );
+            $requestedCents = $this->decimalCents($locked->amount_requested);
+            if ($approvedCents > $requestedCents) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'amount_approved' => ['The approved amount cannot exceed the amount requested.'],
+                ]);
+            }
+            if ($targetStatus !== 'rejected' && $approvedCents <= 0) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'amount_approved' => ['An approved or paid request must have a positive approved amount.'],
+                ]);
+            }
+            if ($allocation && strtoupper((string) $allocation->currency) !== strtoupper((string) $locked->currency)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'amount_approved' => ['The request currency does not match its fund allocation.'],
+                ]);
+            }
 
-        if ($data['status'] === 'paid' && $disbursement->allocation) {
-            $disbursement->allocation->increment('amount_disbursed', (float) $disbursement->amount_approved);
-        }
+            if ($locked->status === 'paid') {
+                if ($targetStatus === 'paid'
+                    && $approvedCents === $this->decimalCents($locked->amount_approved)) {
+                    return true;
+                }
 
-        return back()->with('success', 'Disbursement review saved.');
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'status' => ['A paid funding request is final and cannot be changed.'],
+                ]);
+            }
+
+            if ($allocation) {
+                $otherRequests = ConsortiumDisbursementRequest::query()
+                    ->where('consortium_id', $locked->consortium_id)
+                    ->where('fund_allocation_id', $allocation->id)
+                    ->whereKeyNot($locked->id)
+                    ->whereIn('status', ['submitted', 'under_review', 'approved', 'partially_paid', 'paid'])
+                    ->lockForUpdate()
+                    ->get();
+                $otherPaid = $otherRequests->where('status', 'paid')->sum(fn (ConsortiumDisbursementRequest $row): int => $this->decimalCents(
+                    $this->decimalCents($row->amount_approved) > 0 ? $row->amount_approved : $row->amount_requested
+                ));
+                $otherOutstanding = $otherRequests->whereIn('status', ['submitted', 'under_review', 'approved', 'partially_paid'])
+                    ->sum(fn (ConsortiumDisbursementRequest $row): int => $this->decimalCents(
+                        $this->decimalCents($row->amount_approved) > 0 ? $row->amount_approved : $row->amount_requested
+                    ));
+                $paidReservations = $otherPaid + ($targetStatus === 'paid' ? $approvedCents : 0);
+                $outstandingReservations = $otherOutstanding + ($targetStatus === 'approved' ? $approvedCents : 0);
+                $used = max($this->decimalCents($allocation->amount_disbursed), $paidReservations)
+                    + $outstandingReservations;
+
+                if ($used > $this->decimalCents($allocation->amount_allocated)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'amount_approved' => ['This decision would exceed the selected fund allocation after existing disbursements and reservations.'],
+                    ]);
+                }
+            }
+
+            $paidAt = $locked->paid_at;
+            if ($targetStatus === 'paid') {
+                abort_unless($member, 422, 'A Think Tank funding request must have a tenant before it can be paid.');
+                $linkedPayments = app(ThinkTankFundingSourceService::class)
+                    ->incomingPaymentsQuery($member)
+                    ->where('consortium_disbursement_request_id', $locked->id)
+                    ->lockForUpdate()
+                    ->get();
+                $linkedPaidCents = $linkedPayments->sum(fn (ProcurementDisbursement $payment): int => $this->decimalCents($payment->amount));
+                if ($linkedPayments->isEmpty() || $linkedPaidCents !== $approvedCents) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'status' => ['A request can be marked paid only after recognized tenant transfer records exactly match its approved amount.'],
+                    ]);
+                }
+                if ($linkedPayments->contains(fn (ProcurementDisbursement $payment): bool => strtoupper((string) $payment->currency) !== strtoupper((string) $locked->currency)
+                )) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'status' => ['The linked payment currency does not match the funding request.'],
+                    ]);
+                }
+                $paidAt = $linkedPayments->max('paid_at') ?: now();
+            }
+
+            $locked->update([
+                'status' => $targetStatus,
+                'amount_approved' => $this->decimalAmount($approvedCents),
+                'review_notes' => $data['review_notes'] ?? null,
+                'reviewed_by' => $request->user()?->id,
+                'reviewed_at' => now(),
+                'paid_at' => $targetStatus === 'paid' ? $paidAt : $locked->paid_at,
+                'portal_lock_version' => max(1, (int) $locked->portal_lock_version) + 1,
+            ]);
+
+            return false;
+        }, 3);
+
+        return back()->with('success', $idempotent
+            ? 'Disbursement was already marked paid; no balances changed.'
+            : 'Disbursement review saved.');
     }
 
     public function storeExpense(Request $request, Consortium $consortium)
     {
         $data = $request->validate([
-            'think_tank_member_id' => 'nullable|exists:attp_consortium_think_tanks,id',
-            'activity_report_id' => 'nullable|exists:attp_activity_reports,id',
-            'fund_allocation_id' => 'nullable|exists:attp_fund_allocations,id',
+            'think_tank_member_id' => [
+                'nullable',
+                Rule::exists('attp_consortium_think_tanks', 'id')
+                    ->where(fn ($query) => $query->where('consortium_id', $consortium->id)),
+            ],
+            'activity_report_id' => [
+                'nullable',
+                Rule::exists('attp_activity_reports', 'id')
+                    ->where(fn ($query) => $query->where('consortium_id', $consortium->id)),
+            ],
+            'fund_allocation_id' => [
+                'nullable',
+                Rule::exists('attp_fund_allocations', 'id')
+                    ->where(fn ($query) => $query->where('consortium_id', $consortium->id)),
+            ],
             'description' => 'required|string|max:255',
             'vendor_name' => 'nullable|string|max:255',
             'expense_date' => 'nullable|date',
@@ -432,9 +652,34 @@ class ConsortiumOperationsController extends Controller
 
         unset($data['receipt']);
 
+        $memberId = filled($data['think_tank_member_id'] ?? null)
+            ? (string) $data['think_tank_member_id']
+            : null;
+        $allocation = filled($data['fund_allocation_id'] ?? null)
+            ? ConsortiumFundAllocation::query()
+                ->whereKey($data['fund_allocation_id'])
+                ->where('consortium_id', $consortium->id)
+                ->firstOrFail()
+            : null;
+        $activityReport = filled($data['activity_report_id'] ?? null)
+            ? ConsortiumActivityReport::query()
+                ->whereKey($data['activity_report_id'])
+                ->where('consortium_id', $consortium->id)
+                ->firstOrFail()
+            : null;
+        foreach ([$allocation?->think_tank_member_id, $activityReport?->think_tank_member_id] as $relatedMemberId) {
+            if ($memberId && $relatedMemberId && $memberId !== (string) $relatedMemberId) {
+                throw ValidationException::withMessages([
+                    'think_tank_member_id' => ['The selected finance records do not belong to the same consortium member.'],
+                ]);
+            }
+            $memberId ??= $relatedMemberId ? (string) $relatedMemberId : null;
+        }
+
         ConsortiumExpenseReport::create([
             ...$data,
             'consortium_id' => $consortium->id,
+            'think_tank_member_id' => $memberId,
             'expense_code' => $this->nextCode('ATTP-EXP'),
             'currency' => $data['currency'] ?? $consortium->currency,
             'submitted_by' => $request->user()?->id,
@@ -471,16 +716,15 @@ class ConsortiumOperationsController extends Controller
     {
         $consortiumQuery = Consortium::query()->when($funder, fn ($query) => $query->where('funder_id', $funder->id));
         $consortiumIds = (clone $consortiumQuery)->pluck('id');
-        $purchaseOrderQuery = ProcurementPurchaseOrder::query()
+        $purchaseOrderQuery = $this->currentFundingPurchaseOrders(
+            app(ThinkTankFundingSourceService::class)->incomingPurchaseOrdersQuery()
+        )
             ->whereIn('consortium_id', $consortiumIds)
-            ->whereNotNull('think_tank_member_id')
-            ->where('po_type', 'think_tank_transfer');
-        $transferQuery = ProcurementDisbursement::query()
-            ->whereIn('consortium_id', $consortiumIds)
-            ->whereNotNull('think_tank_member_id')
-            ->whereNotNull('paid_at')
-            ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
-            ->whereHas('purchaseOrder', fn ($query) => $query->where('po_type', 'think_tank_transfer'));
+            ->whereNotNull('think_tank_member_id');
+        $transferQuery = $this->paidTransferDisbursements(
+            app(ThinkTankFundingSourceService::class)->incomingPaymentsQuery()
+        )
+            ->whereIn('consortium_id', $consortiumIds);
 
         $poAllocated = (float) (clone $purchaseOrderQuery)->sum('amount');
         $paidFromPurchaseOrders = (float) (clone $transferQuery)->sum('amount');
@@ -496,9 +740,9 @@ class ConsortiumOperationsController extends Controller
             'po_unpaid' => max($poAllocated - $paidFromPurchaseOrders, 0),
             'funds_disbursed' => $paidFromPurchaseOrders,
             'paid_disbursement_count' => (clone $transferQuery)->count(),
-            'funds_receipted' => (clone $transferQuery)->where('recipient_confirmation_status', 'confirmed')->sum('amount'),
-            'pending_receipts' => (clone $transferQuery)->where('recipient_confirmation_status', '!=', 'confirmed')->count(),
-            'pending_receipts_amount' => (clone $transferQuery)->where('recipient_confirmation_status', '!=', 'confirmed')->sum('amount'),
+            'funds_receipted' => $this->confirmedTransferDisbursements(clone $transferQuery)->sum('amount'),
+            'pending_receipts' => $this->pendingTransferDisbursements(clone $transferQuery)->count(),
+            'pending_receipts_amount' => $this->pendingTransferDisbursements(clone $transferQuery)->sum('amount'),
             'funds_spent' => ConsortiumFundAllocation::whereIn('consortium_id', $consortiumIds)->sum('amount_spent'),
             'open_risks' => ConsortiumRiskFlag::whereIn('consortium_id', $consortiumIds)->where('status', 'open')->count(),
             'research_outputs' => ThinkTankResearchOutput::whereIn('consortium_id', $consortiumIds)->count(),
@@ -519,18 +763,18 @@ class ConsortiumOperationsController extends Controller
                 'reports as reports_total_count',
                 'reports as reports_approved_count' => fn ($query) => $query->where('status', 'approved'),
                 'reports as reports_rejected_count' => fn ($query) => $query->whereIn('status', ['rejected', 'revisions_requested']),
-                'transferPurchaseOrders',
+                'transferPurchaseOrders' => fn ($query) => $this->currentFundingPurchaseOrders($query),
                 'transferDisbursements as transfer_count' => fn ($query) => $this->paidTransferDisbursements($query),
-                'transferDisbursements as confirmed_transfer_count' => fn ($query) => $this->paidTransferDisbursements($query)
-                    ->where('recipient_confirmation_status', 'confirmed'),
+                'transferDisbursements as confirmed_transfer_count' => fn ($query) => $this->confirmedTransferDisbursements($query),
             ])
-            ->withSum('transferPurchaseOrders as po_allocated_amount', 'amount')
+            ->withSum([
+                'transferPurchaseOrders as po_allocated_amount' => fn ($query) => $this->currentFundingPurchaseOrders($query),
+            ], 'amount')
             ->withSum([
                 'transferDisbursements as transferred_amount' => fn ($query) => $this->paidTransferDisbursements($query),
             ], 'amount')
             ->withSum([
-                'transferDisbursements as receipted_amount' => fn ($query) => $this->paidTransferDisbursements($query)
-                    ->where('recipient_confirmation_status', 'confirmed'),
+                'transferDisbursements as receipted_amount' => fn ($query) => $this->confirmedTransferDisbursements($query),
             ], 'amount')
             ->orderBy('name')
             ->get();
@@ -604,14 +848,70 @@ class ConsortiumOperationsController extends Controller
     {
         return $query
             ->whereNotNull('paid_at')
+            ->where('paid_at', '<=', now())
             ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES);
+    }
+
+    private function currentFundingPurchaseOrders($query)
+    {
+        return $query->where(function ($asOf): void {
+            $asOf->where(function ($issued): void {
+                $issued->whereNotNull('issued_at')
+                    ->where('issued_at', '<=', now());
+            })->orWhere(function ($created): void {
+                $created->whereNull('issued_at')
+                    ->where('created_at', '<=', now());
+            });
+        });
     }
 
     private function paidTransferDisbursements($query)
     {
         return $this->paidProcurementDisbursements($query)
             ->whereNotNull('think_tank_member_id')
-            ->whereHas('purchaseOrder', fn ($purchaseOrderQuery) => $purchaseOrderQuery->where('po_type', 'think_tank_transfer'));
+            ->whereIn(
+                'procurement_disbursements.id',
+                app(ThinkTankFundingSourceService::class)
+                    ->incomingPaymentsQuery()
+                    ->select('procurement_disbursements.id')
+            );
+    }
+
+    private function confirmedTransferDisbursements($query)
+    {
+        return $this->paidTransferDisbursements($query)
+            ->where('recipient_confirmation_status', 'confirmed')
+            ->whereNotNull('recipient_confirmed_at')
+            ->where('recipient_confirmed_at', '<=', now());
+    }
+
+    private function pendingTransferDisbursements($query)
+    {
+        return $this->paidTransferDisbursements($query)
+            ->where(function ($pending): void {
+                $pending->whereNull('recipient_confirmation_status')
+                    ->orWhere('recipient_confirmation_status', '<>', 'confirmed')
+                    ->orWhereNull('recipient_confirmed_at')
+                    ->orWhere('recipient_confirmed_at', '>', now());
+            });
+    }
+
+    private function decimalCents(mixed $amount): int
+    {
+        $value = trim((string) ($amount ?? '0'));
+        if (! preg_match('/^(\d+)(?:\.(\d{1,2}))?$/', $value, $matches)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'amount_approved' => ['Use a non-negative amount with no more than two decimal places.'],
+            ]);
+        }
+
+        return ((int) $matches[1] * 100)
+            + (int) str_pad($matches[2] ?? '', 2, '0');
+    }
+
+    private function decimalAmount(int $cents): string
+    {
+        return intdiv($cents, 100).'.'.str_pad((string) ($cents % 100), 2, '0', STR_PAD_LEFT);
     }
 
     private function nextCode(string $prefix): string

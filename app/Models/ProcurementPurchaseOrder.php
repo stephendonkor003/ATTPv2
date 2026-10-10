@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -13,6 +12,7 @@ class ProcurementPurchaseOrder extends BaseModel
     protected $table = 'procurement_purchase_orders';
 
     public const NON_PAYING_DISBURSEMENT_STATUSES = ['cancelled', 'void', 'reversed'];
+
     public const PAID_DISBURSEMENT_STATUSES = ['completed', 'paid', 'fully_paid'];
 
     protected $fillable = [
@@ -54,6 +54,8 @@ class ProcurementPurchaseOrder extends BaseModel
         'amount',
         'currency',
         'status',
+        'submission_idempotency_key',
+        'submission_idempotency_fingerprint',
         'created_by',
         'issued_at',
         'expected_delivery_date',
@@ -190,12 +192,14 @@ class ProcurementPurchaseOrder extends BaseModel
         if ($this->relationLoaded('disbursements')) {
             return (float) $this->disbursements
                 ->filter(fn (ProcurementDisbursement $disbursement) => $disbursement->paid_at
+                    && $disbursement->paid_at->lessThanOrEqualTo(now())
                     && in_array(strtolower((string) $disbursement->status), self::PAID_DISBURSEMENT_STATUSES, true))
                 ->sum(fn (ProcurementDisbursement $disbursement) => (float) $disbursement->amount);
         }
 
         return (float) $this->disbursements()
             ->whereNotNull('paid_at')
+            ->where('paid_at', '<=', now())
             ->whereIn('status', self::PAID_DISBURSEMENT_STATUSES)
             ->sum('amount');
     }
@@ -203,6 +207,7 @@ class ProcurementPurchaseOrder extends BaseModel
     public function remainingAmount(): float
     {
         $amount = (float) ($this->amount ?? 0);
+
         return max($amount - $this->paidAmount(), 0);
     }
 
@@ -242,6 +247,7 @@ class ProcurementPurchaseOrder extends BaseModel
         $totalAmount = round($lineItems->sum(fn ($item) => $this->lineItemPayableAmount($item)), 2);
         $paidDisbursements = $this->disbursements
             ->filter(fn (ProcurementDisbursement $disbursement) => $disbursement->paid_at
+                && $disbursement->paid_at->lessThanOrEqualTo(now())
                 && in_array(strtolower((string) $disbursement->status), self::PAID_DISBURSEMENT_STATUSES, true));
         $paidAmountsByItem = $paidDisbursements
             ->filter(fn (ProcurementDisbursement $disbursement) => filled($disbursement->purchase_request_item_id))
@@ -308,7 +314,7 @@ class ProcurementPurchaseOrder extends BaseModel
     public static function generateReference(): string
     {
         do {
-            $reference = 'PO-' . now()->format('Y') . '-' . Str::upper(Str::random(6));
+            $reference = 'PO-'.now()->format('Y').'-'.Str::upper(Str::random(6));
         } while (self::where('reference_no', $reference)->exists());
 
         return $reference;
@@ -325,7 +331,7 @@ class ProcurementPurchaseOrder extends BaseModel
 
         $sequence = 1;
         do {
-            $reference = $prefix . '-' . str_pad((string) $sequence, 3, '0', STR_PAD_LEFT);
+            $reference = $prefix.'-'.str_pad((string) $sequence, 3, '0', STR_PAD_LEFT);
             $sequence++;
         } while (self::where('reference_no', $reference)->exists());
 

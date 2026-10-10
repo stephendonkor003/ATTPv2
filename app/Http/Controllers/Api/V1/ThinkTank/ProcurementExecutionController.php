@@ -16,6 +16,7 @@ use App\Services\EvaluationReworkGuard;
 use App\Services\ProcurementPublicationNotificationService;
 use App\Services\ProcurementRichTextService;
 use App\Services\ThinkTankProcurementApiService;
+use App\Services\ThinkTankProcurementBudgetGuard;
 use App\Services\ThinkTankProcurementExecutionService;
 use App\Services\ThinkTankProcurementWorkflowService;
 use App\Services\ThinkTankVendorDirectoryService;
@@ -40,6 +41,7 @@ class ProcurementExecutionController extends Controller
     public function __construct(
         private readonly ThinkTankProcurementExecutionService $execution,
         private readonly ThinkTankProcurementApiService $planning,
+        private readonly ThinkTankProcurementBudgetGuard $budgetGuard,
         private readonly ThinkTankProcurementWorkflowService $workflow,
         private readonly ProcurementPublicationNotificationService $publicationNotifications,
         private readonly ThinkTankVendorDirectoryService $vendorDirectory,
@@ -292,13 +294,8 @@ class ProcurementExecutionController extends Controller
 
         try {
             $procurement = DB::transaction(function () use ($request, $member, $data, &$storedPaths, &$storedCover): Procurement {
-                $item = ThinkTankProcurementItem::query()
-                    ->whereKey($data['item_id'])
-                    ->whereHas('plan', fn ($plans) => $plans->where('think_tank_member_id', $member->id))
-                    ->with(['plan', 'documents'])
-                    ->lockForUpdate()
-                    ->firstOrFail();
-                $plan = $item->plan()->where('think_tank_member_id', $member->id)->lockForUpdate()->firstOrFail();
+                $item = $this->budgetGuard->lockPlanningItem($member, $data['item_id']);
+                $plan = $item->plan;
                 $this->planning->assertLockToken($item, $data['lock_token']);
                 abort_unless(
                     $item->status === ThinkTankProcurementItem::STATUS_NO_OBJECTION && $item->isReadyToExecute(),
@@ -729,15 +726,11 @@ class ProcurementExecutionController extends Controller
         $member = $this->member($request);
 
         DB::transaction(function () use ($request, $member, $execution, $data): void {
-            $procurement = $this->lockedExecution($member, $execution);
+            $budgetContext = $this->budgetGuard->lockExecution($member, $execution);
+            $procurement = $budgetContext['procurement'];
+            $item = $budgetContext['item'];
             $this->execution->assertLockToken($procurement, $data['lock_token']);
             abort_unless($procurement->status === 'draft', 422, 'Only a draft procurement execution can be published.');
-            $item = ThinkTankProcurementItem::query()
-                ->where('procurement_id', $procurement->id)
-                ->whereHas('plan', fn ($plans) => $plans->where('think_tank_member_id', $member->id))
-                ->with(['plan', 'documents'])
-                ->lockForUpdate()
-                ->firstOrFail();
             abort_unless(
                 $item->status === ThinkTankProcurementItem::STATUS_NO_OBJECTION && $item->isReadyToExecute(),
                 422,
@@ -854,7 +847,9 @@ class ProcurementExecutionController extends Controller
         $member = $this->member($request);
 
         DB::transaction(function () use ($request, $member, $execution, $data): void {
-            $procurement = $this->lockedExecution($member, $execution);
+            $budgetContext = $this->budgetGuard->lockExecution($member, $execution);
+            $procurement = $budgetContext['procurement'];
+            $item = $budgetContext['item'];
             $this->execution->assertLockToken($procurement, $data['lock_token']);
             abort_unless($procurement->status === 'recalled', 422, 'Only a recalled procurement opportunity can be republished.');
             if ($procurement->visibility_type === 'vendor_group') {
@@ -865,7 +860,6 @@ class ProcurementExecutionController extends Controller
                     true,
                 );
             }
-            $item = ThinkTankProcurementItem::query()->where('procurement_id', $procurement->id)->with('plan')->lockForUpdate()->firstOrFail();
             abort_unless($item->status === ThinkTankProcurementItem::STATUS_PUBLISHED, 422, 'The linked planning item is no longer in execution.');
             $fromVersion = max(1, (int) $procurement->publication_version);
             $procurement->update([
@@ -1162,8 +1156,13 @@ class ProcurementExecutionController extends Controller
         return ThinkTankProcurementItem::query()
             ->where('status', ThinkTankProcurementItem::STATUS_NO_OBJECTION)
             ->whereNull('procurement_id')
+            ->whereHas('budgetLine', fn ($lines) => $lines
+                ->where('think_tank_member_id', $member->id)
+                ->where('consortium_id', $member->consortium_id)
+                ->where('status', 'active'))
             ->whereHas('plan', fn ($plans) => $plans
-                ->where('think_tank_member_id', $member->id));
+                ->where('think_tank_member_id', $member->id)
+                ->where('consortium_id', $member->consortium_id));
     }
 
     private function ownedExecution(Request $request, string $id): Procurement

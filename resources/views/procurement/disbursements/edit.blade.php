@@ -271,6 +271,7 @@
         <form method="POST" action="{{ route('procurement.disbursements.update', $disbursement) }}" enctype="multipart/form-data" id="disbursementEditForm">
             @csrf
             @method('PUT')
+            <input type="hidden" name="idempotency_key" value="{{ old('idempotency_key', $idempotencyKey) }}">
 
             <div class="row g-4">
                 <div class="col-xl-4">

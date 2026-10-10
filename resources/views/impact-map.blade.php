@@ -2229,6 +2229,7 @@
         const defaultTreatyStatus = {
             is_signed: false,
             is_ratified: false,
+            is_acceded: false,
             is_original_submitted: false,
             signed_at: null,
             ratified_at: null,
@@ -2250,6 +2251,7 @@
                 index[code] = {
                     is_signed: !!entry.is_signed,
                     is_ratified: !!entry.is_ratified,
+                    is_acceded: !!entry.is_acceded,
                     is_original_submitted: !!entry.is_original_submitted,
                     signed_at: entry.signed_at || null,
                     ratified_at: entry.ratified_at || null,
@@ -2267,6 +2269,7 @@
                     const current = merged[countryCode] || {
                         is_signed: false,
                         is_ratified: false,
+                        is_acceded: false,
                         is_original_submitted: false,
                         signed_at: null,
                         ratified_at: null,
@@ -2276,6 +2279,7 @@
                     merged[countryCode] = {
                         is_signed: current.is_signed || incoming.is_signed,
                         is_ratified: current.is_ratified || incoming.is_ratified,
+                        is_acceded: current.is_acceded || incoming.is_acceded,
                         is_original_submitted: current.is_original_submitted || incoming
                             .is_original_submitted,
                         signed_at: current.signed_at || incoming.signed_at,
@@ -2320,7 +2324,7 @@
             if (status.is_original_submitted) {
                 return '#0f766e';
             }
-            if (status.is_ratified) {
+            if (status.is_ratified || status.is_acceded) {
                 return '#2e7d32';
             }
             if (status.is_signed) {
@@ -2593,7 +2597,7 @@
 
         function getTreatyDefaultStyle(countryName) {
             const status = getTreatyStatusForCountry(countryName);
-            const hasTreatyAction = status.is_signed || status.is_ratified || status.is_original_submitted;
+            const hasTreatyAction = status.is_signed || status.is_ratified || status.is_acceded || status.is_original_submitted;
             return {
                 fillColor: getTreatyFillColor(countryName),
                 weight: hasTreatyAction ? 2.2 : 0.85,
@@ -2690,7 +2694,7 @@
                         ...defaultTreatyStatus,
                         ...(statusIndex[normalizedCode] || {})
                     };
-                    const hasAction = !!(status.is_signed || status.is_ratified || status.is_original_submitted);
+                    const hasAction = !!(status.is_signed || status.is_ratified || status.is_acceded || status.is_original_submitted);
 
                     return {
                         treaty,
@@ -2799,7 +2803,7 @@
             const countrySafe = escapeHtml(countryName);
             const rows = getCountryTreatyRows(countryName);
             const signedCount = rows.filter((row) => row.status.is_signed).length;
-            const ratifiedCount = rows.filter((row) => row.status.is_ratified).length;
+            const ratifiedCount = rows.filter((row) => row.status.is_ratified || row.status.is_acceded).length;
             const originalCount = rows.filter((row) => row.status.is_original_submitted).length;
 
             const tableRows = rows.length ? rows.map((row) => {

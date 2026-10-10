@@ -4,12 +4,14 @@ use App\Http\Controllers\BudgetReportController;
 use App\Http\Controllers\MasterDashboard;
 use App\Http\Controllers\Procurement\ProcurementDisbursementController;
 use App\Http\Controllers\Procurement\ProcurementPurchaseOrderController;
+use App\Http\Controllers\SubActivityController;
 use App\Models\Activity;
 use App\Models\ActivityAllocation;
 use App\Models\BudgetCommitment;
 use App\Models\ProcurementDisbursement;
 use App\Models\ProcurementInvoice;
 use App\Models\ProcurementPurchaseOrder;
+use App\Models\Permission;
 use App\Models\Program;
 use App\Models\ProgramFunding;
 use App\Models\Project;
@@ -51,6 +53,11 @@ class ProjectFinancialPositionReconciliationSmoke
         try {
             [$admin, $program] = $this->fixture();
             $this->actingAs($admin);
+            session()->put([
+                'otp_verified' => true,
+                'otp_verified_at' => now()->toIso8601String(),
+                'otp_verified_user_id' => (string) $admin->id,
+            ]);
 
             $query = ['program_id' => $program->id];
             $dashboard = $this->executionDashboardPayload($query, $admin);
@@ -124,6 +131,22 @@ class ProjectFinancialPositionReconciliationSmoke
             $this->assertAmount(36, $controls['funding_utilization_integrity_gap_rate'], 'Idle committed funds ratio');
             $this->assertAmount(0, $controls['procurement_pipeline_utilization_gap'], 'Commitment structural gap');
             $this->assertTrue($report['position']['dashboard_aligned'] === true, 'The life-to-date report should be dashboard aligned.');
+
+            $crossPeriodPurchaseOrder = ProcurementPurchaseOrder::query()
+                ->where('reference_no', 'like', 'FP-PO-INV-%')
+                ->firstOrFail();
+            $crossPeriodPurchaseOrder->update(['issued_at' => '2024-12-31']);
+            $yearlyReport = $this->financialPositionPayload([
+                'program_id' => $program->id,
+                'filter_mode' => 'yearly',
+                'year' => 2025,
+            ], $admin);
+            $this->assertAmount(
+                70_000,
+                $yearlyReport['position']['totals']['disbursed'],
+                'Payment period must not inherit the purchase-order issue period'
+            );
+            $crossPeriodPurchaseOrder->update(['issued_at' => '2025-04-01']);
 
             $selectedProject = $program->projects()->firstOrFail();
             $projectQuery = [
@@ -203,8 +226,12 @@ class ProjectFinancialPositionReconciliationSmoke
             );
 
             $webResponse = $this->get(route('budget.reports.project-financial-position', $query));
+            $this->assertTrue(
+                $webResponse->getStatusCode() === 200,
+                'The financial-position web report returned '.$webResponse->getStatusCode()
+                    .' and redirected to '.($webResponse->headers->get('Location') ?: 'nowhere').'.'
+            );
             $webResponse
-                ->assertOk()
                 ->assertSee('Financial execution dataset active')
                 ->assertSee('loaded directly from the reconciled financial execution dataset')
                 ->assertSee('Accounting Integrity')
@@ -404,11 +431,20 @@ class ProjectFinancialPositionReconciliationSmoke
                 ->whereHas('disbursements', fn ($query) => $query->recognizedPayment())
                 ->firstOrFail();
             $paidPurchaseOrderId = $paidPurchaseOrder->id;
-            $deleteResponse = $this->app
-                ->make(ProcurementPurchaseOrderController::class)
-                ->destroy($paidPurchaseOrder);
+            $deleteResponse = null;
+            $deleteValidationErrors = null;
+            try {
+                $deleteResponse = $this->app
+                    ->make(ProcurementPurchaseOrderController::class)
+                    ->destroy($paidPurchaseOrder);
+            } catch (\Illuminate\Validation\ValidationException $exception) {
+                $deleteValidationErrors = $exception->errors();
+            }
 
-            $this->assertTrue($deleteResponse->isRedirect(), 'A protected PO deletion should redirect with an error.');
+            $this->assertTrue(
+                $deleteResponse?->isRedirect() === true || isset($deleteValidationErrors['purchase_order']),
+                'A protected PO deletion should redirect or return a purchase-order validation error.'
+            );
             $this->assertTrue(
                 ProcurementPurchaseOrder::whereKey($paidPurchaseOrderId)->exists(),
                 'A purchase order with recorded payments was deleted.'
@@ -419,10 +455,15 @@ class ProjectFinancialPositionReconciliationSmoke
                     ->exists(),
                 'The protected PO payment lost its source link.'
             );
-            $this->assertTrue(
-                $deleteResponse->getSession()?->get('errors')?->has('purchase_order') === true,
-                'The protected PO deletion did not explain how to reverse its payments.'
-            );
+            if ($deleteResponse) {
+                $this->assertTrue(
+                    $deleteResponse->getSession()?->get('errors')?->has('purchase_order') === true,
+                    'The protected PO deletion did not explain how to reverse its payments.'
+                );
+            }
+
+            $this->assertUnassignedExecutionIsReconciled($admin, $program);
+            $this->assertPostedSubActivityCannotBeDeleted($admin, $program);
 
             echo "PROJECT_FINANCIAL_POSITION_RECONCILIATION_SMOKE_OK\n";
         } finally {
@@ -437,6 +478,9 @@ class ProjectFinancialPositionReconciliationSmoke
             'name' => 'Financial Position Smoke '.Str::upper($suffix),
             'description' => 'Temporary project financial position test role.',
         ]);
+        $role->permissions()->attach(
+            Permission::query()->where('name', 'budget.project_financial_position.view')->value('id')
+        );
         $admin = User::create([
             'name' => 'Financial Position Test Admin',
             'email' => 'financial-position-'.$suffix.'@example.test',
@@ -666,6 +710,164 @@ class ProjectFinancialPositionReconciliationSmoke
         $method = new ReflectionMethod(BudgetReportController::class, 'buildProjectFinancialPositionReportData');
 
         return $method->invoke($this->app->make(BudgetReportController::class), $request);
+    }
+
+    private function assertUnassignedExecutionIsReconciled(User $admin, Program $program): void
+    {
+        $funding = ProgramFunding::query()
+            ->where('program_id', $program->id)
+            ->firstOrFail();
+        $missingSubActivityId = (string) Str::uuid();
+        $amount = 12_345.67;
+
+        $commitment = BudgetCommitment::create([
+            'program_funding_id' => $funding->id,
+            'allocation_level' => 'sub_activity',
+            'allocation_id' => $missingSubActivityId,
+            'commitment_amount' => $amount,
+            'commitment_year' => 2025,
+            'status' => BudgetCommitment::STATUS_APPROVED,
+            'description' => 'Missing-classification reconciliation regression.',
+            'created_by' => $admin->id,
+        ]);
+        $purchaseOrder = ProcurementPurchaseOrder::create([
+            'budget_commitment_id' => $commitment->id,
+            'sub_activity_id' => $missingSubActivityId,
+            'reference_no' => 'FP-PO-UNASSIGNED-'.Str::upper(Str::random(8)),
+            'amount' => $amount,
+            'currency' => 'USD',
+            'status' => 'paid',
+            'created_by' => $admin->id,
+            'issued_at' => now()->setDate(2025, 9, 1),
+        ]);
+        ProcurementDisbursement::create([
+            'purchase_order_id' => $purchaseOrder->id,
+            'sub_activity_id' => $missingSubActivityId,
+            'reference_no' => 'FP-PAY-UNASSIGNED-'.Str::upper(Str::random(8)),
+            'amount' => $amount,
+            'currency' => 'USD',
+            'status' => 'paid',
+            'paid_at' => now()->setDate(2025, 9, 30),
+            'created_by' => $admin->id,
+        ]);
+
+        $dashboard = $this->executionDashboardPayload(['program_id' => $program->id], $admin);
+        $reconciliation = $dashboard['componentBreakdownRows']
+            ->first(fn (array $row): bool => ($row['level'] ?? null) === 'programme_reconciliation');
+
+        $this->assertTrue($reconciliation !== null, 'Unassigned execution did not create a reconciliation row.');
+        $this->assertTrue(
+            ($reconciliation['label'] ?? null) === 'Unassigned Financial Activity',
+            'Unassigned execution was not clearly identified for financial review.'
+        );
+        $this->assertAmount($amount, $reconciliation['commitment'], 'Unassigned commitment reconciliation');
+        $this->assertAmount($amount, $reconciliation['disbursement'], 'Unassigned disbursement reconciliation');
+        $this->assertAmount(
+            $dashboard['totalCommitment'],
+            $dashboard['componentBreakdownRows']->sum('commitment'),
+            'Component commitment reconciliation'
+        );
+        $this->assertAmount(
+            $dashboard['totalDisbursements'],
+            $dashboard['componentBreakdownRows']->sum('disbursement'),
+            'Component disbursement reconciliation'
+        );
+
+        $report = $this->financialPositionPayload(['program_id' => $program->id], $admin);
+        $position = $report['position'];
+        $positionReconciliation = $position['rows']
+            ->first(fn (array $row): bool => ($row['level'] ?? null) === 'programme_reconciliation');
+
+        $this->assertTrue(
+            $positionReconciliation !== null,
+            'Project Financial Position hid the unassigned financial activity.'
+        );
+        $this->assertAmount(
+            $position['totals']['committed'],
+            $position['rows']->sum('committed'),
+            'Project Financial Position commitment reconciliation'
+        );
+        $this->assertAmount(
+            $position['totals']['disbursed'],
+            $position['rows']->sum('disbursed'),
+            'Project Financial Position disbursement reconciliation'
+        );
+
+        $filteredReport = $this->financialPositionPayload([
+            'program_id' => $program->id,
+            'funding_id' => $funding->id,
+            'filter_mode' => 'yearly',
+            'year' => 2025,
+        ], $admin);
+        $filteredPosition = $filteredReport['position'];
+        $filteredReconciliation = $filteredPosition['rows']
+            ->first(fn (array $row): bool => ($row['level'] ?? null) === 'programme_reconciliation');
+
+        $this->assertTrue(
+            $filteredReconciliation !== null,
+            'A funding/year filter hid unassigned financial activity.'
+        );
+        $this->assertAmount(
+            $amount,
+            $filteredReconciliation['committed'],
+            'Filtered unassigned commitment reconciliation'
+        );
+        $this->assertAmount(
+            $amount,
+            $filteredReconciliation['disbursed'],
+            'Filtered unassigned disbursement reconciliation'
+        );
+        $this->assertAmount(
+            $filteredPosition['totals']['committed'],
+            $filteredPosition['rows']->sum('committed'),
+            'Filtered Project Financial Position commitment reconciliation'
+        );
+        $this->assertAmount(
+            $filteredPosition['totals']['disbursed'],
+            $filteredPosition['rows']->sum('disbursed'),
+            'Filtered Project Financial Position disbursement reconciliation'
+        );
+    }
+
+    private function assertPostedSubActivityCannotBeDeleted(User $admin, Program $program): void
+    {
+        $activity = $program->projects()->firstOrFail()->activities()->firstOrFail();
+        $subActivity = SubActivity::create([
+            'activity_id' => $activity->id,
+            'name' => 'Protected Financial Classification '.Str::upper(Str::random(8)),
+            'expected_outcome_type' => 'text',
+            'expected_outcome_value' => 'Deletion guard regression.',
+            'created_by' => $admin->id,
+        ]);
+        $allocation = SubActivityAllocation::create([
+            'sub_activity_id' => $subActivity->id,
+            'year' => 2025,
+            'amount' => 0,
+        ]);
+        $funding = ProgramFunding::query()
+            ->where('program_id', $program->id)
+            ->firstOrFail();
+        $commitment = BudgetCommitment::create([
+            'program_funding_id' => $funding->id,
+            'allocation_level' => 'sub_activity',
+            'allocation_id' => $subActivity->id,
+            'commitment_amount' => 0,
+            'commitment_year' => 2025,
+            'status' => BudgetCommitment::STATUS_DRAFT,
+            'description' => 'Deletion guard regression.',
+            'created_by' => $admin->id,
+        ]);
+
+        $response = $this->app->make(SubActivityController::class)->destroy($subActivity->id);
+
+        $this->assertTrue($response->isRedirect(), 'A protected sub-activity deletion should redirect with an error.');
+        $this->assertTrue(SubActivity::whereKey($subActivity->id)->exists(), 'A posted sub-activity was deleted.');
+        $this->assertTrue(SubActivityAllocation::whereKey($allocation->id)->exists(), 'Protected allocations were deleted.');
+        $this->assertTrue(BudgetCommitment::whereKey($commitment->id)->exists(), 'Protected commitments were deleted.');
+        $this->assertTrue(
+            str_contains((string) session('error'), 'cannot be deleted'),
+            'The protected sub-activity deletion did not explain the dependency.'
+        );
     }
 
     private function assertAmount(float|int|string $expected, float|int|string $actual, string $label): void

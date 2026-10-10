@@ -52,13 +52,17 @@ class DatabaseHealthCheck extends Command
 
             if (! $this->hasTimestamps($tableName)) {
                 $warnings++;
-                $this->warn("Table '{$tableName}' missing created_at/updated_at timestamps");
+                if ($this->option('detailed')) {
+                    $this->warn("Table '{$tableName}' missing created_at/updated_at timestamps");
+                }
             }
 
             $missingIndexes = $this->checkForeignKeyIndexes($tableName);
             if (! empty($missingIndexes)) {
-                $issues++;
-                $this->error("Table '{$tableName}' missing indexes: " . implode(', ', $missingIndexes));
+                $warnings++;
+                if ($this->option('detailed')) {
+                    $this->warn("Table '{$tableName}' has foreign keys without supporting indexes: " . implode(', ', $missingIndexes));
+                }
             }
 
             $orphaned = $this->checkOrphanedRecords($tableName);
@@ -77,6 +81,9 @@ class DatabaseHealthCheck extends Command
         if ($issues === 0 && $warnings === 0) {
             $this->newLine();
             $this->info('Database is healthy. No issues found.');
+        } elseif ($issues === 0) {
+            $this->newLine();
+            $this->info('No data-integrity failures found. Warnings are schema/performance recommendations.');
         }
 
         $this->newLine();
@@ -115,11 +122,21 @@ class DatabaseHealthCheck extends Command
         $missing = [];
 
         try {
-            $columns = Schema::getColumnListing($table);
-            $indexedColumns = $this->indexedColumns($table);
+            [$schema, $tableName] = $this->tableParts($table);
+            $foreignKeyColumns = collect(DB::select("
+                SELECT DISTINCT kcu.column_name
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                  ON tc.constraint_name = kcu.constraint_name
+                 AND tc.table_schema = kcu.table_schema
+                WHERE tc.constraint_type = 'FOREIGN KEY'
+                  AND tc.table_schema = ?
+                  AND tc.table_name = ?
+            ", [$schema, $tableName]))->pluck('column_name');
+            $indexedColumns = $this->indexedColumns($schema, $tableName);
 
-            foreach ($columns as $column) {
-                if (str_ends_with($column, '_id') && ! in_array($column, $indexedColumns, true)) {
+            foreach ($foreignKeyColumns as $column) {
+                if (! in_array($column, $indexedColumns, true)) {
                     $missing[] = $column;
                 }
             }
@@ -130,7 +147,7 @@ class DatabaseHealthCheck extends Command
         return $missing;
     }
 
-    private function indexedColumns(string $table): array
+    private function indexedColumns(string $schema, string $table): array
     {
         $rows = DB::select("
             SELECT a.attname AS column_name
@@ -138,9 +155,9 @@ class DatabaseHealthCheck extends Command
             JOIN pg_index ix ON t.oid = ix.indrelid
             JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
             JOIN pg_namespace n ON n.oid = t.relnamespace
-            WHERE n.nspname = current_schema()
+            WHERE n.nspname = ?
               AND t.relname = ?
-        ", [$table]);
+        ", [$schema, $table]);
 
         return collect($rows)->pluck('column_name')->unique()->values()->all();
     }
@@ -150,9 +167,11 @@ class DatabaseHealthCheck extends Command
         $orphaned = 0;
 
         try {
+            [$schema, $tableName] = $this->tableParts($table);
             $foreignKeys = DB::select("
                 SELECT
                     kcu.column_name,
+                    ccu.table_schema AS referenced_table_schema,
                     ccu.table_name AS referenced_table_name,
                     ccu.column_name AS referenced_column_name
                 FROM information_schema.table_constraints tc
@@ -163,14 +182,15 @@ class DatabaseHealthCheck extends Command
                     ON ccu.constraint_name = tc.constraint_name
                    AND ccu.table_schema = tc.table_schema
                 WHERE tc.constraint_type = 'FOREIGN KEY'
-                  AND tc.table_schema = current_schema()
+                  AND tc.table_schema = ?
                   AND tc.table_name = ?
-            ", [$table]);
+            ", [$schema, $tableName]);
 
             foreach ($foreignKeys as $fk) {
-                $tableSql = $this->wrapIdentifier($table);
+                $tableSql = $this->wrapIdentifier($schema).'.'.$this->wrapIdentifier($tableName);
                 $columnSql = $this->wrapIdentifier($fk->column_name);
-                $refTableSql = $this->wrapIdentifier($fk->referenced_table_name);
+                $refTableSql = $this->wrapIdentifier($fk->referenced_table_schema)
+                    .'.'.$this->wrapIdentifier($fk->referenced_table_name);
                 $refColumnSql = $this->wrapIdentifier($fk->referenced_column_name);
 
                 $count = DB::selectOne("
@@ -200,5 +220,15 @@ class DatabaseHealthCheck extends Command
     private function wrapIdentifier(string $identifier): string
     {
         return '"' . str_replace('"', '""', $identifier) . '"';
+    }
+
+    /** @return array{0: string, 1: string} */
+    private function tableParts(string $table): array
+    {
+        if (str_contains($table, '.')) {
+            return explode('.', $table, 2);
+        }
+
+        return ['public', $table];
     }
 }

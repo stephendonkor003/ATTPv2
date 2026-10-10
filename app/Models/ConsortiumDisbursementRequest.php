@@ -24,6 +24,9 @@ class ConsortiumDisbursementRequest extends BaseModel
         'reviewed_at',
         'review_notes',
         'paid_at',
+        'portal_idempotency_key',
+        'portal_idempotency_fingerprint',
+        'portal_lock_version',
     ];
 
     protected $casts = [
@@ -32,6 +35,7 @@ class ConsortiumDisbursementRequest extends BaseModel
         'requested_at' => 'datetime',
         'reviewed_at' => 'datetime',
         'paid_at' => 'datetime',
+        'portal_lock_version' => 'integer',
     ];
 
     public function consortium(): BelongsTo
@@ -47,5 +51,10 @@ class ConsortiumDisbursementRequest extends BaseModel
     public function allocation(): BelongsTo
     {
         return $this->belongsTo(ConsortiumFundAllocation::class, 'fund_allocation_id');
+    }
+
+    public function reviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
     }
 }

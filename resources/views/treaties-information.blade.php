@@ -707,6 +707,9 @@
                                             <th>Signed Date</th>
                                             <th>Ratified</th>
                                             <th>Ratified Date</th>
+                                            <th>Acceded</th>
+                                            <th>Accession Date</th>
+                                            <th>Instrument Deposited</th>
                                             <th>Instrument Submitted</th>
                                         </tr>
                                     </thead>
@@ -732,6 +735,9 @@
                                                     </div>
                                                 </td>
                                                 <td>{{ $s['ratified_at'] ? \Carbon\Carbon::parse($s['ratified_at'])->format('d M Y') : '-' }}</td>
+                                                <td>{{ $s['is_acceded'] ? 'Yes' : 'No' }}</td>
+                                                <td>{{ $s['acceded_at'] ? \Carbon\Carbon::parse($s['acceded_at'])->format('d M Y') : '-' }}</td>
+                                                <td>{{ $s['instrument_deposited_at'] ? \Carbon\Carbon::parse($s['instrument_deposited_at'])->format('d M Y') : '-' }}</td>
                                                 <td>
                                                     <div class="status-cell">
                                                         <span class="status-dot {{ $s['is_original_submitted'] ? 'dot-yes' : 'dot-no' }}"></span>
@@ -770,6 +776,7 @@
                                 <th>Member State</th>
                                 <th>Signed</th>
                                 <th>Ratified</th>
+                                <th>Acceded</th>
                                 <th>Instrument</th>
                             </tr>
                         </thead>
@@ -780,6 +787,7 @@
                                     data-country="{{ $row['country_code'] }}"
                                     data-signed="{{ $row['is_signed'] ? '1' : '0' }}"
                                     data-ratified="{{ $row['is_ratified'] ? '1' : '0' }}"
+                                    data-acceded="{{ $row['is_acceded'] ? '1' : '0' }}"
                                     data-submitted="{{ $row['is_original_submitted'] ? '1' : '0' }}"
                                     data-search="{{ strtolower(trim(($row['treaty_title'] ?? '') . ' ' . ($row['reference_code'] ?? '') . ' ' . ($row['country_name'] ?? ''))) }}">
                                     <td class="treaty-name-col">{{ $row['treaty_title'] }}</td>
@@ -793,6 +801,11 @@
                                     <td>
                                         <span class="status-pill {{ $row['is_ratified'] ? 'pill-ratified' : 'pill-no' }}">
                                             {{ $row['is_ratified'] ? 'Ratified' : 'No' }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="status-pill {{ $row['is_acceded'] ? 'pill-ratified' : 'pill-no' }}">
+                                            {{ $row['is_acceded'] ? 'Acceded' : 'No' }}
                                         </span>
                                     </td>
                                     <td>

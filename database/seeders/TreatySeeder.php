@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Treaty;
+use App\Models\TreatyMemberStateStatus;
 use App\Models\TreatySupportingDocument;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
@@ -111,6 +113,62 @@ class TreatySeeder extends Seeder
         'additional protocol to the oau general convention on privileges and immunities'
             => 'Additional Protocol to the OAU General Convention on the Privileges and Immunities of the OAU',
     ];
+    private const CANONICAL_TITLE_ALIASES = [
+        'Accord établissant la zone de libre-échange continentale africaine' => 'Agreement Establishing the African Continental Free Trade Area',
+        "Accord portant création de l'Institut africain de réhabilitation (ARI)" => 'Agreement for the Establishment of the African Rehabilitation Institute (ARI)',
+        'Charte africaine de la démocratie, des élections et de la gouvernance' => 'African Charter on Democracy, Elections and Governance',
+        'Charte Africaine de la Statistique' => 'African Charter on Statistics',
+        "Charte africaine des droits de l'homme et des peuples" => 'African Charter on Human and Peoples\' Rights',
+        "Charte africaine des droits et du bien-être de l'enfant" => 'African Charter on the Rights and Welfare of the Child',
+        'Charte africaine des valeurs et principes de la décentralisation, de la gouvernance locale et du développement local' => 'African Charter on the Values and Principles of Decentralisation, Local Governance and Local Development',
+        "Charte africaine des valeurs et principes de la fonction publique et de l'administration publique" => 'African Charter on Values and Principles of Public Service and Administration',
+        'Charte africaine du transport maritime' => 'African Maritime Transport Charter',
+        'Charte Africaine sur la sécurité routière' => 'Road Safety Charter',
+        'Charte africaine sur la sûreté et la sécurité maritimes et le développement en Afrique (Charte de Lomé)' => 'African Charter on Maritime Security and Safety and Development in Africa (Lome Charter)',
+        'Charte de la Renaissance culturelle africaine' => 'Charter for African Cultural Renaissance',
+        "Constitution de l'Association des organisations africaines de promotion du commerce" => 'Constitution of the Association of African Trade Promotion Organizations',
+        'Constitution de la Commission africaine de l’aviation civile' => 'African Civil Aviation Commission Constitution (AFCAC)',
+        'Convention africaine révisée sur la conservation de la nature et des ressources naturelles' => 'Revised African Convention on the Conservation of Nature and Natural Resources',
+        "Convention de l'OUA régissant les aspects propres aux problèmes des réfugiés en Afrique" => 'OAU Convention Governing the Specific Aspects of Refugee Problems in Africa',
+        "Convention de l'OUA sur l'élimination du mercenariat en Afrique" => 'Convention for the Elimination of Mercenarism in Africa',
+        "Convention de l'OUA sur la prévention et la lutte contre le terrorisme" => 'OAU Convention on the Prevention and Combating of Terrorism',
+        "Convention de l'Union africaine sur la coopération transfrontalière (Convention de Niamey)" => 'African Union Convention on Cross-Border Cooperation (Niamey Convention)',
+        "Convention de l'Union africaine sur la prévention et la lutte contre la corruption" => 'African Union Convention on Preventing and Combating Corruption',
+        "Convention de l'Union africaine sur la protection et l'assistance aux personnes déplacées en Afrique (Convention de Kampala)" => 'African Union Convention for the Protection and Assistance of Internally Displaced Persons in Africa (Kampala Convention)',
+        "Convention de la Commission africaine de l'énergie" => 'Convention of the African Energy Commission',
+        'Convention interafricaine établissant un programme africain de coopération technique' => 'Inter-African Convention Establishing an African Technical Co-operation Programme',
+        "Le Pacte de non-agression et de défense commune de l'Union africaine" => 'The African Union Non-Aggression and Common Defence Pact',
+        "Protocole à la Charte africaine des droits de l'homme et des peuples portant création d'une Cour africaine des droits de l'homme et des peuples" => 'Protocol to the African Charter on Human And Peoples\' Rights on the Establishment of an African Court on Human and Peoples\' Rights',
+        "Protocole à la Charte africaine des droits de l'homme et des peuples relatif aux droits des femmes en Afrique" => 'Protocol to the African Charter on Human and Peoples\' Rights on the Rights of Women in Africa',
+        "Protocole à la Charte africaine des droits de l'homme et des peuples relatif aux droits des personnes âgées" => 'Protocol to the African Charter on Human and Peoples\' Rights on the Rights of Older Persons',
+        "Protocole à la Charte africaine des droits de l'homme et des peuples relatif aux droits des personnes handicapées en Afrique" => 'Protocol to the African Charter on Human and Peoples\' Rights on the Rights of Persons with Disabilities in Africa',
+        "Protocole à la Convention de l'OUA sur la prévention et la lutte contre le terrorisme" => 'Protocol to the OAU Convention on the Prevention and Combating of Terrorism',
+        'Protocole au Traité instituant la Communauté économique africaine relatif à la libre circulation des personnes, au droit de séjour et au droit d’établissement' => 'Protocol to the Treaty Establishing the African Economic Community Relating to Free Movement of Persons, Right of Residence and Right of Establishment',
+        'Protocole au Traité instituant la Communauté économique africaine relatif au Parlement panafricain' => 'Protocol to the Treaty Establishing the African Economic Community Relating to the Pan-African Parliament',
+        "Protocole de la Cour de justice de l'Union africaine" => 'Protocol of the Court of Justice of the African Union',
+        'Protocole portant création du Fonds monétaire africain' => 'Protocol on the Establishment of the African Monetary Fund',
+        "Protocole relatif à la création du Conseil de paix et de sécurité de l'Union africaine" => 'Protocol Relating to the Establishment of the Peace and Security Council of the African Union',
+        "Protocole relatif aux amendements au Protocole sur le Statut de la Cour africaine de justice et des droits de l'homme" => 'Protocol on Amendments to the Protocol on the Statute of the African Court of Justice and Human Rights',
+        "Protocole sur la Banque africaine d'investissement" => 'Protocol on the African Investment Bank',
+        "Protocole sur le Statut de la Cour africaine de justice et des droits de l'homme" => 'Protocol on the Statute of the African Court of Justice and Human Rights',
+        "Protocole sur les amendements à l'Acte constitutif de l'Union africaine" => 'Protocol on the Amendments to the Constitutive Act of the African Union',
+        "Statut de la Commission du droit international de l'Union africaine (AUCIL)" => 'Statute of the African Union Commission on International Law (AUCIL)',
+        'Statut du CDC africain et son cadre de fonctionnement' => 'Statute of the African CDC and Its Framework of Operation',
+        "Statut du Mécanisme de coopération policière de l'Union africaine (AFRIPOL)" => 'Statute of the African Union Mechanism for Police Cooperation (AFRIPOL)',
+        "Statut relatif à la création d'un Fonds d'aide judiciaire pour les organes de défense des droits de l'homme de l'Union africaine" => 'Statute on the Establishment of Legal Aid Fund for the African Union Human Rights Organs',
+        'Textes Règlementaires Et Institutionnels Pour La Mise En Œuvre De La Décision De Yamoussoukro Et Du Cadre Pour La Création D’un Marché Unique Du Transport Aérien En Afrique' => 'Regulatory and Institutional Texts for the Implementation of the Yamoussoukro Decision and Framework Towards the Establishment of a Single African Air Transport Market',
+        'Traité instituant la Communauté économique africaine' => 'Treaty Establishing the African Economic Community',
+        "Traité portant création de l'Agence africaine du médicament" => 'Treaty for the Establishment of the African Medicines Agency (AMA)',
+        "Traité sur la zone exempte d'armes nucléaires en Afrique (Traité de Pelindaba)" => 'The African Nuclear-Weapon-Free Zone Treaty (Pelindaba Treaty)',
+        'General Convention on the Privileges and Immunities of the OAU' => 'General Convention on the Privileges and Immunities of the Organization of African Unity',
+        'Agreement for the Establishment of the African Rehabilitation Institute' => 'Agreement for the Establishment of the African Rehabilitation Institute (ARI)',
+        'Constitution of the African Civil Aviation Commission' => 'African Civil Aviation Commission Constitution (AFCAC)',
+        'Constitution for the African Civil Aviation Commission (Revised Version)' => 'Revised Constitution of the African Civil Aviation Commission',
+        'Additional Protocol to The OAU General Convention on Privileges and Immunities' => 'Additional Protocol to the OAU General Convention on the Privileges and Immunities of the OAU',
+        'Agreement for the Establishment of the African Centre for Fertilizer Development' => 'Convention for the Establishment of the African Centre for Fertilizer Development',
+        'Protocol to the Agreement Establishing the African Continental Free Trade Area on Trade in Goods' => 'Agreement Establishing the African Continental Free Trade Area',
+        'Protocol to the Agreement Establishing the African Continental Free Trade Area on Trade in Services' => 'Agreement Establishing the African Continental Free Trade Area',
+    ];
 
     public function run(): void
     {
@@ -171,13 +229,13 @@ class TreatySeeder extends Seeder
                 $treaty->description = $this->buildDescription($title, $officialMetadata);
             }
             if ($officialMetadata) {
-                if (empty($treaty->adoption_date) && !empty($officialMetadata['adoption_date'])) {
+                if (!empty($officialMetadata['adoption_date']) && $treaty->adoption_date?->toDateString() !== $officialMetadata['adoption_date']) {
                     $treaty->adoption_date = $officialMetadata['adoption_date'];
                 }
-                if (empty($treaty->entry_into_force_date) && !empty($officialMetadata['entry_into_force_date'])) {
+                if (!empty($officialMetadata['entry_into_force_date']) && $treaty->entry_into_force_date?->toDateString() !== $officialMetadata['entry_into_force_date']) {
                     $treaty->entry_into_force_date = $officialMetadata['entry_into_force_date'];
                 }
-                if (empty($treaty->read_more_url) && !empty($officialMetadata['url'])) {
+                if (!empty($officialMetadata['url']) && $treaty->read_more_url !== $officialMetadata['url']) {
                     $treaty->read_more_url = $officialMetadata['url'];
                 }
             }
@@ -207,6 +265,7 @@ class TreatySeeder extends Seeder
         }
 
         $documentStats = $this->syncSupportingDocumentsFromFolders($seedUserId);
+        $duplicatesRemoved = $this->reconcileKnownDuplicateTreaties();
         $descriptionBackfills = $this->backfillSeededDescriptions($officialTreatyIndex, $seedUserId);
 
         $this->command?->info("TreatySeeder synced {$synced} treaty records from au.int and workbook sources.");
@@ -232,9 +291,122 @@ class TreatySeeder extends Seeder
                 . ' extra treaty records from document folders that were not present in the workbook.'
             );
         }
+        if ($duplicatesRemoved > 0) {
+            $this->command?->info("TreatySeeder merged {$duplicatesRemoved} duplicate or translated treaty records into their canonical AU records.");
+        }
 
         $this->command?->info('TreatySeeder syncing AU member-state treaty signature and ratification statuses.');
         $this->call(TreatyConstitutiveActStatusSeeder::class);
+    }
+
+    private function reconcileKnownDuplicateTreaties(): int
+    {
+        $aliases = [];
+        foreach (self::CANONICAL_TITLE_ALIASES as $alias => $canonicalTitle) {
+            $aliases[$this->normalizeForMatching($alias)] = $canonicalTitle;
+        }
+
+        $canonicalTreaties = Treaty::query()->get()->keyBy(fn (Treaty $treaty) => $this->normalizeForMatching($treaty->title));
+        $merged = 0;
+
+        foreach ($aliases as $aliasKey => $canonicalTitle) {
+            $canonical = $canonicalTreaties->get($this->normalizeForMatching($canonicalTitle));
+            if (!$canonical || $aliasKey === $this->normalizeForMatching($canonical->title)) {
+                continue;
+            }
+
+            $duplicates = Treaty::query()
+                ->where('id', '!=', $canonical->id)
+                ->get()
+                ->filter(fn (Treaty $treaty) => $this->normalizeForMatching($treaty->title) === $aliasKey);
+
+            foreach ($duplicates as $duplicate) {
+                DB::transaction(function () use ($canonical, $duplicate): void {
+                    $this->mergeTreatyStatuses($canonical, $duplicate);
+
+                    TreatySupportingDocument::query()
+                        ->where('treaty_id', $duplicate->id)
+                        ->update(['treaty_id' => $canonical->id]);
+
+                    foreach ([
+                        'short_title', 'reference_code', 'description', 'overview', 'key_provisions',
+                        'implementation_framework', 'monitoring_and_reporting', 'read_more_url',
+                        'adoption_date', 'entry_into_force_date', 'created_by', 'updated_by',
+                    ] as $column) {
+                        if (empty($canonical->{$column}) && !empty($duplicate->{$column})) {
+                            $canonical->{$column} = $duplicate->{$column};
+                        }
+                    }
+
+                    if ($duplicate->status === 'active') {
+                        $canonical->status = 'active';
+                    }
+                    $canonical->save();
+                    $duplicate->delete();
+                });
+
+                $merged++;
+            }
+        }
+
+        return $merged;
+    }
+
+    private function mergeTreatyStatuses(Treaty $canonical, Treaty $duplicate): void
+    {
+        $booleanColumns = ['is_signed', 'is_ratified', 'is_acceded', 'is_original_submitted'];
+        $documentColumns = [
+            'signed_document_path' => 'signed proof',
+            'ratified_document_path' => 'ratified proof',
+            'original_document_path' => 'original submission',
+        ];
+
+        TreatyMemberStateStatus::query()
+            ->where('treaty_id', $duplicate->id)
+            ->get()
+            ->each(function (TreatyMemberStateStatus $source) use ($canonical, $booleanColumns, $documentColumns): void {
+                $target = TreatyMemberStateStatus::query()->firstOrNew([
+                    'treaty_id' => $canonical->id,
+                    'member_state_id' => $source->member_state_id,
+                ]);
+
+                if (!$target->exists) {
+                    $source->treaty_id = $canonical->id;
+                    $source->save();
+                    return;
+                }
+
+                foreach ($source->getAttributes() as $column => $value) {
+                    if (in_array($column, ['id', 'treaty_id', 'member_state_id', 'created_at', 'updated_at'], true)) {
+                        continue;
+                    }
+                    if (in_array($column, $booleanColumns, true)) {
+                        $target->{$column} = (bool) $target->{$column} || (bool) $value;
+                    } elseif (empty($target->{$column}) && !empty($value)) {
+                        $target->{$column} = $value;
+                    }
+                }
+
+                foreach ($documentColumns as $column => $label) {
+                    $path = $source->{$column};
+                    if (empty($path)) {
+                        continue;
+                    }
+
+                    TreatySupportingDocument::query()->firstOrCreate(
+                        ['treaty_id' => $canonical->id, 'file_path' => $path],
+                        [
+                            'title' => 'Preserved ' . $label . ' for ' . $source->memberState?->name,
+                            'document_type' => 'pdf',
+                            'file_name' => $source->{str_replace('_path', '_name', $column)} ?: basename($path),
+                            'uploaded_by' => $source->updated_by,
+                        ]
+                    );
+                }
+
+                $target->save();
+                $source->delete();
+            });
     }
 
     /**
@@ -259,13 +431,13 @@ class TreatySeeder extends Seeder
                 $treaty->description = $this->buildDescription($title, $officialMetadata);
 
                 if ($officialMetadata) {
-                    if (empty($treaty->adoption_date) && !empty($officialMetadata['adoption_date'])) {
+                    if (!empty($officialMetadata['adoption_date']) && $treaty->adoption_date?->toDateString() !== $officialMetadata['adoption_date']) {
                         $treaty->adoption_date = $officialMetadata['adoption_date'];
                     }
-                    if (empty($treaty->entry_into_force_date) && !empty($officialMetadata['entry_into_force_date'])) {
+                    if (!empty($officialMetadata['entry_into_force_date']) && $treaty->entry_into_force_date?->toDateString() !== $officialMetadata['entry_into_force_date']) {
                         $treaty->entry_into_force_date = $officialMetadata['entry_into_force_date'];
                     }
-                    if (empty($treaty->read_more_url) && !empty($officialMetadata['url'])) {
+                    if (!empty($officialMetadata['url']) && $treaty->read_more_url !== $officialMetadata['url']) {
                         $treaty->read_more_url = $officialMetadata['url'];
                     }
                 }
@@ -336,8 +508,6 @@ class TreatySeeder extends Seeder
      */
     private function loadOfficialAuTreatyIndex(): array
     {
-        $response = null;
-
         try {
             $response = Http::timeout(45)
                 ->connectTimeout(30)
@@ -345,41 +515,60 @@ class TreatySeeder extends Seeder
                 ->accept('text/html')
                 ->get(self::AU_TREATIES_INDEX_URL);
         } catch (\Throwable $exception) {
-            if (!$this->isSslVerificationFailure($exception)) {
-                $this->command?->warn('TreatySeeder: AU treaty metadata request skipped: ' . $exception->getMessage());
-                return [];
-            }
-
-            $this->command?->warn('TreatySeeder: AU treaty metadata TLS verification failed; retrying without certificate verification.');
-
-            try {
-                $response = Http::withoutVerifying()
-                    ->timeout(45)
-                    ->connectTimeout(30)
-                    ->retry(2, 750)
-                    ->accept('text/html')
-                    ->get(self::AU_TREATIES_INDEX_URL);
-            } catch (\Throwable $fallbackException) {
-                $this->command?->warn('TreatySeeder: AU treaty metadata request skipped: ' . $fallbackException->getMessage());
-                return [];
-            }
+            $this->command?->warn('TreatySeeder: AU treaty metadata request skipped: ' . $exception->getMessage());
+            return $this->loadOfficialTreatyIndexSnapshot();
         }
 
         if (!$response->successful()) {
             $this->command?->warn('TreatySeeder: AU treaty metadata request failed with HTTP ' . $response->status() . '.');
-            return [];
+            return $this->loadOfficialTreatyIndexSnapshot();
         }
 
         return $this->parseOfficialAuTreatyRows($response->body());
     }
 
-    private function isSslVerificationFailure(\Throwable $exception): bool
+    /**
+     * @return array<string, array<string, ?string>>
+     */
+    private function loadOfficialTreatyIndexSnapshot(): array
     {
-        return Str::contains(Str::lower($exception->getMessage()), [
-            'curl error 60',
-            'ssl certificate',
-            'unable to get local issuer certificate',
-        ]);
+        $path = database_path('treaty files/AU_Treaty_Status_Snapshot.json');
+        if (!File::exists($path)) {
+            return [];
+        }
+
+        try {
+            $snapshot = json_decode(File::get($path), true, 512, JSON_THROW_ON_ERROR);
+        } catch (\Throwable $exception) {
+            Log::warning('TreatySeeder: official AU catalog snapshot could not be read.', ['error' => $exception->getMessage()]);
+            return [];
+        }
+
+        $index = [];
+        foreach (($snapshot['catalog'] ?? []) as $item) {
+            $title = trim((string) ($item['title'] ?? ''));
+            if ($title === '') {
+                continue;
+            }
+
+            $metadata = [
+                'title' => $title,
+                'url' => $item['detail_url'] ?? null,
+                'adoption_date' => $item['adoption_date'] ?? null,
+                'entry_into_force_date' => $item['entry_into_force_date'] ?? null,
+                'signature_date' => null,
+                'category' => null,
+            ];
+            foreach ($this->buildMatchKeys($title) as $key) {
+                $index[$key] = $metadata;
+            }
+        }
+
+        if (!empty($index)) {
+            $this->command?->info('Loaded ' . count($snapshot['catalog'] ?? []) . ' canonical treaty titles from the verified AU snapshot dated ' . ($snapshot['fetched_at'] ?? 'unknown') . '.');
+        }
+
+        return $index;
     }
 
     /**
@@ -416,6 +605,9 @@ class TreatySeeder extends Seeder
             }
 
             $url = $this->absoluteAuUrl((string) $titleLink->getAttribute('href'));
+            if ($url && preg_match('#^https?://[^/]+/(?:fr|ar|pt|es|sw)/#i', $url)) {
+                continue;
+            }
             $metadata = [
                 'title' => $title,
                 'url' => $url,
@@ -664,6 +856,10 @@ class TreatySeeder extends Seeder
         foreach ($folders as $folderPath) {
             $folderName = basename($folderPath);
             $treaty = $this->resolveTreatyForFolder($folderName, $treaties, $lookup, $seedUserId, $treatiesCreated);
+            if (!$treaty) {
+                $this->command?->warn("TreatySeeder skipped supporting-document folder with no official treaty match: {$folderName}.");
+                continue;
+            }
 
             $pdfFiles = collect(File::files($folderPath))
                 ->filter(static fn ($file) => Str::lower($file->getExtension()) === 'pdf')
@@ -746,7 +942,7 @@ class TreatySeeder extends Seeder
         array &$lookup,
         ?string $seedUserId,
         int &$treatiesCreated
-    ): Treaty {
+    ): ?Treaty {
         $aliasTitle = $this->resolveAliasTitleForFolder($folderName);
         if ($aliasTitle !== null) {
             foreach ($this->buildMatchKeys($aliasTitle) as $key) {
@@ -771,46 +967,7 @@ class TreatySeeder extends Seeder
             return $matchedTreaty;
         }
 
-        $title = $aliasTitle ?? $this->prepareTreatyTitleFromFolder($folderName);
-        $treaty = Treaty::query()->firstOrNew(['title' => $title]);
-        $isNew = !$treaty->exists;
-
-        if (empty($treaty->short_title)) {
-            $treaty->short_title = Str::limit($title, 120, '');
-        }
-        if (empty($treaty->description)) {
-            $treaty->description = $this->buildFolderDescription($folderName);
-        }
-        if ($isNew && empty($treaty->status)) {
-            $treaty->status = 'active';
-        }
-        if (empty($treaty->reference_code)) {
-            $deterministicIndex = (int) sprintf('%u', crc32(Str::lower($title)));
-            $treaty->reference_code = $this->buildReferenceCode($title, $deterministicIndex);
-        }
-
-        if ($isNew && $seedUserId) {
-            $treaty->created_by = $seedUserId;
-        }
-        if ($seedUserId) {
-            $treaty->updated_by = $seedUserId;
-        }
-
-        $treaty->save();
-
-        if ($isNew) {
-            $treaties->push($treaty);
-            $treatiesCreated++;
-        }
-
-        foreach ($this->buildMatchKeys($treaty->title) as $key) {
-            $lookup[$key] = $treaty;
-        }
-        foreach ($this->buildMatchKeys($folderName) as $key) {
-            $lookup[$key] = $treaty;
-        }
-
-        return $treaty;
+        return null;
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
+use App\Models\BudgetCommitment;
 use App\Models\SubActivity;
 use App\Models\Activity;
 use App\Models\SubActivityAllocation;
@@ -357,13 +358,27 @@ public function updateAllocations(Request $request, $id)
 
 public function destroy($id)
 {
-    $sub = SubActivity::findOrFail($id);
-    $this->assertSubActivityInScope($sub);
+    try {
+        DB::transaction(function () use ($id): void {
+            $sub = SubActivity::query()->lockForUpdate()->findOrFail($id);
+            $this->assertSubActivityInScope($sub);
+            $sub->assertHasNoDependentRecords();
 
-    // Optional → delete allocations first if foreign key constraints apply
-    $sub->allocations()->delete();
+            // Optional → delete allocations first if foreign key constraints apply
+            $sub->allocations()->delete();
 
-    $sub->delete();
+            $sub->delete();
+        });
+    } catch (\DomainException $exception) {
+        return back()->with('error', $exception->getMessage());
+    } catch (\Throwable $exception) {
+        report($exception);
+
+        return back()->with(
+            'error',
+            'The sub-activity could not be deleted. No budget or financial records were removed.'
+        );
+    }
 
     return back()->with('success', 'Sub-Activity deleted successfully.');
 }
@@ -463,6 +478,16 @@ public function destroy($id)
         }
 
         $activityAllocationsByYear = $sub->activity->allocations->keyBy(fn ($allocation) => (int) $allocation->year);
+        $protectedCommitmentsByYear = $sub->exists
+            ? BudgetCommitment::query()
+                ->where('allocation_level', 'sub_activity')
+                ->where('allocation_id', $sub->id)
+                ->whereIn('status', [BudgetCommitment::STATUS_SUBMITTED, BudgetCommitment::STATUS_APPROVED])
+                ->selectRaw('commitment_year, SUM(commitment_amount) AS committed_amount')
+                ->groupBy('commitment_year')
+                ->pluck('committed_amount', 'commitment_year')
+            : collect();
+
         foreach ($allocations as $year => $amount) {
             $activityYearBudget = round((float) optional($activityAllocationsByYear->get($year))->amount, 2);
             $otherSubActivitiesYearTotal = round((float) $sub->activity->subActivities
@@ -475,8 +500,18 @@ public function destroy($id)
             $currentAmount = round((float) $sub->allocations
                 ->where('year', $year)
                 ->sum('amount'), 2);
+            $protectedCommitment = round((float) $protectedCommitmentsByYear->get($year, 0), 2);
             $currentCombinedYearTotal = round($otherSubActivitiesYearTotal + $currentAmount, 2);
             $combinedYearTotal = round($otherSubActivitiesYearTotal + (float) $amount, 2);
+
+            // Preserve historical exceptions, but never allow an allocation
+            // edit to create or deepen a shortfall below posted commitments.
+            if ((float) $amount + 0.004 < $protectedCommitment
+                && (float) $amount < $currentAmount - 0.004) {
+                return 'Sub-activity allocations were not saved because year '.$year
+                    .' has '.number_format($protectedCommitment, 2)
+                    .' in submitted or approved commitments. The allocation cannot be reduced below that posted amount.';
+            }
 
             if ($combinedYearTotal > $activityYearBudget + 0.004
                 && $combinedYearTotal > $currentCombinedYearTotal + 0.004) {

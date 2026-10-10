@@ -6,11 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
 use App\Models\Activity;
 use App\Models\BudgetCommitment;
+use App\Models\ConsortiumThinkTank;
 use App\Models\Procurement;
 use App\Models\ProcurementDeliverable;
 use App\Models\ProcurementDisbursement;
 use App\Models\ProcurementPurchaseOrder;
 use App\Models\ProcurementPurchaseOrderItemEvidence;
+use App\Models\ProcurementPurchaseOrderSubmissionClaim;
 use App\Models\Project;
 use App\Models\PurchaseRequest;
 use App\Models\Resource;
@@ -18,12 +20,18 @@ use App\Models\ResourceCategory;
 use App\Models\SubActivity;
 use App\Models\User;
 use App\Services\EvaluationReworkGuard;
+use App\Services\ProcurementSubmissionIdempotencyService;
+use App\Services\ThinkTankFundingSourceService;
+use App\Services\ThinkTankProcurementBudgetGuard;
 use App\Services\VendorPurchaseOrderEvidenceResubmissionNotificationService;
 use App\Services\VendorPurchaseOrderNotificationService;
+use App\Support\ExactMoney;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -31,8 +39,10 @@ class ProcurementPurchaseOrderController extends Controller
 {
     use GovernanceScope;
 
-    public function __construct()
-    {
+    public function __construct(
+        private readonly ThinkTankProcurementBudgetGuard $thinkTankBudgetGuard,
+        private readonly ProcurementSubmissionIdempotencyService $submissionIdempotency,
+    ) {
         $this->middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_requests.view'])
             ->except('publicLineItemEvidenceDocumentPreview');
     }
@@ -137,6 +147,7 @@ class ProcurementPurchaseOrderController extends Controller
     public function edit(ProcurementPurchaseOrder $purchaseOrder)
     {
         $this->assertPurchaseOrderInScope($purchaseOrder);
+        $this->assertNotGovernedThinkTankFundingSourceMutation($purchaseOrder);
 
         $purchaseOrder->load([
             'deliverables',
@@ -267,6 +278,7 @@ class ProcurementPurchaseOrderController extends Controller
             'name' => auth()->user()?->name,
             'email' => auth()->user()?->email,
         ];
+        $idempotencyKey = (string) Str::uuid();
 
         $itemEvidenceDefaults = [];
         if ($purchaseOrder) {
@@ -301,13 +313,15 @@ class ProcurementPurchaseOrderController extends Controller
             'resourcesByCategory',
             'buyerDefaults',
             'purchaseOrder',
-            'itemEvidenceDefaults'
+            'itemEvidenceDefaults',
+            'idempotencyKey',
         );
     }
 
     public function store(Request $request)
     {
         $data = $request->validate([
+            'idempotency_key' => ['required', 'uuid'],
             'purchase_request_id' => ['required', 'exists:myb_purchase_requests,id'],
             'budget_commitment_id' => ['required', 'exists:myb_budget_commitments,id'],
             'procurement_id' => [
@@ -325,11 +339,11 @@ class ProcurementPurchaseOrderController extends Controller
             'line_item_dates' => ['nullable', 'array'],
             'line_item_dates.*' => ['nullable', 'date'],
             'line_item_unit_prices' => ['nullable', 'array'],
-            'line_item_unit_prices.*' => ['nullable', 'numeric', 'min:0.01'],
+            'line_item_unit_prices.*' => ['nullable', 'numeric', 'decimal:0,2', 'min:0.01', 'max:'.ExactMoney::DATABASE_MAX],
             'line_item_quantities' => ['nullable', 'array'],
-            'line_item_quantities.*' => ['nullable', 'numeric', 'min:0.01'],
+            'line_item_quantities.*' => ['nullable', 'numeric', 'decimal:0,2', 'min:0.01', 'max:'.ExactMoney::DATABASE_MAX],
             'line_item_amounts' => ['nullable', 'array'],
-            'line_item_amounts.*' => ['nullable', 'numeric', 'min:0.01'],
+            'line_item_amounts.*' => ['nullable', 'numeric', 'decimal:0,2', 'min:0.01', 'max:'.ExactMoney::DATABASE_MAX],
             'vendor_id' => ['nullable', 'exists:users,id'],
             'po_title' => ['nullable', 'string', 'max:255'],
             'supplier_reference' => ['nullable', 'string', 'max:255'],
@@ -350,7 +364,7 @@ class ProcurementPurchaseOrderController extends Controller
             'inspection_requirements' => ['nullable', 'string', 'max:2000'],
             'special_instructions' => ['nullable', 'string', 'max:2000'],
             'terms_conditions' => ['nullable', 'string', 'max:5000'],
-            'amount' => ['required', 'numeric', 'min:0.01'],
+            'amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01', 'max:'.ExactMoney::DATABASE_MAX],
             'currency' => ['nullable', 'string', 'max:10'],
             'status' => ['required', 'in:draft,issued,closed,cancelled'],
             'issued_at' => ['nullable', 'date'],
@@ -360,9 +374,9 @@ class ProcurementPurchaseOrderController extends Controller
             'item_evidence' => ['nullable', 'array'],
             'item_evidence.*.is_met' => ['nullable', 'boolean'],
             'item_evidence.*.deliverable_date' => ['nullable', 'date'],
-            'item_evidence.*.delivered_unit_price' => ['nullable', 'numeric', 'min:0.01'],
-            'item_evidence.*.delivered_quantity' => ['nullable', 'numeric', 'min:0'],
-            'item_evidence.*.delivered_amount' => ['nullable', 'numeric', 'min:0'],
+            'item_evidence.*.delivered_unit_price' => ['nullable', 'numeric', 'decimal:0,2', 'min:0.01', 'max:'.ExactMoney::DATABASE_MAX],
+            'item_evidence.*.delivered_quantity' => ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'max:'.ExactMoney::DATABASE_MAX],
+            'item_evidence.*.delivered_amount' => ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'max:'.ExactMoney::DATABASE_MAX],
             'item_evidence.*.notes' => ['nullable', 'string', 'max:3000'],
             'item_evidence.*.document_names' => ['nullable', 'array', 'max:20'],
             'item_evidence.*.document_names.*' => ['nullable', 'string', 'max:255'],
@@ -406,13 +420,6 @@ class ProcurementPurchaseOrderController extends Controller
 
         $data['amount'] = $this->lineItemTotalFromRequest($request, $purchaseRequest);
 
-        $remaining = $this->remainingCommitmentAmount($commitment);
-        if ((float) $data['amount'] > $remaining) {
-            throw ValidationException::withMessages([
-                'amount' => 'The purchase order amount cannot exceed the remaining commitment balance of '.number_format($remaining, 2).'.',
-            ]);
-        }
-
         $submittedDeliverableIds = collect($data['deliverable_ids'] ?? [])
             ->filter()
             ->map(fn ($id) => (string) $id)
@@ -429,23 +436,11 @@ class ProcurementPurchaseOrderController extends Controller
             ->unique()
             ->values();
 
-        $procurement = null;
-        if (! empty($data['procurement_id'])) {
-            $procurement = Procurement::findOrFail($data['procurement_id']);
-            $this->assertProcurementInScope($procurement);
-
-            if ($deliverableIds->isNotEmpty()) {
-                $invalid = ProcurementDeliverable::whereIn('id', $deliverableIds)
-                    ->where('procurement_id', '!=', $procurement->id)
-                    ->exists();
-
-                if ($invalid) {
-                    throw ValidationException::withMessages([
-                        'deliverable_ids' => 'One or more selected deliverables do not belong to the chosen procurement.',
-                    ]);
-                }
-            }
-        } elseif ($submittedDeliverableIds->isNotEmpty()) {
+        $procurement = $this->authoritativeProcurementForDeliverables(
+            $data['procurement_id'] ?? null,
+            $deliverableIds,
+        );
+        if (! $procurement && $submittedDeliverableIds->isNotEmpty()) {
             throw ValidationException::withMessages([
                 'procurement_id' => 'Select the procurement before choosing additional deliverables.',
             ]);
@@ -460,22 +455,92 @@ class ProcurementPurchaseOrderController extends Controller
             $vendor = User::query()->find($procurement->awarded_vendor_id);
         }
 
-        $purchaseOrder = DB::transaction(function () use ($commitment, $data, $deliverableIds, $procurement, $purchaseRequest, $request, $vendor) {
-            if ($procurement) {
-                $procurement = app(EvaluationReworkGuard::class)
-                    ->lockForDownstreamTransition($procurement);
-            }
+        $submissionFingerprint = $this->submissionIdempotency->fingerprint(
+            'purchase_order.create',
+            $request->user()?->id,
+            [
+                'validated' => collect($data)->except('idempotency_key')->all(),
+                'authoritative_procurement_id' => $procurement?->id,
+                'deliverable_ids' => $deliverableIds->all(),
+                'files' => $request->allFiles(),
+            ],
+        );
+        $earlyReplay = $this->purchaseOrderReplay(
+            (string) $data['idempotency_key'],
+            $submissionFingerprint,
+            $request->user()?->id,
+        );
+        if ($earlyReplay) {
+            return redirect()
+                ->route('procurement.purchase-orders.show', $earlyReplay)
+                ->with('success', 'This purchase-order submission was already processed; the original record is shown.');
+        }
 
-            $this->syncPurchaseRequestLineItems($request, $purchaseRequest);
+        $newPurchaseOrderId = (string) Str::uuid();
+        $newReferenceNumber = ProcurementPurchaseOrder::generateReference();
+        $remainingCents = $this->remainingCommitmentCents($commitment);
+        if (ExactMoney::cents($data['amount']) > $remainingCents) {
+            throw ValidationException::withMessages([
+                'amount' => 'The purchase order amount cannot exceed the remaining commitment balance of '.ExactMoney::fromCents($remainingCents).'.',
+            ]);
+        }
+        $replayed = false;
 
-            $purchaseOrder = ProcurementPurchaseOrder::create([
+        try {
+            $purchaseOrder = DB::transaction(function () use (
+                $commitment,
+                $data,
+                $deliverableIds,
+                $procurement,
+                $purchaseRequest,
+                $request,
+                $submissionFingerprint,
+                $vendor,
+                $newPurchaseOrderId,
+                $newReferenceNumber,
+                &$replayed,
+            ) {
+                [$claim, $claimReplay] = $this->claimPurchaseOrderSubmission(
+                    (string) $data['idempotency_key'],
+                    $submissionFingerprint,
+                    $request->user()?->id,
+                );
+                if ($claimReplay) {
+                    $replayed = true;
+
+                    return $claim->resultPurchaseOrder;
+                }
+                if ($procurement) {
+                    $procurement = $this->thinkTankBudgetGuard->assertPurchaseOrderBoundary(
+                        $procurement,
+                        $data['amount'],
+                        $this->commitmentCurrency($commitment),
+                        $data['status'],
+                        null,
+                        $commitment->commitment_year,
+                    );
+                    $procurement = app(EvaluationReworkGuard::class)
+                        ->lockForDownstreamTransition($procurement);
+                }
+                $commitment = $this->lockCommitmentCapacity(
+                    $commitment,
+                    $purchaseRequest,
+                    ExactMoney::cents($data['amount']),
+                );
+
+                $this->syncPurchaseRequestLineItems($request, $purchaseRequest);
+
+                $purchaseOrder = ProcurementPurchaseOrder::query()->forceCreate([
+                'id' => $newPurchaseOrderId,
                 'budget_commitment_id' => $commitment->id,
                 'purchase_request_id' => $purchaseRequest->id,
                 'procurement_id' => $procurement?->id,
+                'consortium_id' => $procurement?->consortium_id,
+                'think_tank_member_id' => $procurement?->think_tank_member_id,
                 'vendor_id' => $vendor?->id,
                 'sub_activity_id' => $commitment->allocation_level === 'sub_activity' ? $commitment->allocation_id : null,
                 'governance_node_id' => $commitment->governance_node_id,
-                'reference_no' => ProcurementPurchaseOrder::generateReference(),
+                'reference_no' => $newReferenceNumber,
                 'po_title' => $data['po_title'] ?: 'Purchase Order for '.$purchaseRequest->reference_no,
                 'supplier_reference' => $data['supplier_reference'] ?? null,
                 'contract_reference' => $data['contract_reference'] ?? null,
@@ -498,33 +563,55 @@ class ProcurementPurchaseOrderController extends Controller
                 'amount' => $data['amount'],
                 'currency' => $this->commitmentCurrency($commitment),
                 'status' => $data['status'],
+                'submission_idempotency_key' => $data['idempotency_key'],
+                'submission_idempotency_fingerprint' => $submissionFingerprint,
                 'created_by' => auth()->id(),
                 'issued_at' => $data['issued_at'] ?? now(),
                 'expected_delivery_date' => $data['expected_delivery_date'] ?? $purchaseRequest->delivery_date?->toDateString(),
                 'valid_until' => $data['valid_until'] ?? null,
-            ]);
+                ]);
 
-            $this->attachSupportingDocument($request, $purchaseOrder);
+                $this->attachSupportingDocument($request, $purchaseOrder);
 
-            if ($deliverableIds->isNotEmpty()) {
-                $purchaseOrder->deliverables()->sync($deliverableIds->all());
+                if ($deliverableIds->isNotEmpty()) {
+                    $purchaseOrder->deliverables()->sync($deliverableIds->all());
+                }
+
+                $this->storeLineItemEvidence($request, $purchaseOrder, $purchaseRequest);
+                $claim->update([
+                    'result_purchase_order_id' => $purchaseOrder->id,
+                    'status' => 'completed',
+                ]);
+
+                return $purchaseOrder;
+            }, 3);
+        } catch (QueryException $exception) {
+            $purchaseOrder = $this->purchaseOrderReplay(
+                (string) $data['idempotency_key'],
+                $submissionFingerprint,
+                $request->user()?->id,
+            );
+            if (! $purchaseOrder) {
+                throw $exception;
             }
+            $replayed = true;
+        }
 
-            $this->storeLineItemEvidence($request, $purchaseOrder, $purchaseRequest);
-
-            return $purchaseOrder;
-        });
-
-        app(VendorPurchaseOrderNotificationService::class)->notifyCreated($purchaseOrder->fresh());
+        if (! $replayed) {
+            app(VendorPurchaseOrderNotificationService::class)->notifyCreated($purchaseOrder->fresh());
+        }
 
         return redirect()
             ->route('procurement.purchase-orders.show', $purchaseOrder)
-            ->with('success', 'Purchase order created from approved purchase request '.$purchaseRequest->reference_no.'.');
+            ->with('success', $replayed
+                ? 'This purchase-order submission was already processed; the original record is shown.'
+                : 'Purchase order created from approved purchase request '.$purchaseRequest->reference_no.'.');
     }
 
     public function update(Request $request, ProcurementPurchaseOrder $purchaseOrder)
     {
         $this->assertPurchaseOrderInScope($purchaseOrder);
+        $this->assertNotGovernedThinkTankFundingSourceMutation($purchaseOrder);
 
         $data = $request->validate([
             'purchase_request_id' => ['required', 'exists:myb_purchase_requests,id'],
@@ -544,11 +631,11 @@ class ProcurementPurchaseOrderController extends Controller
             'line_item_dates' => ['nullable', 'array'],
             'line_item_dates.*' => ['nullable', 'date'],
             'line_item_unit_prices' => ['nullable', 'array'],
-            'line_item_unit_prices.*' => ['nullable', 'numeric', 'min:0.01'],
+            'line_item_unit_prices.*' => ['nullable', 'numeric', 'decimal:0,2', 'min:0.01', 'max:'.ExactMoney::DATABASE_MAX],
             'line_item_quantities' => ['nullable', 'array'],
-            'line_item_quantities.*' => ['nullable', 'numeric', 'min:0.01'],
+            'line_item_quantities.*' => ['nullable', 'numeric', 'decimal:0,2', 'min:0.01', 'max:'.ExactMoney::DATABASE_MAX],
             'line_item_amounts' => ['nullable', 'array'],
-            'line_item_amounts.*' => ['nullable', 'numeric', 'min:0.01'],
+            'line_item_amounts.*' => ['nullable', 'numeric', 'decimal:0,2', 'min:0.01', 'max:'.ExactMoney::DATABASE_MAX],
             'vendor_id' => ['nullable', 'exists:users,id'],
             'po_title' => ['nullable', 'string', 'max:255'],
             'supplier_reference' => ['nullable', 'string', 'max:255'],
@@ -569,7 +656,7 @@ class ProcurementPurchaseOrderController extends Controller
             'inspection_requirements' => ['nullable', 'string', 'max:2000'],
             'special_instructions' => ['nullable', 'string', 'max:2000'],
             'terms_conditions' => ['nullable', 'string', 'max:5000'],
-            'amount' => ['required', 'numeric', 'min:0.01'],
+            'amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01', 'max:'.ExactMoney::DATABASE_MAX],
             'currency' => ['nullable', 'string', 'max:10'],
             'status' => ['required', 'in:draft,issued,closed,cancelled'],
             'issued_at' => ['nullable', 'date'],
@@ -579,9 +666,9 @@ class ProcurementPurchaseOrderController extends Controller
             'item_evidence' => ['nullable', 'array'],
             'item_evidence.*.is_met' => ['nullable', 'boolean'],
             'item_evidence.*.deliverable_date' => ['nullable', 'date'],
-            'item_evidence.*.delivered_unit_price' => ['nullable', 'numeric', 'min:0.01'],
-            'item_evidence.*.delivered_quantity' => ['nullable', 'numeric', 'min:0'],
-            'item_evidence.*.delivered_amount' => ['nullable', 'numeric', 'min:0'],
+            'item_evidence.*.delivered_unit_price' => ['nullable', 'numeric', 'decimal:0,2', 'min:0.01', 'max:'.ExactMoney::DATABASE_MAX],
+            'item_evidence.*.delivered_quantity' => ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'max:'.ExactMoney::DATABASE_MAX],
+            'item_evidence.*.delivered_amount' => ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'max:'.ExactMoney::DATABASE_MAX],
             'item_evidence.*.notes' => ['nullable', 'string', 'max:3000'],
             'item_evidence.*.document_names' => ['nullable', 'array', 'max:20'],
             'item_evidence.*.document_names.*' => ['nullable', 'string', 'max:255'],
@@ -624,10 +711,10 @@ class ProcurementPurchaseOrderController extends Controller
 
         $data['amount'] = $this->lineItemTotalFromRequest($request, $purchaseRequest);
 
-        $remaining = $this->remainingCommitmentAmount($commitment, $purchaseOrder);
-        if ((float) $data['amount'] > $remaining) {
+        $remainingCents = $this->remainingCommitmentCents($commitment, $purchaseOrder);
+        if (ExactMoney::cents($data['amount']) > $remainingCents) {
             throw ValidationException::withMessages([
-                'amount' => 'The purchase order amount cannot exceed the remaining commitment balance of '.number_format($remaining, 2).'.',
+                'amount' => 'The purchase order amount cannot exceed the remaining commitment balance of '.ExactMoney::fromCents($remainingCents).'.',
             ]);
         }
 
@@ -647,27 +734,17 @@ class ProcurementPurchaseOrderController extends Controller
             ->unique()
             ->values();
 
-        $procurement = null;
-        if (! empty($data['procurement_id'])) {
-            $procurement = Procurement::findOrFail($data['procurement_id']);
-            $this->assertProcurementInScope($procurement);
-
-            if ($deliverableIds->isNotEmpty()) {
-                $invalid = ProcurementDeliverable::whereIn('id', $deliverableIds)
-                    ->where('procurement_id', '!=', $procurement->id)
-                    ->exists();
-
-                if ($invalid) {
-                    throw ValidationException::withMessages([
-                        'deliverable_ids' => 'One or more selected deliverables do not belong to the chosen procurement.',
-                    ]);
-                }
-            }
-        } elseif ($submittedDeliverableIds->isNotEmpty()) {
+        $procurement = $this->authoritativeProcurementForDeliverables(
+            $data['procurement_id'] ?? null,
+            $deliverableIds,
+        );
+        if (! $procurement && $submittedDeliverableIds->isNotEmpty()) {
             throw ValidationException::withMessages([
                 'procurement_id' => 'Select the procurement before choosing additional deliverables.',
             ]);
         }
+
+        $this->assertExistingThinkTankOwnershipPreserved($purchaseOrder, $procurement);
 
         $vendor = null;
         if (! empty($data['vendor_id'])) {
@@ -683,13 +760,44 @@ class ProcurementPurchaseOrderController extends Controller
 
         DB::transaction(function () use ($commitment, $data, $deliverableIds, $procurement, $purchaseOrder, $purchaseRequest, $request, $vendor) {
             if ($procurement) {
+                $procurement = $this->thinkTankBudgetGuard->assertPurchaseOrderBoundary(
+                    $procurement,
+                    $data['amount'],
+                    $this->commitmentCurrency($commitment),
+                    $data['status'],
+                    $purchaseOrder,
+                    $commitment->commitment_year,
+                );
                 $procurement = app(EvaluationReworkGuard::class)
                     ->lockForDownstreamTransition($procurement);
             }
+            $commitment = $this->lockCommitmentCapacity(
+                $commitment,
+                $purchaseRequest,
+                ExactMoney::cents($data['amount']),
+                $purchaseOrder,
+            );
             $lockedPurchaseOrder = ProcurementPurchaseOrder::query()
                 ->whereKey($purchaseOrder->getKey())
+                ->with('procurement')
                 ->lockForUpdate()
                 ->firstOrFail();
+            $this->assertNotGovernedThinkTankFundingSourceMutation($lockedPurchaseOrder);
+            $this->assertExistingThinkTankOwnershipPreserved($lockedPurchaseOrder, $procurement);
+            $lockedPayments = $lockedPurchaseOrder->disbursements()
+                ->lockForUpdate()
+                ->get();
+            $persistedStatus = $this->purchaseOrderStatusForRecordedPayments(
+                $lockedPayments,
+                $data['amount'],
+                $data['status'],
+            );
+            $this->assertPurchaseOrderPaymentBoundary(
+                $lockedPurchaseOrder,
+                $lockedPayments,
+                $data['amount'],
+                $persistedStatus,
+            );
 
             $this->syncPurchaseRequestLineItems($request, $purchaseRequest);
 
@@ -697,6 +805,8 @@ class ProcurementPurchaseOrderController extends Controller
                 'budget_commitment_id' => $commitment->id,
                 'purchase_request_id' => $purchaseRequest->id,
                 'procurement_id' => $procurement?->id,
+                'consortium_id' => $procurement?->consortium_id ?? $lockedPurchaseOrder->consortium_id,
+                'think_tank_member_id' => $procurement?->think_tank_member_id ?? $lockedPurchaseOrder->think_tank_member_id,
                 'vendor_id' => $vendor?->id,
                 'sub_activity_id' => $commitment->allocation_level === 'sub_activity' ? $commitment->allocation_id : null,
                 'governance_node_id' => $commitment->governance_node_id,
@@ -721,7 +831,7 @@ class ProcurementPurchaseOrderController extends Controller
                 'terms_conditions' => $data['terms_conditions'] ?? null,
                 'amount' => $data['amount'],
                 'currency' => $this->commitmentCurrency($commitment),
-                'status' => $data['status'],
+                'status' => $persistedStatus,
                 'issued_at' => $data['issued_at'] ?? $lockedPurchaseOrder->issued_at ?? now(),
                 'expected_delivery_date' => $data['expected_delivery_date'] ?? $purchaseRequest->delivery_date?->toDateString(),
                 'valid_until' => $data['valid_until'] ?? null,
@@ -1568,17 +1678,12 @@ HTML;
     {
         $this->assertPurchaseOrderInScope($purchaseOrder);
 
-        if ($purchaseOrder->disbursements()->recognizedPayment()->exists()) {
-            return back()->withErrors([
-                'purchase_order' => 'This purchase order has recorded payments and cannot be deleted. Reverse the payments first so the financial audit trail remains intact.',
-            ]);
-        }
-
         DB::transaction(function () use ($purchaseOrder) {
-            $purchaseOrder->disbursements()->update(['purchase_order_id' => null]);
-            $this->deleteLineItemEvidenceDocuments($purchaseOrder);
-            $this->deleteSupportingDocument($purchaseOrder);
-            $purchaseOrder->delete();
+            $lockedPurchaseOrder = $this->thinkTankBudgetGuard->lockHardDeleteBoundary($purchaseOrder);
+            $lockedPurchaseOrder->disbursements()->update(['purchase_order_id' => null]);
+            $this->deleteLineItemEvidenceDocuments($lockedPurchaseOrder);
+            $this->deleteSupportingDocument($lockedPurchaseOrder);
+            $lockedPurchaseOrder->delete();
         });
 
         return redirect()
@@ -1605,6 +1710,175 @@ HTML;
         if (! $purchaseOrder->governance_node_id || ! in_array($purchaseOrder->governance_node_id, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to this purchase order.');
         }
+    }
+
+    private function assertExistingThinkTankOwnershipPreserved(
+        ProcurementPurchaseOrder $purchaseOrder,
+        ?Procurement $targetProcurement,
+    ): void {
+        $currentProcurement = $purchaseOrder->relationLoaded('procurement')
+            ? $purchaseOrder->procurement
+            : $purchaseOrder->procurement()->first();
+        $hasThinkTankMarker = filled($purchaseOrder->think_tank_member_id)
+            || filled($purchaseOrder->consortium_id)
+            || ($currentProcurement && (
+                $currentProcurement->procurement_owner_type === 'think_tank'
+                || filled($currentProcurement->think_tank_member_id)
+                || filled($currentProcurement->think_tank_procurement_plan_id)
+            ));
+        if (! $hasThinkTankMarker) {
+            return;
+        }
+
+        $targetIsSameProcurement = $targetProcurement
+            && (! $currentProcurement || (string) $targetProcurement->id === (string) $currentProcurement->id);
+        $targetOwnsTenant = $targetProcurement
+            && filled($targetProcurement->think_tank_member_id)
+            && filled($targetProcurement->consortium_id)
+            && (! filled($purchaseOrder->think_tank_member_id)
+                || (string) $purchaseOrder->think_tank_member_id === (string) $targetProcurement->think_tank_member_id)
+            && (! filled($purchaseOrder->consortium_id)
+                || (string) $purchaseOrder->consortium_id === (string) $targetProcurement->consortium_id);
+
+        if (! $targetIsSameProcurement || ! $targetOwnsTenant) {
+            throw ValidationException::withMessages([
+                'procurement_id' => 'A Think Tank purchase order cannot be detached from, moved away from, or reclassified outside its budget-controlled procurement.',
+            ]);
+        }
+    }
+
+    private function assertNotGovernedThinkTankFundingSourceMutation(
+        ProcurementPurchaseOrder $purchaseOrder,
+    ): void {
+        if (strtolower((string) $purchaseOrder->po_type) === 'think_tank_transfer') {
+            throw ValidationException::withMessages([
+                'purchase_order' => 'Secretariat-to-Think-Tank funding purchase orders must be corrected through the governed funding workflow.',
+            ]);
+        }
+        if (! filled($purchaseOrder->think_tank_member_id) || ! filled($purchaseOrder->consortium_id)) {
+            return;
+        }
+
+        $member = ConsortiumThinkTank::query()
+            ->whereKey($purchaseOrder->think_tank_member_id)
+            ->where('consortium_id', $purchaseOrder->consortium_id)
+            ->first();
+        if ($member && app(ThinkTankFundingSourceService::class)
+            ->incomingPurchaseOrdersQuery($member)
+            ->whereKey($purchaseOrder->id)
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'purchase_order' => 'Secretariat-to-Think-Tank funding purchase orders must be corrected through the governed funding workflow.',
+            ]);
+        }
+    }
+
+    private function assertPurchaseOrderPaymentBoundary(
+        ProcurementPurchaseOrder $purchaseOrder,
+        \Illuminate\Support\Collection $payments,
+        mixed $proposedAmount,
+        string $proposedStatus,
+    ): void {
+        $paidCents = $payments
+            ->filter(fn (ProcurementDisbursement $payment): bool => filled($payment->paid_at)
+                && in_array(strtolower((string) $payment->status), ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES, true))
+            ->sum(fn (ProcurementDisbursement $payment): int => ExactMoney::cents($payment->amount));
+        $proposedCents = ExactMoney::cents($proposedAmount);
+
+        if ($proposedCents < $paidCents) {
+            throw ValidationException::withMessages([
+                'amount' => 'The purchase-order amount cannot be reduced below its recorded payments.',
+            ]);
+        }
+        if ($paidCents > 0 && in_array(strtolower($proposedStatus), ['draft', 'cancelled'], true)) {
+            throw ValidationException::withMessages([
+                'status' => 'A purchase order with recorded payments cannot be moved to draft or cancelled status. Reverse the payments first.',
+            ]);
+        }
+    }
+
+    private function purchaseOrderStatusForRecordedPayments(
+        \Illuminate\Support\Collection $payments,
+        mixed $proposedAmount,
+        string $proposedStatus,
+    ): string {
+        $paidCents = $payments
+            ->filter(fn (ProcurementDisbursement $payment): bool => filled($payment->paid_at)
+                && in_array(strtolower((string) $payment->status), ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES, true))
+            ->sum(fn (ProcurementDisbursement $payment): int => ExactMoney::cents($payment->amount));
+
+        if ($paidCents <= 0) {
+            return $proposedStatus;
+        }
+
+        return $paidCents >= ExactMoney::cents($proposedAmount)
+            ? 'paid'
+            : 'partial_paid';
+    }
+
+    private function purchaseOrderReplay(
+        string $idempotencyKey,
+        string $fingerprint,
+        mixed $actorId,
+        bool $lock = false,
+    ): ?ProcurementPurchaseOrder {
+        $query = ProcurementPurchaseOrder::query()
+            ->where('submission_idempotency_key', $idempotencyKey);
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+
+        $existing = $query->first();
+        if (! $existing) {
+            return null;
+        }
+        if ((string) $existing->created_by !== (string) $actorId) {
+            throw ValidationException::withMessages([
+                'idempotency_key' => 'This purchase-order submission key belongs to a different user.',
+            ]);
+        }
+        $this->submissionIdempotency->assertReplayMatches(
+            $existing->submission_idempotency_fingerprint,
+            $fingerprint,
+        );
+
+        return $existing;
+    }
+
+    /** @return array{0: ProcurementPurchaseOrderSubmissionClaim, 1: bool} */
+    private function claimPurchaseOrderSubmission(
+        string $idempotencyKey,
+        string $fingerprint,
+        mixed $actorId,
+    ): array {
+        $existing = ProcurementPurchaseOrderSubmissionClaim::query()
+            ->where('idempotency_key', $idempotencyKey)
+            ->with('resultPurchaseOrder')
+            ->lockForUpdate()
+            ->first();
+        if ($existing) {
+            if ((string) $existing->actor_id !== (string) $actorId) {
+                throw ValidationException::withMessages([
+                    'idempotency_key' => 'This purchase-order submission key belongs to a different user.',
+                ]);
+            }
+            $this->submissionIdempotency->assertReplayMatches($existing->fingerprint, $fingerprint);
+            if ($existing->status !== 'completed' || ! $existing->resultPurchaseOrder) {
+                throw ValidationException::withMessages([
+                    'idempotency_key' => 'The earlier purchase-order submission did not complete cleanly. Contact an administrator before retrying.',
+                ]);
+            }
+
+            return [$existing, true];
+        }
+
+        return [ProcurementPurchaseOrderSubmissionClaim::query()->create([
+            'actor_id' => filled($actorId) ? $actorId : null,
+            'idempotency_key' => $idempotencyKey,
+            'fingerprint' => $fingerprint,
+            'result_purchase_order_id' => null,
+            'status' => 'processing',
+        ]), false];
     }
 
     private function assertCommitmentInScope(BudgetCommitment $commitment): void
@@ -1661,6 +1935,43 @@ HTML;
         }
     }
 
+    private function authoritativeProcurementForDeliverables(
+        mixed $submittedProcurementId,
+        $deliverableIds,
+    ): ?Procurement {
+        $linkedProcurementIds = ProcurementDeliverable::withTrashed()
+            ->whereIn('id', collect($deliverableIds)->filter()->values())
+            ->pluck('procurement_id')
+            ->filter()
+            ->map(fn ($id): string => (string) $id)
+            ->unique()
+            ->values();
+
+        if ($linkedProcurementIds->count() > 1) {
+            throw ValidationException::withMessages([
+                'deliverable_ids' => 'A purchase order cannot combine deliverables from different procurements.',
+            ]);
+        }
+
+        $submittedId = trim((string) $submittedProcurementId);
+        $linkedId = (string) ($linkedProcurementIds->first() ?? '');
+        if ($submittedId !== '' && $linkedId !== '' && $submittedId !== $linkedId) {
+            throw ValidationException::withMessages([
+                'deliverable_ids' => 'One or more selected deliverables do not belong to the chosen procurement.',
+            ]);
+        }
+
+        $authoritativeId = $submittedId !== '' ? $submittedId : $linkedId;
+        if ($authoritativeId === '') {
+            return null;
+        }
+
+        $procurement = Procurement::findOrFail($authoritativeId);
+        $this->assertProcurementInScope($procurement);
+
+        return $procurement;
+    }
+
     private function assertResourceCategoryInScope(ResourceCategory $category): void
     {
         $currentUser = auth()->user();
@@ -1682,16 +1993,55 @@ HTML;
         }
     }
 
-    private function remainingCommitmentAmount(BudgetCommitment $commitment, ?ProcurementPurchaseOrder $ignorePurchaseOrder = null): float
+    private function remainingCommitmentCents(BudgetCommitment $commitment, ?ProcurementPurchaseOrder $ignorePurchaseOrder = null): int
     {
-        $committed = (float) ($commitment->commitment_amount ?? 0);
-        $issued = (float) ProcurementPurchaseOrder::query()
+        $committedCents = ExactMoney::cents($commitment->commitment_amount ?? '0.00');
+        $issuedCents = ExactMoney::cents(ProcurementPurchaseOrder::query()
             ->where('budget_commitment_id', $commitment->id)
             ->when($ignorePurchaseOrder, fn ($query) => $query->where($ignorePurchaseOrder->getKeyName(), '!=', $ignorePurchaseOrder->getKey()))
             ->whereNotIn('status', ['cancelled'])
-            ->sum('amount');
+            ->sum('amount'));
 
-        return max($committed - $issued, 0);
+        return max($committedCents - $issuedCents, 0);
+    }
+
+    private function lockCommitmentCapacity(
+        BudgetCommitment $commitment,
+        PurchaseRequest $purchaseRequest,
+        int $amountCents,
+        ?ProcurementPurchaseOrder $ignorePurchaseOrder = null,
+    ): BudgetCommitment {
+        $locked = BudgetCommitment::with(['programFunding.program', 'purchaseRequest.programFunding.program'])
+            ->whereKey($commitment->id)
+            ->lockForUpdate()
+            ->firstOrFail();
+        $this->assertCommitmentInScope($locked);
+
+        if ((string) $locked->purchase_request_id !== (string) $purchaseRequest->id
+            || $locked->status !== BudgetCommitment::STATUS_APPROVED) {
+            throw ValidationException::withMessages([
+                'budget_commitment_id' => 'The approved commitment changed while this purchase order was being saved. Refresh and try again.',
+            ]);
+        }
+        if ($this->commitmentCurrency($locked) !== $this->commitmentCurrency($commitment)) {
+            throw ValidationException::withMessages([
+                'budget_commitment_id' => 'The commitment currency changed while this purchase order was being saved. Refresh and try again.',
+            ]);
+        }
+        if ((int) $locked->commitment_year !== (int) $commitment->commitment_year) {
+            throw ValidationException::withMessages([
+                'budget_commitment_id' => 'The commitment year changed while this purchase order was being saved. Refresh and try again.',
+            ]);
+        }
+
+        $remainingCents = $this->remainingCommitmentCents($locked, $ignorePurchaseOrder);
+        if ($amountCents > $remainingCents) {
+            throw ValidationException::withMessages([
+                'amount' => 'The purchase order amount cannot exceed the locked commitment balance of '.ExactMoney::fromCents($remainingCents).'.',
+            ]);
+        }
+
+        return $locked;
     }
 
     private function commitmentHierarchy(BudgetCommitment $commitment): array
@@ -1804,8 +2154,8 @@ HTML;
         $commitments = $purchaseRequest->commitments
             ->filter(fn (BudgetCommitment $commitment) => $commitment->status === BudgetCommitment::STATUS_APPROVED)
             ->map(function (BudgetCommitment $commitment) use ($purchaseOrder) {
-                $remaining = $this->remainingCommitmentAmount($commitment, $purchaseOrder);
-                if ($remaining <= 0) {
+                $remainingCents = $this->remainingCommitmentCents($commitment, $purchaseOrder);
+                if ($remainingCents <= 0) {
                     return null;
                 }
 
@@ -1815,7 +2165,7 @@ HTML;
                     'id' => (string) $commitment->id,
                     'year' => $commitment->commitment_year,
                     'amount' => round((float) $commitment->commitment_amount, 2),
-                    'remaining_amount' => round($remaining, 2),
+                    'remaining_amount' => ExactMoney::fromCents($remainingCents),
                     'currency' => $this->commitmentCurrency($commitment),
                     'project' => $hierarchy['project'],
                     'activity' => $hierarchy['activity'],
@@ -1895,7 +2245,7 @@ HTML;
         ];
     }
 
-    private function lineItemTotalFromRequest(Request $request, PurchaseRequest $purchaseRequest): float
+    private function lineItemTotalFromRequest(Request $request, PurchaseRequest $purchaseRequest): string
     {
         $unitPrices = $request->input('line_item_unit_prices', []);
         $quantities = $request->input('line_item_quantities', []);
@@ -1912,11 +2262,14 @@ HTML;
         $purchaseRequest->loadMissing('items');
 
         if ($submittedIds->isEmpty()) {
-            return round((float) $purchaseRequest->items->sum('amount'), 2);
+            $totalCents = $purchaseRequest->items
+                ->sum(fn ($item): int => ExactMoney::cents($item->amount ?? '0.00'));
+
+            return $this->validatedPurchaseOrderTotal($totalCents);
         }
 
         $itemsById = $purchaseRequest->items->keyBy(fn ($item) => (string) $item->id);
-        $total = 0.0;
+        $totalCents = 0;
 
         foreach ($submittedIds as $key) {
             if (! $itemsById->has($key)) {
@@ -1926,34 +2279,44 @@ HTML;
             }
 
             $orderedPricing = $this->lineItemPricingFromRequest($key, $itemsById->get($key), $unitPrices, $quantities, $amounts);
-            $total += $this->lineItemDeliveredPricingFromRequest($key, $orderedPricing, $evidenceInput[$key] ?? [])['amount'];
+            $deliveredPricing = $this->lineItemDeliveredPricingFromRequest($key, $orderedPricing, $evidenceInput[$key] ?? []);
+            $totalCents += ExactMoney::cents($deliveredPricing['amount']);
         }
 
-        $total = round($total, 2);
-        if ($total <= 0) {
+        return $this->validatedPurchaseOrderTotal($totalCents);
+    }
+
+    private function validatedPurchaseOrderTotal(int $totalCents): string
+    {
+        if ($totalCents <= 0) {
             throw ValidationException::withMessages([
                 'amount' => 'Purchase order line items must have a total amount greater than zero.',
             ]);
         }
+        if ($totalCents > ExactMoney::cents(ExactMoney::DATABASE_MAX)) {
+            throw ValidationException::withMessages([
+                'amount' => 'The purchase order total exceeds the supported accounting amount.',
+            ]);
+        }
 
-        return $total;
+        return ExactMoney::fromCents($totalCents);
     }
 
     private function lineItemPricingFromRequest(string $key, $item, array $unitPrices, array $quantities, array $amounts): array
     {
-        $existingAmount = round((float) ($item->amount ?? 0), 2);
+        $existingAmount = ExactMoney::normalize($item->amount ?? '0.00');
         $unitPrice = array_key_exists($key, $unitPrices) && $unitPrices[$key] !== null && $unitPrices[$key] !== ''
-            ? round((float) $unitPrices[$key], 2)
-            : round((float) (($item->unit_price ?? null) ?: $existingAmount), 2);
+            ? ExactMoney::normalize($unitPrices[$key])
+            : ExactMoney::normalize(($item->unit_price ?? null) ?: $existingAmount);
         $quantity = array_key_exists($key, $quantities) && $quantities[$key] !== null && $quantities[$key] !== ''
-            ? round((float) $quantities[$key], 2)
-            : round((float) (($item->quantity ?? null) ?: 1), 2);
-        $amount = round($unitPrice * $quantity, 2);
+            ? ExactMoney::normalize($quantities[$key])
+            : ExactMoney::normalize(($item->quantity ?? null) ?: '1.00');
+        $amount = ExactMoney::multiply($unitPrice, $quantity);
 
-        if ($amount <= 0 && array_key_exists($key, $amounts)) {
-            $amount = round((float) $amounts[$key], 2);
+        if (ExactMoney::cents($amount) <= 0 && array_key_exists($key, $amounts)) {
+            $amount = ExactMoney::normalize($amounts[$key]);
             $unitPrice = $amount;
-            $quantity = 1.00;
+            $quantity = '1.00';
         }
 
         return [
@@ -1967,23 +2330,23 @@ HTML;
     {
         $input = is_array($input) ? $input : [];
         $unitPrice = array_key_exists('delivered_unit_price', $input) && $input['delivered_unit_price'] !== null && $input['delivered_unit_price'] !== ''
-            ? round((float) $input['delivered_unit_price'], 2)
-            : round((float) $orderedPricing['unit_price'], 2);
+            ? ExactMoney::normalize($input['delivered_unit_price'])
+            : ExactMoney::normalize($orderedPricing['unit_price']);
         $quantity = array_key_exists('delivered_quantity', $input) && $input['delivered_quantity'] !== null && $input['delivered_quantity'] !== ''
-            ? round((float) $input['delivered_quantity'], 2)
-            : round((float) $orderedPricing['quantity'], 2);
-        $orderedQuantity = round((float) $orderedPricing['quantity'], 2);
+            ? ExactMoney::normalize($input['delivered_quantity'])
+            : ExactMoney::normalize($orderedPricing['quantity']);
+        $orderedQuantity = ExactMoney::normalize($orderedPricing['quantity']);
 
-        if ($quantity > $orderedQuantity) {
+        if (ExactMoney::compareDecimal($quantity, $orderedQuantity) > 0) {
             throw ValidationException::withMessages([
-                "item_evidence.{$key}.delivered_quantity" => 'Delivered quantity cannot exceed the ordered quantity of '.number_format($orderedQuantity, 2).'.',
+                "item_evidence.{$key}.delivered_quantity" => 'Delivered quantity cannot exceed the ordered quantity of '.$orderedQuantity.'.',
             ]);
         }
 
         return [
             'unit_price' => $unitPrice,
             'quantity' => $quantity,
-            'amount' => round($unitPrice * $quantity, 2),
+            'amount' => ExactMoney::multiply($unitPrice, $quantity),
         ];
     }
 
@@ -2032,7 +2395,7 @@ HTML;
                 ? trim((string) $dates[$key])
                 : $item->milestone_date?->format('Y-m-d');
 
-            if ($categoryId === '' || $resourceId === '' || $amount <= 0) {
+            if ($categoryId === '' || $resourceId === '' || ExactMoney::cents($amount) <= 0) {
                 throw ValidationException::withMessages([
                     'line_item_resources' => 'Each purchase request line item must have a category, resource item, and amount.',
                 ]);
@@ -2070,7 +2433,8 @@ HTML;
         $purchaseRequest->unsetRelation('items');
         $purchaseRequest->load('items.deliverable');
         $purchaseRequest->update([
-            'total_amount' => round((float) $purchaseRequest->items->sum('amount'), 2),
+            'total_amount' => ExactMoney::fromCents($purchaseRequest->items
+                ->sum(fn ($item): int => ExactMoney::cents($item->amount ?? '0.00'))),
         ]);
     }
 

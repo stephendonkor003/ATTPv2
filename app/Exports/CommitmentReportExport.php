@@ -33,7 +33,7 @@ class CommitmentReportExport implements FromArray, WithStyles, WithColumnWidths,
             'Sub-Activity',
             'PR Reference No',
             'Allocated',
-            'Planned Commitment',
+            'Submitted / Approved Commitment',
             'Variance',
             'Utilization %',
         ];

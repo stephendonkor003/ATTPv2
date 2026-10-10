@@ -36,6 +36,8 @@ class ProcurementDisbursement extends BaseModel
         'recipient_confirmed_by',
         'recipient_confirmed_at',
         'recipient_confirmation_notes',
+        'secretariat_idempotency_key',
+        'secretariat_idempotency_fingerprint',
         'paid_at',
         'created_by',
         'notes',
@@ -74,6 +76,7 @@ class ProcurementDisbursement extends BaseModel
 
         return $query
             ->whereNotNull("{$table}.paid_at")
+            ->where("{$table}.paid_at", '<=', now())
             ->whereIn("{$table}.status", ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
             ->where(function (Builder $sourceQuery) use ($table) {
                 $sourceQuery

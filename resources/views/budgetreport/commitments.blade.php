@@ -150,7 +150,7 @@
                                     <th rowspan="2" style="min-width: 260px;">Project / Activity / Sub-Activity</th>
                                     <th rowspan="2">PR Reference No</th>
                                     <th rowspan="2" class="text-end">Allocated</th>
-                                    <th rowspan="2" class="text-end">Planned Commitment</th>
+                                    <th rowspan="2" class="text-end">Submitted / Approved Commitment</th>
                                     <th rowspan="2" class="text-end">Variance</th>
                                     <th rowspan="2" class="text-end">Utilization %</th>
                                     @foreach ($filters['year_range'] as $year)

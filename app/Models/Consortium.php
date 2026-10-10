@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\ThinkTankFundingSourceService;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -98,7 +99,12 @@ class Consortium extends BaseModel
 
     public function transferPurchaseOrders(): HasMany
     {
-        return $this->purchaseOrders()->where('po_type', 'think_tank_transfer');
+        return $this->purchaseOrders()->whereIn(
+            'procurement_purchase_orders.id',
+            app(ThinkTankFundingSourceService::class)
+                ->incomingPurchaseOrdersQuery()
+                ->select('procurement_purchase_orders.id')
+        );
     }
 
     public function expenseReports(): HasMany

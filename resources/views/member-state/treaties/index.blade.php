@@ -17,6 +17,7 @@
 .stage-not-started{background:#f1f5f9;color:#475569;border-color:#cbd5e1}
 .stage-signed{background:#e0f2fe;color:#0369a1;border-color:#7dd3fc}
 .stage-ratified{background:#dbeafe;color:#1d4ed8;border-color:#93c5fd}
+.stage-acceded{background:#dcfce7;color:#166534;border-color:#86efac}
 .stage-original-submitted{background:#fef9c3;color:#a16207;border-color:#fcd34d}
 .stage-completed{background:#dcfce7;color:#166534;border-color:#86efac}
 .code-block{border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;padding:.5rem .6rem}
@@ -184,17 +185,19 @@
                 $canResendServiceEmail = $status && ($isSignedCodePending || $isRatifiedCodePending);
                 $signStateClass = $status?->is_signed ? 'done' : 'pending';
                 $signStateLabel = $status?->is_signed ? 'Completed' : 'Pending';
-                $ratifyStateClass = !$status?->is_signed ? 'locked' : ($status?->is_ratified ? 'done' : 'pending');
-                $ratifyStateLabel = !$status?->is_signed ? 'Locked' : ($status?->is_ratified ? 'Completed' : 'Pending');
-                $originalStateClass = !$status?->is_ratified
+                $hasRatificationOrAccession = (bool) ($status?->is_ratified || $status?->is_acceded);
+                $ratifyStateClass = (!$status?->is_signed && !$status?->is_acceded) ? 'locked' : (($status?->is_ratified || $status?->is_acceded) ? 'done' : 'pending');
+                $ratifyStateLabel = $status?->is_acceded ? 'Acceded' : ((!$status?->is_signed) ? 'Locked' : ($status?->is_ratified ? 'Completed' : 'Pending'));
+                $originalStateClass = !$hasRatificationOrAccession
                     ? 'locked'
                     : (($status?->is_original_submitted && $legalCodesVerified) ? 'done' : 'pending');
-                $originalStateLabel = !$status?->is_ratified
+                $originalStateLabel = !$hasRatificationOrAccession
                     ? 'Locked'
                     : (($status?->is_original_submitted && $legalCodesVerified) ? 'Completed' : 'In Review');
                 $stageClass = match ($stage) {
                     'Signed' => 'stage-signed',
                     'Ratified' => 'stage-ratified',
+                    'Acceded' => 'stage-acceded',
                     'Original Submitted' => 'stage-original-submitted',
                     'Completed' => 'stage-completed',
                     default => 'stage-not-started',
@@ -215,8 +218,8 @@
                 $collapseId = 'treaty-collapse-' . $loop->index;
                 $modalId = 'treaty-readmore-modal-' . $loop->index;
                 $mapId = 'treaty-africa-map-' . $loop->index;
-                $mapHighlightColor = ($status?->is_ratified || $status?->is_original_submitted) ? '#16a34a' : ($status?->is_signed ? '#facc15' : '#94a3b8');
-                $mapHighlightLabel = ($status?->is_ratified || $status?->is_original_submitted) ? 'ratified' : ($status?->is_signed ? 'signed' : 'not-started');
+                $mapHighlightColor = ($status?->is_ratified || $status?->is_acceded || $status?->is_original_submitted) ? '#16a34a' : ($status?->is_signed ? '#facc15' : '#94a3b8');
+                $mapHighlightLabel = $status?->is_acceded ? 'acceded' : (($status?->is_ratified || $status?->is_original_submitted) ? 'ratified' : ($status?->is_signed ? 'signed' : 'not-started'));
                 $palette = [
                     ['soft' => '#e0f2fe', 'border' => '#0284c7'],
                     ['soft' => '#dcfce7', 'border' => '#16a34a'],
@@ -300,6 +303,7 @@
                                     @if ($status?->signed_document_path)
                                         <a href="{{ route('treaty-statuses.documents.download', ['treatyStatus' => $status->id, 'type' => 'signed']) }}?download=1" class="btn btn-sm btn-outline-info mb-2"><i class="feather-download me-1"></i>Current Signed File</a>
                                     @endif
+                                    @if (!$status?->is_acceded)
                                     @can('member_state.treaties.update')
                                     <form method="POST" action="{{ route('member-state.treaties.status.update', $treaty->id) }}" enctype="multipart/form-data">
                                         @csrf
@@ -310,6 +314,9 @@
                                         <button class="btn btn-sm btn-info text-white workflow-submit-btn"><i class="feather-check me-1"></i>{{ $status?->is_signed ? 'Update Signature' : 'Mark as Signed' }}</button>
                                     </form>
                                     @endcan
+                                    @else
+                                        <div class="alert alert-success small mb-0">The AU status list records this Member State as acceded.</div>
+                                    @endif
                                 </div>
                             </div>
                             <div class="col-lg-4">
@@ -325,7 +332,7 @@
                                     @if ($status?->ratified_document_path)
                                         <a href="{{ route('treaty-statuses.documents.download', ['treatyStatus' => $status->id, 'type' => 'ratified']) }}?download=1" class="btn btn-sm btn-outline-primary mb-2"><i class="feather-download me-1"></i>Current Ratified File</a>
                                     @endif
-                                    @if ($status?->is_signed)
+                                    @if ($status?->is_signed && !$status?->is_acceded)
                                         @can('member_state.treaties.update')
                                         <form method="POST" action="{{ route('member-state.treaties.status.update', $treaty->id) }}" enctype="multipart/form-data">
                                             @csrf
@@ -336,6 +343,8 @@
                                             <button class="btn btn-sm btn-primary workflow-submit-btn"><i class="feather-award me-1"></i>{{ $status?->is_ratified ? 'Update Ratification' : 'Mark as Ratified' }}</button>
                                         </form>
                                         @endcan
+                                    @elseif ($status?->is_acceded)
+                                        <div class="alert alert-success small mb-0">Accession is recorded by the AU status source.</div>
                                     @else
                                         <div class="alert alert-warning small mb-0">This step becomes available after signing.</div>
                                     @endif
@@ -354,7 +363,7 @@
                                     @if ($status?->original_document_path)
                                         <a href="{{ route('treaty-statuses.documents.download', ['treatyStatus' => $status->id, 'type' => 'original']) }}?download=1" class="btn btn-sm btn-outline-success mb-2"><i class="feather-download me-1"></i>Current Original File</a>
                                     @endif
-                                    @if ($status?->is_ratified)
+                                    @if ($hasRatificationOrAccession)
                                         @can('member_state.treaties.update')
                                         <form method="POST" action="{{ route('member-state.treaties.status.update', $treaty->id) }}" enctype="multipart/form-data">
                                             @csrf

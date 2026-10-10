@@ -388,33 +388,72 @@ class ProgramController extends Controller
     public function destroy(Program $program)
     {
         $this->assertProgramInScope($program);
-        DB::beginTransaction();
 
         try {
-            foreach ($program->projects as $project) {
-                foreach ($project->activities as $activity) {
-                    foreach ($activity->subActivities as $sub) {
-                        $sub->allocations()?->delete();
-                        $sub->delete();
-                    }
+            DB::transaction(function () use ($program): void {
+                $lockedProgram = Program::query()
+                    ->lockForUpdate()
+                    ->findOrFail($program->id);
+                $this->assertProgramInScope($lockedProgram);
 
-                    $activity->allocations()?->delete();
-                    $activity->delete();
+                $projects = $lockedProgram->projects()
+                    ->lockForUpdate()
+                    ->get();
+                foreach ($projects as $project) {
+                    $activities = $project->activities()
+                        ->lockForUpdate()
+                        ->get();
+                    foreach ($activities as $activity) {
+                        $activity->setRelation(
+                            'subActivities',
+                            $activity->subActivities()->lockForUpdate()->get(),
+                        );
+                    }
+                    $project->setRelation('activities', $activities);
                 }
 
-                $project->allocations()?->delete();
-                $project->delete();
-            }
+                $lockedProgram->assertHasNoFinancialDependencies();
 
-            $program->delete();
+                foreach ($projects as $project) {
+                    foreach ($project->activities as $activity) {
+                        foreach ($activity->subActivities as $subActivity) {
+                            $subActivity->allocations()->delete();
+                            \App\Models\Indicator::where('indicatorable_type', \App\Models\SubActivity::class)
+                                ->where('indicatorable_id', $subActivity->id)
+                                ->delete();
+                            $subActivity->delete();
+                        }
 
-            DB::commit();
+                        $activity->allocations()->delete();
+                        \App\Models\Indicator::where('indicatorable_type', \App\Models\Activity::class)
+                            ->where('indicatorable_id', $activity->id)
+                            ->delete();
+                        $activity->delete();
+                    }
+
+                    $project->allocations()->delete();
+                    \App\Models\Indicator::where('indicatorable_type', \App\Models\Project::class)
+                        ->where('indicatorable_id', $project->id)
+                        ->delete();
+                    $project->delete();
+                }
+
+                \App\Models\Indicator::where('indicatorable_type', Program::class)
+                    ->where('indicatorable_id', $lockedProgram->id)
+                    ->delete();
+                $lockedProgram->delete();
+            });
 
             return back()->with('success', 'Program deleted successfully.');
+        } catch (\DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
 
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            return back()->with('error', $e->getMessage());
+            return back()->with(
+                'error',
+                'The program could not be deleted. No program hierarchy records were removed.'
+            );
         }
     }
 

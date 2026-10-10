@@ -11,6 +11,8 @@ use App\Models\ProcurementInvoice;
 use App\Models\ProcurementPlan;
 use App\Models\ProcurementPurchaseOrder;
 use App\Services\EvaluationReworkGuard;
+use App\Services\ThinkTankProcurementBudgetGuard;
+use App\Support\ExactMoney;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -19,8 +21,9 @@ class ProcurementInvoiceController extends Controller
 {
     use GovernanceScope;
 
-    public function __construct()
-    {
+    public function __construct(
+        private readonly ThinkTankProcurementBudgetGuard $thinkTankBudgetGuard,
+    ) {
         $this->middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_requests.view']);
     }
 
@@ -181,7 +184,21 @@ class ProcurementInvoiceController extends Controller
             return back()->with('error', 'Procurement record not found.');
         }
 
-        $purchaseOrder = DB::transaction(function () use ($procurement, $invoice): ProcurementPurchaseOrder {
+        $guardedAmount = ExactMoney::normalize($invoice->amount);
+        $guardedCurrency = strtoupper(trim((string) $invoice->currency));
+
+        $purchaseOrder = DB::transaction(function () use (
+            $procurement,
+            $invoice,
+            $guardedAmount,
+            $guardedCurrency,
+        ): ProcurementPurchaseOrder {
+            $procurement = $this->thinkTankBudgetGuard->assertPurchaseOrderBoundary(
+                $procurement,
+                $guardedAmount,
+                $guardedCurrency,
+                'draft',
+            );
             $lockedProcurement = app(EvaluationReworkGuard::class)
                 ->lockForDownstreamTransition($procurement);
             $lockedInvoice = ProcurementInvoice::query()
@@ -189,6 +206,13 @@ class ProcurementInvoiceController extends Controller
                 ->where('procurement_id', $lockedProcurement->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            if (ExactMoney::normalize($lockedInvoice->amount) !== $guardedAmount
+                || strtoupper(trim((string) $lockedInvoice->currency)) !== $guardedCurrency) {
+                throw ValidationException::withMessages([
+                    'invoice' => 'The invoice amount or currency changed while its budget boundary was being checked. Refresh and try again.',
+                ]);
+            }
 
             if ($lockedInvoice->resolvedPurchaseOrder()) {
                 throw ValidationException::withMessages([
@@ -213,6 +237,8 @@ class ProcurementInvoiceController extends Controller
                 'procurement_id' => $lockedProcurement->getKey(),
                 'negotiation_id' => $negotiation?->id,
                 'invoice_id' => $lockedInvoice->id,
+                'consortium_id' => $lockedProcurement->consortium_id,
+                'think_tank_member_id' => $lockedProcurement->think_tank_member_id,
                 'vendor_id' => $lockedInvoice->vendor_id,
                 'sub_activity_id' => $lockedInvoice->sub_activity_id,
                 'governance_node_id' => $lockedInvoice->governance_node_id,

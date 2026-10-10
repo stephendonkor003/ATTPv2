@@ -288,7 +288,7 @@ class ThinkTankPortalSmoke
                     ->first();
 
                 $this->assertTrue((bool) $fundingTransfer, 'Funding transfer was not created.');
-                $this->assertSame('pending', $fundingTransfer->purchaseOrder?->status, 'Funding transfer purchase order was not pending before receipt confirmation.');
+                $this->assertSame('fully_paid', $fundingTransfer->purchaseOrder?->status, 'Secretariat payment posting did not settle the funding transfer purchase order.');
                 $this->assertSame('paid', $fundingTransfer->purchaseOrder?->invoice?->status, 'Funding transfer invoice was not marked paid.');
 
                 $this->asAdmin($data['adminUser'])
@@ -302,13 +302,14 @@ class ThinkTankPortalSmoke
                         'purchaseOrder' => $fundingTransfer->purchaseOrder,
                         'disbursement' => $fundingTransfer,
                     ]), [
+                        'lock_token' => app(\App\Services\ThinkTankFinanceApiService::class)->lockToken($fundingTransfer),
                         'recipient_confirmation_notes' => 'E2E receipt confirmed.',
                     ])
                     ->assertRedirect();
 
                 $fundingTransfer->purchaseOrder->refresh();
                 $fundingTransfer->purchaseOrder->invoice->refresh();
-                $this->assertSame('fully_paid', $fundingTransfer->purchaseOrder->status, 'Funding transfer purchase order was not fully paid after receipt confirmation.');
+                $this->assertSame('fully_paid', $fundingTransfer->purchaseOrder->status, 'Receipt confirmation incorrectly changed the settled purchase order status.');
                 $this->assertSame('paid', $fundingTransfer->purchaseOrder->invoice->status, 'Funding transfer invoice did not remain paid after receipt confirmation.');
             }
 

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ThinkTankProcurementItem extends BaseModel
 {
@@ -83,6 +84,11 @@ class ThinkTankProcurementItem extends BaseModel
     public function events(): HasMany
     {
         return $this->hasMany(ThinkTankProcurementEvent::class, 'item_id')->latest('created_at');
+    }
+
+    public function budgetLine(): HasOne
+    {
+        return $this->hasOne(ThinkTankBudgetLine::class, 'procurement_item_id');
     }
 
     public function procurement(): BelongsTo

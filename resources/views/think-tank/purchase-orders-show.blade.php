@@ -81,12 +81,15 @@
                                 <td>
                                     @if ($disbursement->recipient_confirmation_status === 'confirmed')
                                         <span class="text-muted small">Confirmed</span>
-                                    @else
+                                    @elseif ($receiptLockTokens->has((string) $disbursement->id))
                                         <form method="POST" action="{{ route('think-tank.purchase-orders.disbursements.confirm', array_merge($portalRouteParams, ['purchaseOrder' => $purchaseOrder, 'disbursement' => $disbursement])) }}" class="stack">
                                             @csrf
+                                            <input type="hidden" name="lock_token" value="{{ $receiptLockTokens->get((string) $disbursement->id) }}">
                                             <textarea name="recipient_confirmation_notes" rows="2" placeholder="Optional receipt note"></textarea>
                                             <button class="btn btn-primary btn-sm" type="submit">Confirm Received</button>
                                         </form>
+                                    @else
+                                        <span class="text-muted small">Awaiting payment processing</span>
                                     @endif
                                 </td>
                             </tr>

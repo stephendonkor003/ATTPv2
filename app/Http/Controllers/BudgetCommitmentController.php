@@ -16,6 +16,7 @@ use App\Models\PurchaseRequestIntake;
 use App\Models\PurchaseRequestItem;
 use App\Models\ProcurementDeliverable;
 use App\Models\ProcurementPurchaseOrder;
+use App\Services\ThinkTankProcurementBudgetGuard;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +27,10 @@ use Carbon\Carbon;
 class BudgetCommitmentController extends Controller
 {
     use ScopesAssignedPortfolios;
+
+    public function __construct(
+        private readonly ThinkTankProcurementBudgetGuard $thinkTankBudgetGuard,
+    ) {}
 
     /* =========================================================
      | CONSTANTS
@@ -268,14 +273,16 @@ public function index()
         /* =====================================================
          * 3. ALLOCATION VALIDATION
          * ===================================================== */
-	        $allocationExists = SubActivity::where('id', $validated['allocation_id'])->exists();
+	        $allocation = SubActivity::with('activity.project')
+	            ->find($validated['allocation_id']);
 
-		        if (!$allocationExists) {
+		        if (!$allocation) {
 		            return back()
 		                ->withErrors(['allocation_id' => 'Selected allocation record does not exist.'])
 		                ->withInput();
 		        }
 			        $this->assertAllocationInScope($validated['allocation_level'], $validated['allocation_id']);
+		        $this->assertFundingMatchesAllocationProgram($funding, $allocation);
 
 		        $itemsInput = collect($validated['items'] ?? []);
 		        if ($itemsInput->isEmpty()) {
@@ -726,6 +733,23 @@ public function index()
             abort(403, 'Only draft commitments can be updated.');
         }
 
+        $hasActivePurchaseOrder = ProcurementPurchaseOrder::query()
+            ->where(function ($query) use ($commitment) {
+                $query->where('budget_commitment_id', $commitment->id);
+
+                if ($commitment->purchase_request_id) {
+                    $query->orWhere('purchase_request_id', $commitment->purchase_request_id);
+                }
+            })
+            ->whereNotIn('status', ['cancelled', 'void', 'rejected'])
+            ->exists();
+
+        if ($hasActivePurchaseOrder) {
+            return back()->withErrors([
+                'commitment_amount' => 'This approved request already has a purchase order. Its classification, line items, years, and commitment amount are locked so the issued order cannot become inconsistent. Cancel the downstream order through the authorized workflow before revising the request.',
+            ]);
+        }
+
         $validated = $request->validate([
             'program_funding_id'   => 'required|exists:myb_program_fundings,id',
             'allocation_level'     => 'required|in:sub_activity',
@@ -788,13 +812,15 @@ public function index()
             }
             $this->assertFundingInScope($funding);
 
-            $allocationExists = SubActivity::where('id', $validated['allocation_id'])->exists();
-            if (!$allocationExists) {
+            $allocation = SubActivity::with('activity.project')
+                ->find($validated['allocation_id']);
+            if (!$allocation) {
                 return back()
                     ->withErrors(['allocation_id' => 'Selected allocation record does not exist.'])
                     ->withInput();
             }
             $this->assertAllocationInScope($validated['allocation_level'], $validated['allocation_id']);
+            $this->assertFundingMatchesAllocationProgram($funding, $allocation);
 
             $itemsInput = collect($validated['items'] ?? []);
             if ($itemsInput->isEmpty()) {
@@ -1082,6 +1108,10 @@ public function index()
                 DB::rollBack();
             }
 
+            if ($e instanceof \Illuminate\Validation\ValidationException) {
+                return back()->withErrors($e->errors())->withInput();
+            }
+
             \Log::error('Budget Commitment Update Failed', [
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
@@ -1263,6 +1293,7 @@ public function index()
 
     private function deletePurchaseOrderCascade(ProcurementPurchaseOrder $po): void
     {
+        $po = $this->thinkTankBudgetGuard->lockHardDeleteBoundary($po);
         $invoiceId     = $po->invoice_id;
         $negotiationId = $po->negotiation_id;
 
@@ -2044,6 +2075,33 @@ protected function aiSummary(array $allocated, array $committed)
         default => 0,
     };
 }
+
+    private function assertFundingMatchesAllocationProgram(
+        ProgramFunding $funding,
+        SubActivity $allocation
+    ): void {
+        if (
+            ! $allocation->relationLoaded('activity')
+            || ($allocation->activity && ! $allocation->activity->relationLoaded('project'))
+        ) {
+            $allocation->loadMissing('activity.project');
+        }
+
+        $fundingProgramId = (string) ($funding->program_id ?? '');
+        $allocationProgramId = (string) ($allocation->activity?->project?->program_id ?? '');
+
+        if (
+            $fundingProgramId !== ''
+            && $allocationProgramId !== ''
+            && $fundingProgramId === $allocationProgramId
+        ) {
+            return;
+        }
+
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'program_funding_id' => 'Selected program funding belongs to a different programme than the selected sub-activity. Choose approved funding from the same programme.',
+        ]);
+    }
 
     private function deliverableOptions()
     {

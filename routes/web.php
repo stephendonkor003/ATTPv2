@@ -2333,8 +2333,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_r
         Route::get('/', [ProcurementDisbursementController::class, 'index'])
             ->name('index');
         Route::get('/create', [ProcurementDisbursementController::class, 'create'])
+            ->middleware('permission:finance.purchase_orders.create')
             ->name('create');
         Route::post('/', [ProcurementDisbursementController::class, 'store'])
+            ->middleware('permission:finance.purchase_orders.create')
             ->name('store');
         Route::get('{disbursement}/edit', [ProcurementDisbursementController::class, 'edit'])
             ->name('edit');
@@ -2367,10 +2369,13 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_r
         Route::get('{invoice}', [ProcurementInvoiceController::class, 'show'])
             ->name('show');
         Route::post('{invoice}/approve', [ProcurementInvoiceController::class, 'approve'])
+            ->middleware('permission:finance.purchase_requests.approve')
             ->name('approve');
         Route::post('{invoice}/reject', [ProcurementInvoiceController::class, 'reject'])
+            ->middleware('permission:finance.purchase_requests.approve')
             ->name('reject');
         Route::post('{invoice}/purchase-order', [ProcurementInvoiceController::class, 'createPurchaseOrder'])
+            ->middleware('permission:finance.purchase_orders.create')
             ->name('purchase-order');
     });
 
@@ -4210,9 +4215,6 @@ Route::middleware(['auth', 'think.tank', 'permission:think_tank.portal.access'])
         Route::get('/purchase-orders', 'purchaseOrders')
             ->middleware(['think.tank.area:finance', 'permission:think_tank.finance.view'])
             ->name('purchase-orders');
-        Route::post('/purchase-orders', 'storePurchaseOrder')
-            ->middleware(['think.tank.area:finance', 'permission:think_tank.finance.manage'])
-            ->name('purchase-orders.store');
         Route::get('/purchase-orders/{purchaseOrder}', 'showPurchaseOrder')
             ->middleware(['think.tank.area:finance', 'permission:think_tank.finance.view'])
             ->name('purchase-orders.show');

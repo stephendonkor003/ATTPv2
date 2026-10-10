@@ -32,11 +32,11 @@ class InterimFinancialReportExport implements FromArray, WithStyles, WithColumnW
             'Activity',
             'Sub-Activity',
             'PR Reference No',
-            'Global Commitments',
-            'Planned Commitments',
+            'Submitted / Approved Commitments',
+            'Planned Pipeline Commitments',
             'Cumulative Disbursed',
             'Variance',
-            'Commitment Rate %',
+            'Pipeline Coverage Rate %',
             'Disbursement Rate %',
         ];
         foreach ($this->yearRange as $year) {
@@ -47,7 +47,7 @@ class InterimFinancialReportExport implements FromArray, WithStyles, WithColumnW
 
         $headerRow2 = array_fill(0, 12, '');
         foreach ($this->yearRange as $year) {
-            $headerRow2[] = 'Global Commitments';
+            $headerRow2[] = 'Submitted / Approved Commitments';
             $headerRow2[] = 'Cumulative Disbursed';
             $headerRow2[] = 'Variance';
         }

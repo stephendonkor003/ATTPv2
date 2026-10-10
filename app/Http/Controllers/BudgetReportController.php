@@ -507,8 +507,8 @@ class BudgetReportController extends Controller
 
             $fundingIds = $fundings->pluck('id')->all();
 
-            $commitments = BudgetCommitment::with('purchaseRequest')
-                ->whereIn('program_funding_id', $fundingIds)
+            $commitments = $this->financialReportingCommitmentQuery($fundingIds)
+                ->with('purchaseRequest')
                 ->where('allocation_level', 'sub_activity')
                 ->get();
 
@@ -627,8 +627,8 @@ class BudgetReportController extends Controller
 
         $fundingIds = $fundings->pluck('id')->all();
 
-        $commitments = BudgetCommitment::with('purchaseRequest.items')
-            ->whereIn('program_funding_id', $fundingIds)
+        $commitments = $this->financialReportingCommitmentQuery($fundingIds)
+            ->with('purchaseRequest.items')
             ->where('allocation_level', 'sub_activity')
             ->get();
 
@@ -742,6 +742,7 @@ class BudgetReportController extends Controller
                 ->all();
 
             $commitments = $this->buildIfrCommitmentFacts($program, $fundingIds, $subActivityIds);
+            $commitments = $this->filterIfrCommitmentFactsByPeriod($commitments, $filters);
 
             $disbursements = empty($subActivityIds)
                 ? collect()
@@ -758,7 +759,11 @@ class BudgetReportController extends Controller
                 return $date->between($filters['start_date'], $filters['end_date']);
             });
 
-            $globalCommitmentBySub = $this->buildIfrGlobalBudgetBySubActivity($program);
+            $globalCommitmentBySub = $this->buildIfrActualCommitmentBySubActivity(
+                $fundingIds,
+                $subActivityIds,
+                $filters
+            );
             $plannedCommitmentBySub = $commitments
                 ->groupBy('sub_activity_id')
                 ->map(fn ($rows) => round((float) $rows->sum('amount'), 2))
@@ -1024,7 +1029,7 @@ class BudgetReportController extends Controller
     {
         return [
             'title' => 'Commitment and Disbursement Report',
-            'description' => 'Global commitments from the budget structure, planned commitments from purchase requests, and fully paid disbursement trends by program structure.',
+            'description' => 'Submitted and approved commitments, separately identified planned pipeline commitments, and fully paid disbursement trends by programme structure.',
             'form_route' => 'budget.reports.commitment-disbursement',
             'pdf_route' => 'budget.reports.commitment-disbursement.export.pdf',
             'excel_route' => 'budget.reports.commitment-disbursement.export.excel',
@@ -1073,6 +1078,7 @@ class BudgetReportController extends Controller
             ->all();
 
         $commitments = $this->buildIfrCommitmentFacts($program, $fundingIds, $subActivityIds);
+        $commitments = $this->filterIfrCommitmentFactsByPeriod($commitments, $filters);
 
         $disbursements = empty($subActivityIds)
             ? collect()
@@ -1089,7 +1095,11 @@ class BudgetReportController extends Controller
             return $date->between($filters['start_date'], $filters['end_date']);
         });
 
-        $globalCommitmentBySub = $this->buildIfrGlobalBudgetBySubActivity($program);
+        $globalCommitmentBySub = $this->buildIfrActualCommitmentBySubActivity(
+            $fundingIds,
+            $subActivityIds,
+            $filters
+        );
         $plannedCommitmentBySub = $commitments
             ->groupBy('sub_activity_id')
             ->map(fn ($rows) => round((float) $rows->sum('amount'), 2))
@@ -1264,6 +1274,77 @@ class BudgetReportController extends Controller
         return now()->startOfDay();
     }
 
+    private function financialReportingCommitmentQuery(array $fundingIds)
+    {
+        return BudgetCommitment::query()
+            ->whereIn('status', [
+                BudgetCommitment::STATUS_SUBMITTED,
+                BudgetCommitment::STATUS_APPROVED,
+            ])
+            ->where(function ($query) use ($fundingIds) {
+                if (empty($fundingIds)) {
+                    $query->whereRaw('1 = 0');
+
+                    return;
+                }
+
+                $query
+                    ->whereIn('program_funding_id', $fundingIds)
+                    ->orWhereHas('purchaseRequest', fn ($requestQuery) => $requestQuery
+                        ->whereIn('program_funding_id', $fundingIds));
+            });
+    }
+
+    private function filterIfrCommitmentFactsByPeriod($facts, array $filters)
+    {
+        if (empty($filters['start_date']) || empty($filters['end_date'])) {
+            return collect($facts)->values();
+        }
+
+        return collect($facts)
+            ->filter(fn (array $fact): bool => Carbon::parse($fact['date'])
+                ->between($filters['start_date'], $filters['end_date']))
+            ->values();
+    }
+
+    private function buildIfrActualCommitmentBySubActivity(
+        array $fundingIds,
+        array $subActivityIds,
+        array $filters
+    ): array {
+        if (empty($fundingIds) || empty($subActivityIds)) {
+            return [];
+        }
+
+        $subActivityLookup = collect($subActivityIds)
+            ->mapWithKeys(fn ($id) => [(string) $id => true])
+            ->all();
+
+        return $this->financialReportingCommitmentQuery($fundingIds)
+            ->with('purchaseRequest')
+            ->get()
+            ->filter(fn (BudgetCommitment $commitment): bool => $this->withinProjectPositionPeriod(
+                $this->resolveCommitmentDate($commitment),
+                $filters
+            ))
+            ->map(function (BudgetCommitment $commitment) use ($subActivityLookup): ?array {
+                $subActivityId = $this->resolveIfrCommitmentSubActivityId($commitment);
+
+                if (! $this->ifrSubActivityInScope($subActivityId, $subActivityLookup)) {
+                    return null;
+                }
+
+                return [
+                    'sub_activity_id' => (string) $subActivityId,
+                    'amount' => (float) $commitment->commitment_amount,
+                ];
+            })
+            ->filter()
+            ->groupBy('sub_activity_id')
+            ->map(fn ($rows) => round((float) $rows->sum('amount'), 2))
+            ->all();
+    }
+
     private function buildIfrCommitmentFacts(Program $program, array $fundingIds, array $subActivityIds)
     {
         if (empty($fundingIds) && empty($subActivityIds)) {
@@ -1271,6 +1352,9 @@ class BudgetReportController extends Controller
         }
 
         $subActivityLookup = collect($subActivityIds)
+            ->mapWithKeys(fn ($id) => [(string) $id => true])
+            ->all();
+        $fundingLookup = collect($fundingIds)
             ->mapWithKeys(fn ($id) => [(string) $id => true])
             ->all();
 
@@ -1298,7 +1382,12 @@ class BudgetReportController extends Controller
                 $query->whereNull('status')
                     ->orWhereNotIn('status', [BudgetCommitment::STATUS_CANCELLED, 'rejected', 'void']);
             })
-            ->get();
+            ->get()
+            ->filter(fn (BudgetCommitment $commitment): bool => $this->ifrFundingInScope([
+                $commitment->program_funding_id,
+                $commitment->purchaseRequest?->program_funding_id,
+            ], $fundingLookup))
+            ->values();
 
         $purchaseRequests = empty($subActivityIds)
             ? collect()
@@ -1309,7 +1398,11 @@ class BudgetReportController extends Controller
                     $query->whereNull('status')
                         ->orWhereNotIn('status', ['cancelled', 'void', 'rejected', 'failed']);
                 })
-                ->get();
+                ->get()
+                ->filter(fn (PurchaseRequest $purchaseRequest): bool => $this->ifrFundingInScope([
+                    $purchaseRequest->program_funding_id,
+                ], $fundingLookup))
+                ->values();
 
         $purchaseRequestIds = $purchaseRequests
             ->pluck('id')
@@ -1361,7 +1454,13 @@ class BudgetReportController extends Controller
                     $query->whereNull('status')
                         ->orWhereNotIn('status', ['cancelled', 'void', 'rejected']);
                 })
-                ->get();
+                ->get()
+                ->filter(fn (ProcurementPurchaseOrder $purchaseOrder): bool => $this->ifrFundingInScope([
+                    $purchaseOrder->purchaseRequest?->program_funding_id,
+                    $purchaseOrder->budgetCommitment?->program_funding_id,
+                    $purchaseOrder->budgetCommitment?->purchaseRequest?->program_funding_id,
+                ], $fundingLookup))
+                ->values();
 
         $facts = [];
         $coveredCommitmentIds = [];
@@ -1551,6 +1650,20 @@ class BudgetReportController extends Controller
     private function ifrSubActivityInScope(?string $subActivityId, array $subActivityLookup): bool
     {
         return $subActivityId !== null && isset($subActivityLookup[(string) $subActivityId]);
+    }
+
+    private function ifrFundingInScope(array $fundingIds, array $fundingLookup): bool
+    {
+        $resolvedFundingIds = collect($fundingIds)
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique();
+
+        if ($resolvedFundingIds->isEmpty()) {
+            return true;
+        }
+
+        return $resolvedFundingIds->contains(fn (string $id): bool => isset($fundingLookup[$id]));
     }
 
     private function resolveIfrPurchaseRequestDate(?PurchaseRequest $purchaseRequest): Carbon
@@ -1862,6 +1975,33 @@ class BudgetReportController extends Controller
         return true;
     }
 
+    private function projectPositionCommitmentMatchesStructureScope(
+        BudgetCommitment $commitment,
+        array $projectIds,
+        array $activityIds,
+        array $subActivityIds,
+        bool $hasActivityFilter,
+        bool $hasSubActivityFilter
+    ): bool {
+        $allocationLevel = (string) $commitment->allocation_level;
+        $allocationId = (string) $commitment->allocation_id;
+
+        if (! $hasActivityFilter && ! $hasSubActivityFilter
+            && $allocationLevel === 'project'
+            && in_array($allocationId, $projectIds, true)) {
+            return true;
+        }
+
+        if (! $hasSubActivityFilter
+            && $allocationLevel === 'activity'
+            && in_array($allocationId, $activityIds, true)) {
+            return true;
+        }
+
+        return $allocationLevel === 'sub_activity'
+            && in_array($allocationId, $subActivityIds, true);
+    }
+
     private function buildProjectFinancialPosition(
         Program $program,
         array $programFundingIds,
@@ -1901,64 +2041,65 @@ class BudgetReportController extends Controller
         $subActivityIds = $structureScope['sub_activity_ids'];
         $hasActivityFilter = ! empty($filters['activity_id']);
         $hasSubActivityFilter = ! empty($filters['sub_activity_id']);
-        $hasStructureScope = ! empty($projectIds) || ! empty($activityIds) || ! empty($subActivityIds);
+        $hasStructureFilter = ! empty($filters['project_id'])
+            || $hasActivityFilter
+            || $hasSubActivityFilter;
 
-        $commitments = empty($fundingIds) || ! $hasStructureScope
+        $scopedCommitments = empty($fundingIds)
             ? collect()
-            : BudgetCommitment::with('purchaseRequest')
-                ->whereIn('program_funding_id', $fundingIds)
-                ->whereIn('status', [
-                    BudgetCommitment::STATUS_SUBMITTED,
-                    BudgetCommitment::STATUS_APPROVED,
-                ])
-                ->where(function ($query) use ($projectIds, $activityIds, $subActivityIds, $hasActivityFilter, $hasSubActivityFilter) {
-                    if (! $hasActivityFilter && ! $hasSubActivityFilter && ! empty($projectIds)) {
-                        $query->orWhere(function ($projectQuery) use ($projectIds) {
-                            $projectQuery->where('allocation_level', 'project')
-                                ->whereIn('allocation_id', $projectIds);
-                        });
-                    }
-
-                    if (! $hasSubActivityFilter && ! empty($activityIds)) {
-                        $query->orWhere(function ($activityQuery) use ($activityIds) {
-                            $activityQuery->where('allocation_level', 'activity')
-                                ->whereIn('allocation_id', $activityIds);
-                        });
-                    }
-
-                    if (! empty($subActivityIds)) {
-                        $query->orWhere(function ($subActivityQuery) use ($subActivityIds) {
-                            $subActivityQuery->where('allocation_level', 'sub_activity')
-                                ->whereIn('allocation_id', $subActivityIds);
-                        });
-                    }
-                })
+            : $this->financialReportingCommitmentQuery($fundingIds)
+                ->with('purchaseRequest')
                 ->get()
-                ->filter(fn (BudgetCommitment $commitment) => $this->withinProjectPositionPeriod($this->resolveCommitmentDate($commitment), $filters))
+                ->when($hasStructureFilter, fn ($rows) => $rows->filter(
+                    fn (BudgetCommitment $commitment): bool => $this->projectPositionCommitmentMatchesStructureScope(
+                        $commitment,
+                        $projectIds,
+                        $activityIds,
+                        $subActivityIds,
+                        $hasActivityFilter,
+                        $hasSubActivityFilter
+                    )
+                ))
                 ->values();
 
-        $commitmentIds = $commitments->pluck('id')->filter()->unique()->values()->all();
+        $commitments = $scopedCommitments
+            ->filter(fn (BudgetCommitment $commitment) => $this->withinProjectPositionPeriod($this->resolveCommitmentDate($commitment), $filters))
+            ->values();
 
-        $purchaseOrders = (empty($commitmentIds) && empty($subActivityIds))
+        $scopedCommitmentIds = $scopedCommitments->pluck('id')->filter()->unique()->values()->all();
+
+        $scopedPurchaseOrders = (empty($scopedCommitmentIds) && empty($subActivityIds) && empty($fundingIds))
             ? collect()
             : ProcurementPurchaseOrder::with('invoice')
-                ->where(function ($query) use ($commitmentIds, $subActivityIds) {
-                    if (! empty($commitmentIds)) {
-                        $query->whereIn('budget_commitment_id', $commitmentIds);
+                ->where(function ($query) use ($scopedCommitmentIds, $subActivityIds, $fundingIds, $hasStructureFilter) {
+                    if (! empty($scopedCommitmentIds)) {
+                        $query->whereIn('budget_commitment_id', $scopedCommitmentIds);
+                    }
+
+                    if (! $hasStructureFilter && ! empty($fundingIds)) {
+                        $query->orWhereHas('purchaseRequest', fn ($requestQuery) => $requestQuery
+                            ->whereIn('program_funding_id', $fundingIds));
                     }
 
                     if (! empty($subActivityIds)) {
-                        $method = empty($commitmentIds) ? 'whereIn' : 'orWhereIn';
-                        $query->{$method}('sub_activity_id', $subActivityIds);
+                        $query->orWhere(function ($directQuery) use ($subActivityIds) {
+                            $directQuery
+                                ->whereIn('sub_activity_id', $subActivityIds)
+                                ->whereNull('budget_commitment_id')
+                                ->whereNull('purchase_request_id');
+                        });
                     }
                 })
                 ->whereNotIn('status', ['cancelled', 'void', 'rejected'])
                 ->get()
-                ->filter(fn (ProcurementPurchaseOrder $purchaseOrder) => $this->withinProjectPositionPeriod($purchaseOrder->issued_at ?: $purchaseOrder->created_at, $filters))
                 ->values();
 
-        $purchaseOrderIds = $purchaseOrders->pluck('id')->filter()->unique()->values()->all();
-        $invoiceIdsFromPurchaseOrders = $purchaseOrders->pluck('invoice_id')->filter()->unique()->values()->all();
+        $purchaseOrders = $scopedPurchaseOrders
+            ->filter(fn (ProcurementPurchaseOrder $purchaseOrder) => $this->withinProjectPositionPeriod($purchaseOrder->issued_at ?: $purchaseOrder->created_at, $filters))
+            ->values();
+
+        $scopedPurchaseOrderIds = $scopedPurchaseOrders->pluck('id')->filter()->unique()->values()->all();
+        $invoiceIdsFromPurchaseOrders = $scopedPurchaseOrders->pluck('invoice_id')->filter()->unique()->values()->all();
         $dashboardAligned = ($filters['mode'] ?? 'life_to_date') === 'life_to_date'
             && empty($filters['funding_id'])
             && empty($filters['project_id'])
@@ -1989,17 +2130,21 @@ class BudgetReportController extends Controller
                 ->filter(fn (ProcurementInvoice $invoice) => $this->withinProjectPositionPeriod($invoice->invoice_month ?: $invoice->created_at, $filters))
                 ->values();
 
-        $disbursements = (empty($purchaseOrderIds) && empty($subActivityIds))
+        $disbursements = (empty($scopedPurchaseOrderIds) && empty($subActivityIds))
             ? collect()
             : ProcurementDisbursement::with('purchaseOrder.invoice')
                 ->recognizedPayment()
-                ->where(function ($query) use ($purchaseOrderIds, $subActivityIds) {
-                    if (! empty($purchaseOrderIds)) {
-                        $query->whereIn('purchase_order_id', $purchaseOrderIds);
+                ->where(function ($query) use ($scopedPurchaseOrderIds, $subActivityIds) {
+                    if (! empty($scopedPurchaseOrderIds)) {
+                        $query->whereIn('purchase_order_id', $scopedPurchaseOrderIds);
                     }
 
                     if (! empty($subActivityIds)) {
-                        $method = empty($purchaseOrderIds) ? 'whereIn' : 'orWhereIn';
+                        // A payment belongs to the selected reporting period by
+                        // its own paid_at date. Do not require its purchase order
+                        // to have been issued in the same period: the persisted
+                        // sub-activity is the independent hierarchy scope.
+                        $method = empty($scopedPurchaseOrderIds) ? 'whereIn' : 'orWhereIn';
                         $query->{$method}('sub_activity_id', $subActivityIds);
                     }
                 })
@@ -2038,7 +2183,7 @@ class BudgetReportController extends Controller
                     }
 
                     $budget = $this->projectPositionAllocationAmount($subActivity->allocations, $filters);
-                    $direct = $this->directProjectPositionMetrics('sub_activity', (string) $subActivity->id, $commitments, $purchaseOrders, $invoices, $disbursements);
+                    $direct = $this->directProjectPositionMetrics('sub_activity', (string) $subActivity->id, $commitments, $purchaseOrders, $invoices, $disbursements, $scopedCommitments, $scopedPurchaseOrders);
                     $subRow = $this->projectPositionNode($subActivity->name, 'sub_activity', $budget, $direct, $this->emptyProjectPositionTotals());
 
                     if ($this->isUnallocatedFundsBalanceSheetLine((string) $subActivity->name)) {
@@ -2057,7 +2202,7 @@ class BudgetReportController extends Controller
                     : $this->projectPositionAllocationAmount($activity->allocations, $filters);
                 $activityDirect = $hasSubActivityFilter
                     ? $this->emptyDirectProjectPositionMetrics()
-                    : $this->directProjectPositionMetrics('activity', (string) $activity->id, $commitments, $purchaseOrders, $invoices, $disbursements);
+                    : $this->directProjectPositionMetrics('activity', (string) $activity->id, $commitments, $purchaseOrders, $invoices, $disbursements, $scopedCommitments, $scopedPurchaseOrders);
                 $activityRow = $this->projectPositionNode(
                     $activity->name,
                     'activity',
@@ -2079,7 +2224,7 @@ class BudgetReportController extends Controller
             }
             $projectDirect = ($hasActivityFilter || $hasSubActivityFilter)
                 ? $this->emptyDirectProjectPositionMetrics()
-                : $this->directProjectPositionMetrics('project', (string) $project->id, $commitments, $purchaseOrders, $invoices, $disbursements);
+                : $this->directProjectPositionMetrics('project', (string) $project->id, $commitments, $purchaseOrders, $invoices, $disbursements, $scopedCommitments, $scopedPurchaseOrders);
             $projectRow = $this->projectPositionNode(
                 $project->name,
                 'project',
@@ -2109,8 +2254,6 @@ class BudgetReportController extends Controller
             $totals = $this->addProjectPositionTotals($totals, $projectRow);
         }
 
-        $displayRows = $this->filterProjectPositionRows($projectRows, $filters);
-
         $scheduledAllocation = $dashboardAligned
             ? round((float) data_get($executionDashboard, 'executionSummary.scheduled_allocation', $totals['budget']), 2)
             : round((float) $totals['budget'], 2);
@@ -2122,6 +2265,30 @@ class BudgetReportController extends Controller
                 $approvedFunding,
                 $scheduledAllocation
             );
+        $displayRows = $this->filterProjectPositionRows($projectRows, $filters);
+        $filteredFactsAligned = ! $dashboardAligned
+            && ! $hasStructureFilter
+            && (! empty($filters['funding_id']) || ($filters['mode'] ?? 'life_to_date') !== 'life_to_date');
+        $programmeReconciliation = $dashboardAligned
+            ? collect($executionDashboard['componentBreakdownRows'] ?? [])->first(
+                fn ($row): bool => ($row['level'] ?? null) === 'programme_reconciliation'
+            )
+            : ($filteredFactsAligned
+                ? $this->projectPositionFilteredReconciliation(
+                    $budgetEnvelope,
+                    $totals,
+                    $commitments,
+                    $purchaseOrders,
+                    $invoices,
+                    $disbursements,
+                    $projectRows->isEmpty()
+                )
+                : null);
+
+        if ($programmeReconciliation) {
+            $displayRows->push($this->projectPositionReconciliationRow($programmeReconciliation));
+        }
+
         $invoiceComposition = $invoices
             ->groupBy(fn (ProcurementInvoice $invoice): string => strtolower((string) ($invoice->status ?: 'unspecified')))
             ->map(fn ($rows, string $status): array => [
@@ -2141,6 +2308,11 @@ class BudgetReportController extends Controller
         if ($dashboardAligned) {
             $totals['committed'] = round((float) ($executionDashboard['totalCommitment'] ?? $totals['committed']), 2);
             $totals['disbursed'] = round((float) ($executionDashboard['totalDisbursements'] ?? $totals['disbursed']), 2);
+        } elseif ($filteredFactsAligned) {
+            $totals['committed'] = round((float) $commitments->sum('commitment_amount'), 2);
+            $totals['purchase_orders'] = round((float) $purchaseOrders->sum('amount'), 2);
+            $totals['invoiced'] = round((float) $invoices->sum('amount'), 2);
+            $totals['disbursed'] = round((float) $disbursements->sum('amount'), 2);
         }
         $totals['approved_funding'] = round($approvedFunding, 2);
         $totals['funding_balance'] = round($approvedFunding - $totals['disbursed'], 2);
@@ -2164,6 +2336,7 @@ class BudgetReportController extends Controller
         return [
             'currency' => $program->sector?->currency ?? $fundings->first()?->currency ?? $program->currency ?? 'USD',
             'dashboard_aligned' => $dashboardAligned,
+            'programme_reconciliation' => $programmeReconciliation,
             'execution_dashboard_snapshot' => data_get($executionDashboard, 'executionChartData.snapshot_hash'),
             'execution_dashboard_totals' => $executionDashboard['executionBreakdownTotals'] ?? null,
             'rows' => $displayRows,
@@ -2328,26 +2501,53 @@ class BudgetReportController extends Controller
         ];
     }
 
-    private function directProjectPositionMetrics(string $level, string $id, $commitments, $purchaseOrders, $invoices, $disbursements): array
-    {
+    private function directProjectPositionMetrics(
+        string $level,
+        string $id,
+        $commitments,
+        $purchaseOrders,
+        $invoices,
+        $disbursements,
+        $scopedCommitments = null,
+        $scopedPurchaseOrders = null
+    ): array {
         $nodeCommitments = $commitments
             ->where('allocation_level', $level)
             ->filter(fn ($commitment) => (string) $commitment->allocation_id === $id)
             ->values();
 
-        $commitmentIds = $nodeCommitments->pluck('id')->map(fn ($value) => (string) $value)->all();
+        $nodeScopedCommitments = ($scopedCommitments ?? $commitments)
+            ->where('allocation_level', $level)
+            ->filter(fn ($commitment) => (string) $commitment->allocation_id === $id)
+            ->values();
+        $scopedCommitmentIds = $nodeScopedCommitments
+            ->pluck('id')
+            ->map(fn ($value) => (string) $value)
+            ->all();
 
-        $nodePurchaseOrders = $purchaseOrders->filter(function ($purchaseOrder) use ($level, $id, $commitmentIds) {
+        $nodeScopedPurchaseOrders = ($scopedPurchaseOrders ?? $purchaseOrders)
+            ->filter(function ($purchaseOrder) use ($level, $id, $scopedCommitmentIds) {
             $matchesCommitment = $purchaseOrder->budget_commitment_id
-                && in_array((string) $purchaseOrder->budget_commitment_id, $commitmentIds, true);
+                && in_array((string) $purchaseOrder->budget_commitment_id, $scopedCommitmentIds, true);
             $matchesSubActivity = $level === 'sub_activity'
                 && (string) $purchaseOrder->sub_activity_id === $id;
 
             return $matchesCommitment || $matchesSubActivity;
         })->unique('id')->values();
 
-        $purchaseOrderIds = $nodePurchaseOrders->pluck('id')->map(fn ($value) => (string) $value)->all();
-        $invoiceIds = $nodePurchaseOrders->pluck('invoice_id')->filter()->map(fn ($value) => (string) $value)->all();
+        $scopedPurchaseOrderIds = $nodeScopedPurchaseOrders
+            ->pluck('id')
+            ->map(fn ($value) => (string) $value)
+            ->all();
+        $nodePurchaseOrders = $purchaseOrders
+            ->filter(fn ($purchaseOrder) => in_array((string) $purchaseOrder->id, $scopedPurchaseOrderIds, true))
+            ->unique('id')
+            ->values();
+        $invoiceIds = $nodeScopedPurchaseOrders
+            ->pluck('invoice_id')
+            ->filter()
+            ->map(fn ($value) => (string) $value)
+            ->all();
 
         $nodeInvoices = $invoices->filter(function ($invoice) use ($level, $id, $invoiceIds) {
             $matchesPurchaseOrder = in_array((string) $invoice->id, $invoiceIds, true);
@@ -2357,9 +2557,9 @@ class BudgetReportController extends Controller
             return $matchesPurchaseOrder || $matchesSubActivity;
         })->unique('id')->values();
 
-        $nodeDisbursements = $disbursements->filter(function ($disbursement) use ($level, $id, $purchaseOrderIds) {
+        $nodeDisbursements = $disbursements->filter(function ($disbursement) use ($level, $id, $scopedPurchaseOrderIds) {
             $matchesPurchaseOrder = $disbursement->purchase_order_id
-                && in_array((string) $disbursement->purchase_order_id, $purchaseOrderIds, true);
+                && in_array((string) $disbursement->purchase_order_id, $scopedPurchaseOrderIds, true);
             $matchesSubActivity = $level === 'sub_activity'
                 && (string) $disbursement->sub_activity_id === $id;
 
@@ -2403,6 +2603,81 @@ class BudgetReportController extends Controller
             'references' => $direct['references'] ?? [],
             'children' => collect(),
         ];
+    }
+
+    private function projectPositionReconciliationRow(array $reconciliation): array
+    {
+        $budget = round((float) ($reconciliation['allocation'] ?? 0), 2);
+        $committed = round((float) ($reconciliation['commitment'] ?? 0), 2);
+        $purchaseOrders = round((float) ($reconciliation['purchase_orders'] ?? 0), 2);
+        $invoiced = round((float) ($reconciliation['invoiced'] ?? 0), 2);
+        $disbursed = round((float) ($reconciliation['disbursement'] ?? 0), 2);
+
+        return [
+            'label' => (string) ($reconciliation['label'] ?? 'Programme Reconciliation Adjustment'),
+            'level' => 'programme_reconciliation',
+            'budget' => $budget,
+            'committed' => $committed,
+            'purchase_orders' => $purchaseOrders,
+            'invoiced' => $invoiced,
+            'disbursed' => $disbursed,
+            'uncommitted_budget' => round($budget - $committed, 2),
+            'unpaid_commitments' => round(max($purchaseOrders - $disbursed, 0), 2),
+            'po_balance' => round($purchaseOrders - $disbursed, 2),
+            'invoice_balance' => round($invoiced - $disbursed, 2),
+            'commitment_rate' => $budget > 0 ? round(($committed / $budget) * 100, 1) : 0.0,
+            'disbursement_rate' => $budget > 0 ? round(($disbursed / $budget) * 100, 1) : 0.0,
+            'references' => $this->emptyDirectProjectPositionMetrics()['references'],
+            'children' => collect(),
+        ];
+    }
+
+    private function projectPositionFilteredReconciliation(
+        float $budgetEnvelope,
+        array $hierarchyTotals,
+        $commitments,
+        $purchaseOrders,
+        $invoices,
+        $disbursements,
+        bool $force = false
+    ): ?array {
+        $reconciliation = [
+            'component_id' => null,
+            'level' => 'programme_reconciliation',
+            'label' => 'Unassigned Financial Activity',
+            'description' => 'Financial activity in the selected funding and reporting period that is not represented by the surviving programme structure.',
+            'allocation' => round($budgetEnvelope - (float) ($hierarchyTotals['budget'] ?? 0), 2),
+            'commitment' => round(
+                (float) collect($commitments)->sum('commitment_amount')
+                    - (float) ($hierarchyTotals['committed'] ?? 0),
+                2
+            ),
+            'purchase_orders' => round(
+                (float) collect($purchaseOrders)->sum('amount')
+                    - (float) ($hierarchyTotals['purchase_orders'] ?? 0),
+                2
+            ),
+            'invoiced' => round(
+                (float) collect($invoices)->sum('amount')
+                    - (float) ($hierarchyTotals['invoiced'] ?? 0),
+                2
+            ),
+            'disbursement' => round(
+                (float) collect($disbursements)->sum('amount')
+                    - (float) ($hierarchyTotals['disbursed'] ?? 0),
+                2
+            ),
+        ];
+
+        $hasDifference = collect([
+            'allocation',
+            'commitment',
+            'purchase_orders',
+            'invoiced',
+            'disbursement',
+        ])->contains(fn (string $key): bool => abs((float) $reconciliation[$key]) > 0.01);
+
+        return $force || $hasDifference ? $reconciliation : null;
     }
 
     private function isUnallocatedFundsBalanceSheetLine(string $name): bool
@@ -2833,21 +3108,6 @@ class BudgetReportController extends Controller
         return now()->startOfDay();
     }
 
-    private function buildIfrGlobalBudgetBySubActivity(Program $program): array
-    {
-        $budgets = [];
-
-        foreach ($program->projects as $project) {
-            foreach ($project->activities as $activity) {
-                foreach ($activity->subActivities as $subActivity) {
-                    $budgets[(string) $subActivity->id] = round((float) $subActivity->allocations->sum('amount'), 2);
-                }
-            }
-        }
-
-        return $budgets;
-    }
-
     private function buildIfrHierarchy(
         Program $program,
         array $globalCommitmentBySub,
@@ -3155,16 +3415,16 @@ class BudgetReportController extends Controller
         $summary[] = "Coverage period: {$label}.";
 
         if ($globalCommitment <= 0) {
-            $summary[] = 'No global commitments were found for the selected budget structure, so planned commitments and disbursements cannot be compared.';
+            $summary[] = 'No submitted or approved commitments were found for the selected budget structure, so planned pipeline commitments and disbursements cannot be compared.';
         } else {
             $summary[] = sprintf(
-                'Global commitments are %s and planned commitments are %s, giving a commitment rate of %s%%.',
+                'Submitted and approved commitments are %s; planned pipeline commitments are %s, giving a pipeline coverage rate of %s%%.',
                 number_format($globalCommitment, 2),
                 number_format($plannedCommitment, 2),
                 number_format($commitmentRate, 2)
             );
             $summary[] = sprintf(
-                'Recorded fully paid disbursements are %s, giving a disbursement rate of %s%% against global commitments.',
+                'Recorded fully paid disbursements are %s, giving a disbursement rate of %s%% against submitted and approved commitments.',
                 number_format($disbursed, 2),
                 number_format($disbursementRate, 2)
             );
@@ -3204,7 +3464,7 @@ class BudgetReportController extends Controller
         }
 
         if ($variance > 0) {
-            $summary[] = 'Remaining global commitment balance: ' . number_format($variance, 2) . '.';
+            $summary[] = 'Remaining submitted/approved commitment balance: ' . number_format($variance, 2) . '.';
         }
 
         return $summary;

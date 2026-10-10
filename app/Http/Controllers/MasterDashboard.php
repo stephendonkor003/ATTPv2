@@ -605,10 +605,6 @@ class MasterDashboard extends Controller
             ->map(fn ($id) => (string) $id)
             ->all();
 
-        if (empty($componentIds)) {
-            return collect();
-        }
-
         $allocationByComponent = DB::table('myb_project_allocations')
             ->whereIn('project_id', $componentIds)
             ->when($yearStart && $yearEnd, fn ($q) => $q->whereBetween('year', [$yearStart, $yearEnd]))
@@ -616,7 +612,7 @@ class MasterDashboard extends Controller
             ->groupBy('project_id')
             ->pluck('total', 'project_id');
 
-        $commitmentByComponent = $this->commitmentsByExecutionComponent($componentIds);
+        $commitmentByComponent = $this->commitmentsByExecutionComponent($componentIds, $scopeType);
         $disbursementByComponent = $this->disbursementsByExecutionComponent($componentIds, $yearStart, $yearEnd);
 
         $rows = $components->map(function (Project $component) use (
@@ -649,22 +645,45 @@ class MasterDashboard extends Controller
         })->values();
 
         $unallocatedEnvelope = round($budgetEnvelope - (float) $rows->sum('allocation'), 2);
-        if (abs($unallocatedEnvelope) > 0.01) {
+        $unassignedCommitment = round($totalCommitment - (float) $rows->sum('commitment'), 2);
+        $unassignedDisbursement = round($totalDisbursements - (float) $rows->sum('disbursement'), 2);
+        $requiresReconciliation = $unallocatedEnvelope < -0.01
+            || $unassignedCommitment < -0.01
+            || $unassignedDisbursement < -0.01;
+
+        if (
+            $components->isEmpty()
+            || abs($unallocatedEnvelope) > 0.01
+            || abs($unassignedCommitment) > 0.01
+            || abs($unassignedDisbursement) > 0.01
+        ) {
+            $hasUnassignedExecution = abs($unassignedCommitment) > 0.01
+                || abs($unassignedDisbursement) > 0.01;
+
             $rows->push([
                 'component_id' => null,
-                'label' => $unallocatedEnvelope > 0
-                    ? 'Unallocated Programme Balance'
-                    : 'Envelope Reconciliation',
-                'description' => $unallocatedEnvelope > 0
-                    ? 'Approved budget not yet distributed across component yearly allocations.'
-                    : 'Component yearly allocations exceed the approved budget envelope.',
+                'level' => 'programme_reconciliation',
+                'label' => $requiresReconciliation
+                    ? 'Programme Reconciliation Adjustment'
+                    : ($hasUnassignedExecution
+                        ? 'Unassigned Financial Activity'
+                        : 'Unallocated Programme Balance'),
+                'description' => $requiresReconciliation
+                    ? 'Component figures exceed one or more programme totals; this adjustment keeps the breakdown reconciled.'
+                    : ($hasUnassignedExecution
+                        ? 'Posted commitments or payments whose budget-structure record is missing or no longer assigned to a component.'
+                        : 'Approved budget not yet distributed across component yearly allocations.'),
                 'name' => 'Programme envelope reconciliation',
                 'allocation' => $unallocatedEnvelope,
-                'commitment' => 0.0,
-                'disbursement' => 0.0,
-                'remaining' => $unallocatedEnvelope,
-                'execution_rate' => 0.0,
-                'disbursement_rate' => 0.0,
+                'commitment' => $unassignedCommitment,
+                'disbursement' => $unassignedDisbursement,
+                'remaining' => round($unallocatedEnvelope - $unassignedCommitment, 2),
+                'execution_rate' => $unallocatedEnvelope > 0
+                    ? max(0, round(($unassignedCommitment / $unallocatedEnvelope) * 100, 1))
+                    : 0.0,
+                'disbursement_rate' => $unallocatedEnvelope > 0
+                    ? max(0, round(($unassignedDisbursement / $unallocatedEnvelope) * 100, 1))
+                    : 0.0,
             ]);
         }
 
@@ -872,7 +891,7 @@ class MasterDashboard extends Controller
             ->pluck('total', 'sub_component_id');
     }
 
-    private function commitmentsByExecutionComponent(array $componentIds)
+    private function commitmentsByExecutionComponent(array $componentIds, string $scopeType)
     {
         $projectExpression = "
             CASE
@@ -888,6 +907,8 @@ class MasterDashboard extends Controller
 
         return DB::table('myb_budget_commitments as c')
             ->leftJoin('myb_purchase_requests as pr', 'pr.id', '=', 'c.purchase_request_id')
+            ->leftJoin('myb_program_fundings as c_funding', 'c_funding.id', '=', 'c.program_funding_id')
+            ->leftJoin('myb_program_fundings as pr_funding', 'pr_funding.id', '=', 'pr.program_funding_id')
             ->leftJoin('myb_activities as c_activity', function ($join) {
                 $join->on('c_activity.id', '=', 'c.allocation_id')
                     ->where('c.allocation_level', '=', 'activity');
@@ -906,10 +927,26 @@ class MasterDashboard extends Controller
                     ->where('pr.allocation_level', '=', 'sub_activity');
             })
             ->leftJoin('myb_activities as pr_sub_activity_project', 'pr_sub_activity_project.id', '=', 'pr_sub_activity.activity_id')
+            ->join('myb_projects as mapped_project', function ($join) use ($projectExpression) {
+                $join->on('mapped_project.id', '=', DB::raw("({$projectExpression})"));
+            })
             ->whereIn('c.status', [
                 BudgetCommitment::STATUS_SUBMITTED,
                 BudgetCommitment::STATUS_APPROVED,
             ])
+            ->where(function ($fundingQuery) use ($scopeType) {
+                $fundingQuery
+                    ->whereColumn('c_funding.program_id', 'mapped_project.program_id')
+                    ->orWhereColumn('pr_funding.program_id', 'mapped_project.program_id');
+
+                if ($scopeType === 'global') {
+                    $fundingQuery->orWhere(function ($unfundedQuery) {
+                        $unfundedQuery
+                            ->whereNull('c.program_funding_id')
+                            ->whereNull('pr.program_funding_id');
+                    });
+                }
+            })
             ->whereIn(DB::raw("({$projectExpression})"), $componentIds)
             ->selectRaw("{$projectExpression} as component_id")
             ->selectRaw('SUM(c.commitment_amount) as total')
@@ -957,6 +994,9 @@ class MasterDashboard extends Controller
             ->leftJoin('myb_purchase_requests as pr', 'pr.id', '=', 'po.purchase_request_id')
             ->leftJoin('myb_budget_commitments as bc', 'bc.id', '=', 'po.budget_commitment_id')
             ->leftJoin('myb_purchase_requests as bc_pr', 'bc_pr.id', '=', 'bc.purchase_request_id')
+            ->leftJoin('myb_program_fundings as pr_funding', 'pr_funding.id', '=', 'pr.program_funding_id')
+            ->leftJoin('myb_program_fundings as bc_funding', 'bc_funding.id', '=', 'bc.program_funding_id')
+            ->leftJoin('myb_program_fundings as bc_pr_funding', 'bc_pr_funding.id', '=', 'bc_pr.program_funding_id')
             ->leftJoin('myb_sub_activities as d_sub_activity', 'd_sub_activity.id', '=', 'd.sub_activity_id')
             ->leftJoin('myb_activities as d_sub_activity_project', 'd_sub_activity_project.id', '=', 'd_sub_activity.activity_id')
             ->leftJoin('myb_sub_activities as po_sub_activity', 'po_sub_activity.id', '=', 'po.sub_activity_id')
@@ -988,11 +1028,26 @@ class MasterDashboard extends Controller
                     ->where('bc_pr.allocation_level', '=', 'sub_activity');
             })
             ->leftJoin('myb_activities as bc_pr_sub_activity_project', 'bc_pr_sub_activity_project.id', '=', 'bc_pr_sub_activity.activity_id')
+            ->join('myb_projects as mapped_project', function ($join) use ($projectExpression) {
+                $join->on('mapped_project.id', '=', DB::raw("({$projectExpression})"));
+            })
             ->when($yearStart && $yearEnd, function ($q) use ($yearStart, $yearEnd) {
                 $q->whereBetween('d.paid_at', [
                     Carbon::create((int) $yearStart, 1, 1)->startOfDay(),
                     Carbon::create((int) $yearEnd, 12, 31)->endOfDay(),
                 ]);
+            })
+            ->where(function ($fundingQuery) {
+                $fundingQuery
+                    ->whereColumn('pr_funding.program_id', 'mapped_project.program_id')
+                    ->orWhereColumn('bc_funding.program_id', 'mapped_project.program_id')
+                    ->orWhereColumn('bc_pr_funding.program_id', 'mapped_project.program_id')
+                    ->orWhere(function ($unfundedQuery) {
+                        $unfundedQuery
+                            ->whereNull('pr.program_funding_id')
+                            ->whereNull('bc.program_funding_id')
+                            ->whereNull('bc_pr.program_funding_id');
+                    });
             })
             ->whereIn(DB::raw("({$projectExpression})"), $componentIds)
             ->selectRaw("{$projectExpression} as component_id")

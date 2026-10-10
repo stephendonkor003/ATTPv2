@@ -107,3 +107,12 @@ it('shows yearly limits inline and blocks an excessive amount before save', func
         ->toContain('input.setCustomValidity')
         ->toContain('submitButton.disabled = hasExceededAmount');
 });
+
+it('prevents allocation reductions from deepening a posted commitment shortfall', function () {
+    $source = file_get_contents(dirname(__DIR__, 2).'/app/Http/Controllers/SubActivityController.php');
+
+    expect($source)
+        ->toContain("BudgetCommitment::STATUS_SUBMITTED, BudgetCommitment::STATUS_APPROVED")
+        ->toContain("\$amount + 0.004 < \$protectedCommitment")
+        ->toContain('The allocation cannot be reduced below that posted amount.');
+});

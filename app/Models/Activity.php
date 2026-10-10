@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\BaseModel;
 use App\Models\GovernanceNode;
+use App\Services\FinancialHierarchyDeletionGuard;
 
 class Activity extends BaseModel
 {
@@ -18,6 +19,18 @@ class Activity extends BaseModel
         'expected_outcome_value',
         'created_by',
     ];
+
+    protected static function booted(): void
+    {
+        static::deleting(function (Activity $activity): void {
+            $activity->assertHasNoFinancialDependencies();
+        });
+    }
+
+    public function assertHasNoFinancialDependencies(): void
+    {
+        app(FinancialHierarchyDeletionGuard::class)->assertActivityCanBeDeleted($this);
+    }
 
     /**
      * Relationship: Activity belongs to a Project

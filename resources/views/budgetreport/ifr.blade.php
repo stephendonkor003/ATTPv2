@@ -4,7 +4,7 @@
     @php
         $reportMeta = array_merge([
             'title' => 'IFR - Interim Financial Report',
-            'description' => 'Global commitments from the budget structure, planned commitments from purchase requests, and fully paid disbursement trends',
+            'description' => 'Submitted and approved commitments, planned pipeline commitments from purchase requests, and fully paid disbursement trends',
             'form_route' => 'budget.reports.ifr',
             'pdf_route' => 'budget.reports.ifr.export.pdf',
             'excel_route' => 'budget.reports.ifr.export.excel',
@@ -152,11 +152,11 @@
                             </div>
                         </div>
                         <div class="text-end">
-                            <div class="fw-semibold">Global Commitments: {{ $currency }} {{ number_format($totals['global_commitment'] ?? $totals['committed'] ?? 0, 2) }}</div>
-                            <div class="fw-semibold">Planned Commitments: {{ $currency }} {{ number_format($totals['planned_commitment'] ?? 0, 2) }}</div>
+                            <div class="fw-semibold">Submitted / Approved Commitments: {{ $currency }} {{ number_format($totals['global_commitment'] ?? $totals['committed'] ?? 0, 2) }}</div>
+                            <div class="fw-semibold">Planned Pipeline Commitments: {{ $currency }} {{ number_format($totals['planned_commitment'] ?? 0, 2) }}</div>
                             <div class="fw-semibold">Cumulative Disbursed: {{ $currency }} {{ number_format($totals['disbursed'] ?? 0, 2) }}</div>
                             <div class="text-muted small">
-                                Commitment Rate: {{ number_format($totals['commitment_rate'] ?? 0, 2) }}%
+                                Pipeline Coverage Rate: {{ number_format($totals['commitment_rate'] ?? 0, 2) }}%
                                 | Disbursement Rate: {{ number_format($totals['disbursement_rate'] ?? $totals['utilization'] ?? 0, 2) }}%
                             </div>
                         </div>
@@ -168,11 +168,11 @@
                                 <tr>
                                     <th rowspan="2" style="min-width: 260px;">Project / Activity / Sub-Activity</th>
                                     <th rowspan="2">PR Reference No</th>
-                                    <th rowspan="2" class="text-end">Global Commitments</th>
-                                    <th rowspan="2" class="text-end">Planned Commitments</th>
+                                    <th rowspan="2" class="text-end">Submitted / Approved Commitments</th>
+                                    <th rowspan="2" class="text-end">Planned Pipeline Commitments</th>
                                     <th rowspan="2" class="text-end">Cumulative Disbursement</th>
                                     <th rowspan="2" class="text-end">Variance</th>
-                                    <th rowspan="2" class="text-end">Commitment Rate</th>
+                                    <th rowspan="2" class="text-end">Pipeline Coverage Rate</th>
                                     <th rowspan="2" class="text-end">Disbursement Rate</th>
                                     @foreach ($filters['year_range'] as $year)
                                         <th colspan="3" class="text-center">{{ $year }}</th>
@@ -180,7 +180,7 @@
                                 </tr>
                                 <tr>
                                     @foreach ($filters['year_range'] as $year)
-                                        <th class="text-end">Global Commitments</th>
+                                        <th class="text-end">Submitted / Approved Commitments</th>
                                         <th class="text-end">Cumulative Disbursed</th>
                                         <th class="text-end">Variance</th>
                                     @endforeach
@@ -380,7 +380,7 @@
                 data: {
                     labels: lineLabels,
                     datasets: [{
-                        label: 'Global Commitments',
+                        label: 'Submitted / Approved Commitments',
                         data: lineCommitments,
                         borderColor: '#0d6efd',
                         backgroundColor: 'rgba(13,110,253,0.15)',
@@ -388,7 +388,7 @@
                         tension: 0.3,
                         fill: false,
                     }, {
-                        label: 'Planned Commitments',
+                        label: 'Planned Pipeline Commitments',
                         data: linePlannedCommitments,
                         borderColor: '#f59e0b',
                         backgroundColor: 'rgba(245,158,11,0.12)',
@@ -415,11 +415,11 @@
                 data: {
                     labels: barLabels,
                     datasets: [{
-                        label: 'Global Commitments',
+                        label: 'Submitted / Approved Commitments',
                         data: barCommitments,
                         backgroundColor: '#0d6efd'
                     }, {
-                        label: 'Planned Commitments',
+                        label: 'Planned Pipeline Commitments',
                         data: barPlannedCommitments,
                         backgroundColor: '#f59e0b'
                     }, {
@@ -447,7 +447,7 @@
                 options: {
                     responsive: true,
                     scales: {
-                        x: { title: { display: true, text: 'Global Commitments' } },
+                        x: { title: { display: true, text: 'Submitted / Approved Commitments' } },
                         y: { title: { display: true, text: 'Disbursed' } }
                     },
                     plugins: {

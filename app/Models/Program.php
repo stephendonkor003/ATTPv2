@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\BaseModel;
 use App\Models\GovernanceNode;
+use App\Services\FinancialHierarchyDeletionGuard;
 
 class Program extends BaseModel
 {
@@ -33,6 +34,18 @@ class Program extends BaseModel
     protected $casts = [
         'ttl_notified_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        static::deleting(function (Program $program): void {
+            $program->assertHasNoFinancialDependencies();
+        });
+    }
+
+    public function assertHasNoFinancialDependencies(): void
+    {
+        app(FinancialHierarchyDeletionGuard::class)->assertProgramCanBeDeleted($this);
+    }
 
 
     public function sector()

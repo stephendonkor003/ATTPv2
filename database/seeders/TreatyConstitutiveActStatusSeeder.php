@@ -127,8 +127,9 @@ class TreatyConstitutiveActStatusSeeder extends Seeder
                 $ratificationDate = $this->parseSpreadsheetDate($row[$columnIndexes['ratification']] ?? null);
                 $depositDate = $this->parseSpreadsheetDate($row[$columnIndexes['deposit']] ?? null);
 
-                $isRatified = !is_null($ratificationDate);
-                $isSigned = !is_null($signatureDate) || $isRatified;
+                $isAcceded = !is_null($ratificationDate) && is_null($signatureDate);
+                $isRatified = !is_null($ratificationDate) && !$isAcceded;
+                $isSigned = !is_null($signatureDate);
 
                 $status = TreatyMemberStateStatus::query()->firstOrNew([
                     'treaty_id' => $treaty->id,
@@ -137,39 +138,35 @@ class TreatyConstitutiveActStatusSeeder extends Seeder
 
                 $isNew = !$status->exists;
 
+                if (!$isNew && !empty($status->official_status_source_url)) {
+                    continue;
+                }
+
+                $hasImportedStatus = !empty($status->official_status_source_url)
+                    || Str::contains((string) $status->signed_notes . ' ' . (string) $status->ratified_notes, 'treaty status spreadsheet');
+                if (!$isNew && !$hasImportedStatus && ($status->is_signed || $status->is_ratified || $status->is_acceded || $status->is_original_submitted || $status->signed_document_path || $status->ratified_document_path || $status->original_document_path)) {
+                    continue;
+                }
+
                 $status->is_signed = $isSigned;
-                $status->signed_at = $isSigned ? ($signatureDate ?? $ratificationDate) : null;
+                $status->signed_at = $signatureDate;
                 $status->is_ratified = $isRatified;
-                $status->ratified_at = $ratificationDate;
-
-                if ($isSigned && empty($status->signed_service_code)) {
-                    $status->signed_service_code = TreatyMemberStateStatus::generateUniqueServiceCode('signed_service_code');
-                }
-
-                if ($isRatified && empty($status->ratified_service_code)) {
-                    $status->ratified_service_code = TreatyMemberStateStatus::generateUniqueServiceCode('ratified_service_code');
-                }
-
-                if ($isSigned && !empty($status->signed_service_code) && empty($status->signed_service_code_verified_at)) {
-                    $status->signed_service_code_verified_at = now();
-                    if ($seedUserId && empty($status->signed_service_code_verified_by_user_id)) {
-                        $status->signed_service_code_verified_by_user_id = $seedUserId;
-                    }
-                }
-
-                if ($isRatified && !empty($status->ratified_service_code) && empty($status->ratified_service_code_verified_at)) {
-                    $status->ratified_service_code_verified_at = now();
-                    if ($seedUserId && empty($status->ratified_service_code_verified_by_user_id)) {
-                        $status->ratified_service_code_verified_by_user_id = $seedUserId;
-                    }
-                }
+                $status->ratified_at = $isRatified ? $ratificationDate : null;
+                $status->is_acceded = $isAcceded;
+                $status->acceded_at = $isAcceded ? $ratificationDate : null;
+                $status->instrument_deposited_at = $depositDate;
 
                 if ($isSigned && empty($status->signed_notes)) {
                     $status->signed_notes = $this->buildSignedNote($filePath);
                 }
 
-                if ($isRatified) {
-                    $status->ratified_notes = $this->buildRatifiedNote($filePath, $depositDate, (string) $status->ratified_notes);
+                if ($isRatified || $isAcceded) {
+                    $status->ratified_notes = $this->buildInstrumentStatusNote(
+                        $filePath,
+                        $depositDate,
+                        (string) $status->ratified_notes,
+                        $isAcceded
+                    );
                 }
 
                 if ($seedUserId) {
@@ -192,6 +189,8 @@ class TreatyConstitutiveActStatusSeeder extends Seeder
             }
         }
 
+        $snapshotStats = $this->syncOfficialStatusSnapshot($memberStates, $memberStatesByNormalized, $aliases, $treaties, $seedUserId);
+
         if (!empty($missingTreaties)) {
             $this->command?->warn(
                 'TreatyConstitutiveActStatusSeeder missing treaty matches for folders: '
@@ -213,7 +212,6 @@ class TreatyConstitutiveActStatusSeeder extends Seeder
             );
         }
 
-        $backfilledCodes = $this->backfillMissingServiceCodes($seedUserId);
         $matrixRowsCreated = $this->ensureCompleteMemberStateMatrix($treaties, $memberStates, $seedUserId);
 
         $this->command?->info(
@@ -227,18 +225,133 @@ class TreatyConstitutiveActStatusSeeder extends Seeder
             . $rowsSeeded
             . ', updated: '
             . $rowsUpdated
-            . '). Service-code backfill (signed: '
-            . $backfilledCodes['signed_code']
-            . ', ratified: '
-            . $backfilledCodes['ratified_code']
-            . '), verification backfill (signed: '
-            . $backfilledCodes['signed_verified']
-            . ', ratified: '
-            . $backfilledCodes['ratified_verified']
             . '), full matrix rows created: '
             . $matrixRowsCreated
             . '.'
         );
+        if ($snapshotStats['treaties'] > 0) {
+            $this->command?->info('TreatyConstitutiveActStatusSeeder imported ' . $snapshotStats['rows'] . ' current AU status rows from ' . $snapshotStats['treaties'] . ' official PDFs (as of ' . $snapshotStats['latest_as_of'] . ').');
+        }
+    }
+
+    /**
+     * @param Collection<int, AuMemberState> $memberStates
+     * @param Collection<string, AuMemberState> $memberStatesByNormalized
+     * @param array<string, string> $aliases
+     * @param Collection<int, Treaty> $treaties
+     * @return array{treaties:int,rows:int,latest_as_of:string}
+     */
+    private function syncOfficialStatusSnapshot(Collection $memberStates, Collection $memberStatesByNormalized, array $aliases, Collection $treaties, ?string $seedUserId): array
+    {
+        $path = database_path('treaty files/AU_Treaty_Status_Snapshot.json');
+        if (!File::exists($path)) {
+            return ['treaties' => 0, 'rows' => 0, 'latest_as_of' => 'unavailable'];
+        }
+
+        try {
+            $snapshot = json_decode(File::get($path), true, 512, JSON_THROW_ON_ERROR);
+        } catch (\Throwable $exception) {
+            Log::warning('Treaty status snapshot could not be read.', ['error' => $exception->getMessage()]);
+            return ['treaties' => 0, 'rows' => 0, 'latest_as_of' => 'unavailable'];
+        }
+
+        $rowsSynced = 0;
+        $treatiesSynced = 0;
+        $latestAsOf = null;
+        $unmatched = [];
+        $missingCountries = [];
+        foreach (($snapshot['treaties'] ?? []) as $snapshotTreaty) {
+            $treatyTitle = (string) ($snapshotTreaty['title'] ?? '');
+            $treaty = $this->resolveTreatyForFolder($treatyTitle, $treaties);
+            $statusList = $snapshotTreaty['status_list'] ?? [];
+            if (!$treaty || empty($statusList['pdf_url']) || empty($statusList['member_states'])) {
+                $unmatched[] = $treatyTitle;
+                continue;
+            }
+
+            $asOf = $statusList['as_of'] ?? null;
+            if ($asOf && (!$latestAsOf || $asOf > $latestAsOf)) {
+                $latestAsOf = $asOf;
+            }
+
+            foreach ($statusList['member_states'] as $row) {
+                $country = trim((string) ($row['country'] ?? ''));
+                $normalized = $this->normalizeCountryName($country);
+                if (Str::startsWith($normalized, 'c te d ivoire')) {
+                    $normalized = $this->normalizeCountryName('Cote d Ivoire');
+                }
+                $lookupCountry = $aliases[$normalized] ?? $normalized;
+                $memberState = $memberStatesByNormalized->get($lookupCountry);
+                if (!$memberState) {
+                    $missingCountries[$country] = true;
+                    continue;
+                }
+
+                $signedDate = $this->parseSpreadsheetDate($row['signed_at'] ?? null);
+                $completionDate = $this->parseSpreadsheetDate($row['ratification_or_accession_at'] ?? null);
+                $depositDate = $this->parseSpreadsheetDate($row['instrument_deposited_at'] ?? null);
+                // AU publishes one ratification/accession date; without a signature date, accession is the best source-based classification.
+                $isAcceded = $completionDate !== null && $signedDate === null;
+                $isRatified = $completionDate !== null && !$isAcceded;
+                $sourceUrl = (string) $statusList['pdf_url'];
+                $status = TreatyMemberStateStatus::query()->firstOrNew([
+                    'treaty_id' => $treaty->id,
+                    'member_state_id' => $memberState->id,
+                ]);
+                $isNew = !$status->exists;
+                $isSourceManaged = $isNew
+                    || !empty($status->official_status_source_url)
+                    || Str::contains((string) $status->signed_notes . ' ' . (string) $status->ratified_notes, 'treaty status spreadsheet');
+                if (!$isSourceManaged && ($status->is_signed || $status->is_ratified || $status->is_acceded || $status->is_original_submitted || $status->signed_document_path || $status->ratified_document_path || $status->original_document_path)) {
+                    continue;
+                }
+
+                $status->is_signed = $signedDate !== null;
+                $status->signed_at = $signedDate;
+                $status->is_ratified = $isRatified;
+                $status->ratified_at = $isRatified ? $completionDate : null;
+                $status->is_acceded = $isAcceded;
+                $status->acceded_at = $isAcceded ? $completionDate : null;
+                $status->instrument_deposited_at = $depositDate;
+                $status->official_status_as_of = $asOf;
+                $status->official_status_source_url = $sourceUrl;
+
+                if (empty($status->signed_by_user_id) && empty($status->signed_document_path)) {
+                    $status->signed_service_code = null;
+                    $status->signed_service_code_verified_at = null;
+                    $status->signed_service_code_verified_by_user_id = null;
+                }
+                if (empty($status->ratified_by_user_id) && empty($status->ratified_document_path)) {
+                    $status->ratified_service_code = null;
+                    $status->ratified_service_code_verified_at = null;
+                    $status->ratified_service_code_verified_by_user_id = null;
+                }
+
+                $statusNote = 'AU official treaty status list dated ' . ($asOf ?: 'unknown') . ': ' . $sourceUrl;
+                if ($signedDate && (empty($status->signed_notes) || Str::contains((string) $status->signed_notes, 'treaty status spreadsheet') || Str::contains((string) $status->signed_notes, 'AU official treaty status list'))) {
+                    $status->signed_notes = $statusNote;
+                }
+                if (($isRatified || $isAcceded) && (empty($status->ratified_notes) || Str::contains((string) $status->ratified_notes, 'treaty status spreadsheet') || Str::contains((string) $status->ratified_notes, 'AU official treaty status list'))) {
+                    $status->ratified_notes = $statusNote;
+                }
+                if ($seedUserId) {
+                    $status->updated_by = $seedUserId;
+                }
+                $status->save();
+                $rowsSynced++;
+            }
+
+            $treatiesSynced++;
+        }
+
+        if (!empty($unmatched)) {
+            $this->command?->warn('AU status lists without matching treaty records: ' . implode('; ', $unmatched));
+        }
+        if (!empty($missingCountries)) {
+            $this->command?->warn('AU status list countries without member-state matches: ' . implode(', ', array_keys($missingCountries)));
+        }
+
+        return ['treaties' => $treatiesSynced, 'rows' => $rowsSynced, 'latest_as_of' => $latestAsOf ?: 'unknown'];
     }
 
     /**
@@ -539,9 +652,10 @@ class TreatyConstitutiveActStatusSeeder extends Seeder
         return 'Seeded from treaty status spreadsheet (' . $this->relativeStatusPath($filePath) . ').';
     }
 
-    private function buildRatifiedNote(string $filePath, ?Carbon $depositDate, string $existing): string
+    private function buildInstrumentStatusNote(string $filePath, ?Carbon $depositDate, string $existing, bool $isAcceded): string
     {
-        $base = 'Seeded from treaty status spreadsheet (' . $this->relativeStatusPath($filePath) . ').';
+        $state = $isAcceded ? 'Accession' : 'Ratification';
+        $base = 'AU ' . $state . ' status from treaty status spreadsheet (' . $this->relativeStatusPath($filePath) . ').';
         $depositPart = $depositDate ? ' Deposit date: ' . $depositDate->format('d/m/Y') . '.' : '';
         $appended = trim($base . $depositPart);
 

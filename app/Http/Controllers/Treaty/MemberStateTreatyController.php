@@ -105,11 +105,11 @@ class MemberStateTreatyController extends Controller
         $summary = [
             'total_treaties' => $treaties->count(),
             'signed_count' => $statusRows->where('is_signed', true)->count(),
-            'ratified_count' => $statusRows->where('is_ratified', true)->count(),
+            'ratified_count' => $statusRows->filter(fn ($status) => $status->is_ratified || $status->is_acceded)->count(),
             'original_submitted_count' => $statusRows->where('is_original_submitted', true)->count(),
             'pending_sign_count' => $treaties->count() - $statusRows->where('is_signed', true)->count(),
-            'pending_ratification_count' => $statusRows->where('is_signed', true)->where('is_ratified', false)->count(),
-            'pending_original_submission_count' => $statusRows->where('is_ratified', true)->where('is_original_submitted', false)->count(),
+            'pending_ratification_count' => $statusRows->filter(fn ($status) => $status->is_signed && !$status->is_ratified && !$status->is_acceded)->count(),
+            'pending_original_submission_count' => $statusRows->filter(fn ($status) => ($status->is_ratified || $status->is_acceded) && !$status->is_original_submitted)->count(),
             'fully_completed_count' => $statusRows->filter(function ($status) {
                 return $status->is_original_submitted
                     && $status->signed_service_code_verified_at
@@ -164,13 +164,19 @@ class MemberStateTreatyController extends Controller
             'member_state_id' => $user->member_state_id,
         ]);
 
-        if ($validated['action_type'] === 'ratify' && !$status->is_signed) {
+        if ($validated['action_type'] === 'ratify' && !$status->is_signed && !$status->is_acceded) {
             return back()->withErrors([
             'action_type' => 'This treaty must be signed first before it can be ratified.',
             ]);
         }
 
-        if ($validated['action_type'] === 'submit_original' && !$status->is_ratified) {
+        if ($validated['action_type'] === 'ratify' && $status->is_acceded) {
+            return back()->withErrors([
+                'action_type' => 'This treaty is already recorded as acceded to by the AU status source.',
+            ]);
+        }
+
+        if ($validated['action_type'] === 'submit_original' && !$status->is_ratified && !$status->is_acceded) {
             return back()->withErrors([
                 'action_type' => 'The treaty must be ratified before submitting original signed and ratified copies.',
             ]);
@@ -209,7 +215,7 @@ class MemberStateTreatyController extends Controller
             $status->ratified_service_code_verified_at = null;
             $status->ratified_service_code_verified_by_user_id = null;
 
-            if (!$status->is_signed) {
+            if (!$status->is_signed && !$status->is_acceded) {
                 $status->is_signed = true;
                 $status->signed_at = $dateTime;
                 $status->signed_by_user_id = $user->id;
@@ -246,6 +252,8 @@ class MemberStateTreatyController extends Controller
         }
 
         $status->updated_by = $user->id;
+        $status->official_status_as_of = null;
+        $status->official_status_source_url = null;
         $status->save();
 
         $emailSent = true;
@@ -343,8 +351,12 @@ class MemberStateTreatyController extends Controller
 
     private function resolveTreatyStage(?TreatyMemberStateStatus $status): string
     {
-        if (!$status || !$status->is_signed) {
+        if (!$status || (!$status->is_signed && !$status->is_acceded)) {
             return 'Not Started';
+        }
+
+        if ($status->is_acceded && !$status->is_original_submitted) {
+            return 'Acceded';
         }
 
         if ($status->is_signed && !$status->is_ratified) {
@@ -371,9 +383,9 @@ class MemberStateTreatyController extends Controller
         $stageFilter = Str::lower($stageFilter);
 
         return match ($stageFilter) {
-            'not_started' => !$status || !$status->is_signed,
+            'not_started' => !$status || (!$status->is_signed && !$status->is_acceded),
             'signed' => (bool) ($status?->is_signed) && !(bool) ($status?->is_ratified),
-            'ratified' => (bool) ($status?->is_ratified) && !(bool) ($status?->is_original_submitted),
+            'ratified' => ((bool) ($status?->is_ratified) || (bool) ($status?->is_acceded)) && !(bool) ($status?->is_original_submitted),
             'original_submitted' => (bool) ($status?->is_original_submitted),
             'completed' => (bool) ($status?->is_original_submitted)
                 && !empty($status?->signed_service_code_verified_at)

@@ -114,7 +114,7 @@
                             <h5 class="mb-3">Status Summary</h5>
                             @php
                                 $signedCount = $treaty->memberStateStatuses->where('is_signed', true)->count();
-                                $ratifiedCount = $treaty->memberStateStatuses->where('is_ratified', true)->count();
+                                $ratifiedCount = $treaty->memberStateStatuses->filter(fn ($status) => $status->is_ratified || $status->is_acceded)->count();
                                 $originalSubmittedCount = $treaty->memberStateStatuses->where('is_original_submitted', true)->count();
                             @endphp
                             <div class="d-flex justify-content-between border rounded p-2 mb-2">
@@ -196,6 +196,7 @@
                                     <th width="160">Status</th>
                                     <th width="140">Signed At</th>
                                     <th width="140">Ratified At</th>
+                                    <th width="140">Acceded At</th>
                                     <th width="170">Original Submitted At</th>
                                     <th width="180">Signed Proof</th>
                                     <th width="180">Ratified Proof</th>
@@ -212,6 +213,8 @@
                                         $selectedStatus = 'none';
                                         if ($stateStatus?->is_ratified) {
                                             $selectedStatus = 'ratified';
+                                        } elseif ($stateStatus?->is_acceded) {
+                                            $selectedStatus = 'acceded';
                                         } elseif ($stateStatus?->is_signed) {
                                             $selectedStatus = 'signed';
                                         }
@@ -237,6 +240,9 @@
                                                         {{ $selectedStatus === 'ratified' ? 'selected' : '' }}>
                                                         Ratified
                                                     </option>
+                                                    <option value="acceded" {{ $selectedStatus === 'acceded' ? 'selected' : '' }}>
+                                                        Acceded
+                                                    </option>
                                                     <option value="original_submitted"
                                                         {{ $selectedStatus === 'original_submitted' ? 'selected' : '' }}>
                                                         Original Submitted
@@ -252,6 +258,9 @@
                                         </td>
                                         <td>
                                             {{ optional($stateStatus?->ratified_at)->format('d M Y') ?: '—' }}
+                                        </td>
+                                        <td>
+                                            {{ optional($stateStatus?->acceded_at)->format('d M Y') ?: '—' }}
                                         </td>
                                         <td>
                                             {{ optional($stateStatus?->original_submitted_at)->format('d M Y') ?: '—' }}

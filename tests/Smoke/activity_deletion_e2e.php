@@ -6,7 +6,6 @@ use App\Models\GovernanceLevel;
 use App\Models\GovernanceNode;
 use App\Models\Permission;
 use App\Models\Program;
-use App\Models\ProgramBudgetAllocation;
 use App\Models\Project;
 use App\Models\Role;
 use App\Models\Sector;
@@ -215,13 +214,6 @@ class ActivityDeletionSmoke
                 'year' => 2025,
                 'amount' => 5000,
             ]);
-            ProgramBudgetAllocation::create([
-                'project_id' => $project->id,
-                'activity_id' => $activity->id,
-                'sub_activity_id' => $subActivity->id,
-                'year' => 2025,
-                'allocated_amount' => 5000,
-            ]);
             $subActivities->push($subActivity);
         }
 
@@ -261,10 +253,6 @@ class ActivityDeletionSmoke
         $this->assertTrue(
             ! SubActivityAllocation::whereIn('sub_activity_id', $subActivityIds)->exists(),
             'Associated sub-activity allocations were not deleted.'
-        );
-        $this->assertTrue(
-            ! ProgramBudgetAllocation::where('activity_id', $activity->id)->exists(),
-            'Associated program budget allocations were not deleted.'
         );
     }
 

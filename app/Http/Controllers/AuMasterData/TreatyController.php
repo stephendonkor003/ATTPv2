@@ -31,7 +31,7 @@ class TreatyController extends Controller
         $statusCounts = TreatyMemberStateStatus::query()
             ->select('treaty_id')
             ->selectRaw('SUM(CASE WHEN is_signed IS TRUE THEN 1 ELSE 0 END) as signed_count')
-            ->selectRaw('SUM(CASE WHEN is_ratified IS TRUE THEN 1 ELSE 0 END) as ratified_count')
+            ->selectRaw('SUM(CASE WHEN is_ratified IS TRUE OR is_acceded IS TRUE THEN 1 ELSE 0 END) as ratified_count')
             ->groupBy('treaty_id');
 
         $treaties = Treaty::query()
@@ -196,7 +196,7 @@ class TreatyController extends Controller
     {
         $validated = $request->validate([
             'status' => 'nullable|array',
-            'status.*' => 'nullable|in:none,signed,ratified,original_submitted',
+            'status.*' => 'nullable|in:none,signed,ratified,acceded,original_submitted',
             'proof_signed_code' => 'nullable|array',
             'proof_signed_code.*' => [
                 'nullable',
@@ -244,10 +244,21 @@ class TreatyController extends Controller
             }
 
             $record->updated_by = $currentUserId;
+            $record->official_status_as_of = null;
+            $record->official_status_source_url = null;
             $wasSignedVerified = !empty($record->signed_service_code_verified_at);
             $wasRatifiedVerified = !empty($record->ratified_service_code_verified_at);
 
-            if ($requestedStatus === 'signed') {
+            if ($requestedStatus === 'acceded') {
+                $record->is_acceded = true;
+                $record->acceded_at = $record->acceded_at ?: now();
+                $record->is_signed = false;
+                $record->signed_at = null;
+                $record->is_ratified = false;
+                $record->ratified_at = null;
+            } elseif ($requestedStatus === 'signed') {
+                $record->is_acceded = false;
+                $record->acceded_at = null;
                 if (!$record->is_signed) {
                     $record->signed_at = now();
                     $record->signed_by_user_id = $currentUserId;
@@ -272,11 +283,13 @@ class TreatyController extends Controller
                 $record->ratified_document_name = null;
                 $record->ratified_notes = null;
             } elseif ($requestedStatus === 'ratified') {
+                $record->is_acceded = false;
+                $record->acceded_at = null;
                 if (!$record->is_signed) {
                     $record->signed_at = now();
                     $record->signed_by_user_id = $currentUserId;
                 }
-                if (!$record->is_ratified) {
+                if (!$record->is_ratified && !$record->is_acceded) {
                     $record->ratified_at = now();
                     $record->ratified_by_user_id = $currentUserId;
                 }
@@ -294,11 +307,11 @@ class TreatyController extends Controller
                 $record->original_document_name = null;
                 $record->original_notes = null;
             } else {
-                if (!$record->is_signed) {
+                if (!$record->is_signed && !$record->is_acceded) {
                     $record->signed_at = now();
                     $record->signed_by_user_id = $currentUserId;
                 }
-                if (!$record->is_ratified) {
+                if (!$record->is_ratified && !$record->is_acceded) {
                     $record->ratified_at = now();
                     $record->ratified_by_user_id = $currentUserId;
                 }
@@ -307,12 +320,14 @@ class TreatyController extends Controller
                     $record->original_submitted_by_user_id = $currentUserId;
                 }
 
-                $record->is_signed = true;
-                $record->signed_service_code = $record->signed_service_code
-                    ?: TreatyMemberStateStatus::generateUniqueServiceCode('signed_service_code');
-                $record->is_ratified = true;
-                $record->ratified_service_code = $record->ratified_service_code
-                    ?: TreatyMemberStateStatus::generateUniqueServiceCode('ratified_service_code');
+                if (!$record->is_acceded) {
+                    $record->is_signed = true;
+                    $record->signed_service_code = $record->signed_service_code
+                        ?: TreatyMemberStateStatus::generateUniqueServiceCode('signed_service_code');
+                    $record->is_ratified = true;
+                    $record->ratified_service_code = $record->ratified_service_code
+                        ?: TreatyMemberStateStatus::generateUniqueServiceCode('ratified_service_code');
+                }
             }
 
             $storedSignedCode = $this->normalizeServiceCode($record->signed_service_code ?? null);

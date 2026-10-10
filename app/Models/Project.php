@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\BaseModel;
 use App\Models\GovernanceNode;
+use App\Services\FinancialHierarchyDeletionGuard;
 use Illuminate\Support\Facades\DB;
 
 class Project extends BaseModel
@@ -25,6 +26,18 @@ class Project extends BaseModel
         'total_budget',
         'created_by',
     ];
+
+    protected static function booted(): void
+    {
+        static::deleting(function (Project $project): void {
+            $project->assertHasNoFinancialDependencies();
+        });
+    }
+
+    public function assertHasNoFinancialDependencies(): void
+    {
+        app(FinancialHierarchyDeletionGuard::class)->assertProjectCanBeDeleted($this);
+    }
 
     /****************************************
      * RELATIONSHIPS

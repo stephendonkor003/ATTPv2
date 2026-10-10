@@ -17,7 +17,6 @@ use App\Models\FormSubmission;
 use App\Models\MePerformanceReportTransition;
 use App\Models\Procurement;
 use App\Models\ProcurementDisbursement;
-use App\Models\ProcurementInvoice;
 use App\Models\ProcurementPurchaseOrder;
 use App\Models\SystemAuditLog;
 use App\Models\ThinkTankProcurementEvent;
@@ -27,6 +26,9 @@ use App\Models\ThinkTankResearchOutput;
 use App\Models\User;
 use App\Services\EvaluationReworkGuard;
 use App\Services\ThinkTank\ThinkTankUserManagementService;
+use App\Services\ThinkTankFinanceApiService;
+use App\Services\ThinkTankFundingReceiptService;
+use App\Services\ThinkTankFundingSourceService;
 use App\Services\ThinkTankLogoService;
 use App\Services\ThinkTankMeAssignmentService;
 use App\Support\IpGeo;
@@ -448,20 +450,15 @@ class ThinkTankPortalController extends Controller
         $procurementsBase = Procurement::where('think_tank_member_id', $member->id);
         $filteredProcurementsBase = $applyPeriod(Procurement::where('think_tank_member_id', $member->id));
         $procurementIds = (clone $filteredProcurementsBase)->pluck('id');
+        $fundingSources = app(ThinkTankFundingSourceService::class);
         $purchaseOrderQuery = $applyPeriod(
-            ProcurementPurchaseOrder::query()
-                ->where('think_tank_member_id', $member->id)
-                ->where('po_type', 'think_tank_transfer'),
+            $this->currentFundingPurchaseOrders($fundingSources->incomingPurchaseOrdersQuery($member)),
             'issued_at'
         );
         $allocationQuery = $applyPeriod(ConsortiumFundAllocation::where('think_tank_member_id', $member->id));
         $disbursementQuery = $applyPeriod(ConsortiumDisbursementRequest::where('think_tank_member_id', $member->id));
         $actualPaymentQuery = $applyPeriod(
-            ProcurementDisbursement::query()
-                ->where('think_tank_member_id', $member->id)
-                ->whereNotNull('paid_at')
-                ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
-                ->whereHas('purchaseOrder', fn ($query) => $query->where('po_type', 'think_tank_transfer')),
+            $this->paidFundingDisbursements($fundingSources->incomingPaymentsQuery($member)),
             'paid_at'
         );
         $expenseQuery = $applyPeriod(ConsortiumExpenseReport::where('think_tank_member_id', $member->id), 'expense_date');
@@ -495,23 +492,17 @@ class ThinkTankPortalController extends Controller
             : 0;
 
         $transferSummaryQuery = $applyPeriod(
-            ProcurementDisbursement::query()
-                ->where('think_tank_member_id', $member->id)
-                ->whereNotNull('paid_at')
-                ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
-                ->whereHas('purchaseOrder', fn ($query) => $query->where('po_type', 'think_tank_transfer')),
+            $this->paidFundingDisbursements($fundingSources->incomingPaymentsQuery($member)),
             'paid_at'
         );
         $receiptSent = (float) (clone $transferSummaryQuery)->sum('amount');
-        $receiptConfirmed = (float) (clone $transferSummaryQuery)
-            ->where('recipient_confirmation_status', 'confirmed')
-            ->sum('amount');
+        $receiptConfirmed = (float) $this->confirmedFundingDisbursements(clone $transferSummaryQuery)->sum('amount');
         $receiptSummary = [
             'sent' => $receiptSent,
             'confirmed' => $receiptConfirmed,
             'pending' => max(0, $receiptSent - $receiptConfirmed),
             'transfer_count' => (clone $transferSummaryQuery)->count(),
-            'confirmed_count' => (clone $transferSummaryQuery)->where('recipient_confirmation_status', 'confirmed')->count(),
+            'confirmed_count' => $this->confirmedFundingDisbursements(clone $transferSummaryQuery)->count(),
             'rate' => $receiptSent > 0 ? round(($receiptConfirmed / $receiptSent) * 100, 1) : 0,
         ];
 
@@ -525,9 +516,7 @@ class ThinkTankPortalController extends Controller
             ->with([
                 'purchaseRequest',
                 'budgetCommitment.purchaseRequest',
-                'disbursements' => fn ($query) => $query
-                    ->whereNotNull('paid_at')
-                    ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+                'disbursements' => fn ($query) => $this->paidFundingDisbursements($query)
                     ->latest('paid_at')
                     ->latest(),
             ])
@@ -1212,9 +1201,13 @@ class ThinkTankPortalController extends Controller
         $member = $this->member($request);
         $member->loadMissing(['consortium', 'vendorUser', 'fundAllocations']);
 
-        $purchaseOrders = ProcurementPurchaseOrder::with(['disbursements'])
-            ->where('think_tank_member_id', $member->id)
-            ->where('po_type', 'think_tank_transfer')
+        $fundingSources = app(ThinkTankFundingSourceService::class);
+        $purchaseOrders = $this->currentFundingPurchaseOrders(
+            $fundingSources->incomingPurchaseOrdersQuery($member)
+        )
+            ->with([
+                'disbursements' => fn ($query) => $this->paidFundingDisbursements($query),
+            ])
             ->orderByDesc('created_at')
             ->paginate(15);
 
@@ -1222,8 +1215,9 @@ class ThinkTankPortalController extends Controller
             ->orderBy('budget_line')
             ->get();
 
-        $allTransferOrders = ProcurementPurchaseOrder::where('think_tank_member_id', $member->id)
-            ->where('po_type', 'think_tank_transfer')
+        $allTransferOrders = $this->currentFundingPurchaseOrders(
+            $fundingSources->incomingPurchaseOrdersQuery($member)
+        )
             ->get();
 
         $stats = [
@@ -1240,78 +1234,45 @@ class ThinkTankPortalController extends Controller
 
     public function storePurchaseOrder(Request $request)
     {
-        $member = $this->member($request);
-        $member->loadMissing(['consortium', 'vendorUser']);
-
-        if (! $member->vendor_user_id) {
-            return back()->with('error', 'This think tank is not linked to a vendor account yet.');
-        }
-
-        $data = $request->validate([
-            'fund_allocation_id' => 'nullable|exists:attp_fund_allocations,id',
-            'au_sap_vendor_number' => 'nullable|string|max:80',
-            'amount' => 'required|numeric|min:0.01',
-            'currency' => 'nullable|string|max:10',
-            'issued_at' => 'nullable|date',
-            'notes' => 'nullable|string|max:2000',
-        ]);
-
-        if (! $member->au_sap_vendor_number && empty($data['au_sap_vendor_number'])) {
-            return back()
-                ->withErrors(['au_sap_vendor_number' => 'Please enter your AU SAP vendor number before creating a purchase order.'])
-                ->withInput();
-        }
-
-        if (! empty($data['au_sap_vendor_number']) && $data['au_sap_vendor_number'] !== $member->au_sap_vendor_number) {
-            $member->update(['au_sap_vendor_number' => $data['au_sap_vendor_number']]);
-            $member->refresh();
-        }
-
-        $allocation = null;
-        if (! empty($data['fund_allocation_id'])) {
-            $allocation = ConsortiumFundAllocation::where('think_tank_member_id', $member->id)
-                ->whereKey($data['fund_allocation_id'])
-                ->firstOrFail();
-        }
-
-        $purchaseOrder = ProcurementPurchaseOrder::create([
-            'po_type' => 'think_tank_transfer',
-            'consortium_id' => $member->consortium_id,
-            'think_tank_member_id' => $member->id,
-            'vendor_id' => $member->vendor_user_id,
-            'reference_no' => ProcurementPurchaseOrder::generateThinkTankTransferReference($member),
-            'amount' => $data['amount'],
-            'currency' => $data['currency'] ?: ($allocation?->currency ?? $member->consortium?->currency ?? 'USD'),
-            'status' => 'issued',
-            'created_by' => $request->user()?->id,
-            'issued_at' => $data['issued_at'] ?? now(),
-        ]);
-
-        if (! empty($data['notes'])) {
-            logger()->info('Think tank transfer PO notes', [
-                'purchase_order_id' => $purchaseOrder->id,
-                'think_tank_member_id' => $member->id,
-                'notes' => $data['notes'],
-            ]);
-        }
-
-        return redirect()
-            ->route('think-tank.purchase-orders.show', array_merge($this->portalRouteParams($request, $member), ['purchaseOrder' => $purchaseOrder]))
-            ->with('success', 'Purchase order created: '.$purchaseOrder->reference_no);
+        abort(403, 'Funding transfer records can only be created through the authorized Secretariat workflow.');
     }
 
-    public function showPurchaseOrder(Request $request, ProcurementPurchaseOrder $purchaseOrder)
-    {
+    public function showPurchaseOrder(
+        Request $request,
+        ProcurementPurchaseOrder $purchaseOrder,
+        ThinkTankFinanceApiService $finance,
+    ) {
         $member = $this->member($request);
         $this->assertMemberPurchaseOrder($member, $purchaseOrder);
 
-        $purchaseOrder->load(['vendor', 'consortium', 'thinkTankMember', 'disbursements.recipientConfirmer']);
+        $purchaseOrder->load([
+            'vendor',
+            'consortium',
+            'thinkTankMember',
+            'disbursements' => fn ($query) => $this->paidFundingDisbursements($query)
+                ->with('recipientConfirmer'),
+        ]);
+        $confirmableIds = $this->paidFundingDisbursements(
+            app(ThinkTankFundingSourceService::class)->incomingPaymentsQuery($member)
+        )
+            ->where('purchase_order_id', $purchaseOrder->id)
+            ->pluck('id')
+            ->map(fn ($id): string => (string) $id);
+        $receiptLockTokens = $purchaseOrder->disbursements
+            ->filter(fn (ProcurementDisbursement $payment): bool => $confirmableIds->contains((string) $payment->id))
+            ->mapWithKeys(fn (ProcurementDisbursement $payment): array => [
+                (string) $payment->id => $finance->lockToken($payment),
+            ]);
 
-        return view('think-tank.purchase-orders-show', compact('member', 'purchaseOrder'));
+        return view('think-tank.purchase-orders-show', compact('member', 'purchaseOrder', 'receiptLockTokens'));
     }
 
-    public function confirmDisbursementReceipt(Request $request, ProcurementPurchaseOrder $purchaseOrder, ProcurementDisbursement $disbursement)
-    {
+    public function confirmDisbursementReceipt(
+        Request $request,
+        ProcurementPurchaseOrder $purchaseOrder,
+        ProcurementDisbursement $disbursement,
+        ThinkTankFundingReceiptService $receipts,
+    ) {
         $member = $this->member($request);
         $this->assertMemberPurchaseOrder($member, $purchaseOrder);
 
@@ -1323,59 +1284,25 @@ class ThinkTankPortalController extends Controller
 
         $data = $request->validate([
             'recipient_confirmation_notes' => 'nullable|string|max:2000',
+            'lock_token' => ['required', 'string', 'size:64', 'regex:/^[a-f0-9]{64}$/i'],
         ]);
+        $actor = $request->user();
+        abort_unless($actor instanceof User, 401);
+        $result = $receipts->confirm(
+            $request,
+            $member,
+            $actor,
+            (string) $disbursement->id,
+            $data['lock_token'],
+            $data['recipient_confirmation_notes'] ?? null,
+        );
 
-        $disbursement->update([
-            'recipient_confirmation_status' => 'confirmed',
-            'recipient_confirmed_by' => $request->user()?->id,
-            'recipient_confirmed_at' => now(),
-            'recipient_confirmation_notes' => $data['recipient_confirmation_notes'] ?? null,
-        ]);
-
-        $purchaseOrder->load(['disbursements', 'invoice']);
-        $hasPendingReceipt = $purchaseOrder->disbursements
-            ->contains(fn (ProcurementDisbursement $linkedDisbursement) => $linkedDisbursement->recipient_confirmation_status !== 'confirmed');
-
-        $purchaseOrder->update([
-            'status' => $hasPendingReceipt ? 'pending' : 'fully_paid',
-        ]);
-
-        if ($purchaseOrder->invoice) {
-            $purchaseOrder->invoice->update([
-                'status' => 'paid',
-                'approved_by' => $purchaseOrder->invoice->approved_by ?: $request->user()?->id,
-                'approved_at' => $purchaseOrder->invoice->approved_at ?: now(),
-            ]);
-        } else {
-            $invoice = ProcurementInvoice::create([
-                'procurement_id' => $purchaseOrder->procurement_id,
-                'vendor_id' => $purchaseOrder->vendor_id,
-                'sub_activity_id' => $purchaseOrder->sub_activity_id,
-                'governance_node_id' => $purchaseOrder->governance_node_id,
-                'invoice_month' => ($disbursement->paid_at ?: now())->copy()->startOfMonth()->toDateString(),
-                'reference_no' => ProcurementInvoice::generateReference(),
-                'amount' => $purchaseOrder->amount,
-                'currency' => $purchaseOrder->currency,
-                'status' => 'paid',
-                'created_by' => $purchaseOrder->created_by,
-                'approved_by' => $request->user()?->id,
-                'approved_at' => now(),
-                'notes' => 'Paid Funding to Think Tanks transfer for '.$member->name,
-            ]);
-
-            $purchaseOrder->update(['invoice_id' => $invoice->id]);
-        }
-
-        $this->auditAction('think_tank.transfer.receipt_confirmed', 'Think tank funding transfer receipt confirmed', [
-            'think_tank_member_id' => $member->id,
-            'purchase_order_id' => $purchaseOrder->id,
-            'purchase_order_status' => $purchaseOrder->fresh()->status,
-            'disbursement_id' => $disbursement->id,
-            'amount' => (float) $disbursement->amount,
-            'currency' => $disbursement->currency,
-        ]);
-
-        return back()->with('success', 'Receipt of payment confirmed. ATTP Secretariat can now see this transfer as received.');
+        return back()->with(
+            'success',
+            $result['idempotent']
+                ? 'Receipt was already confirmed.'
+                : 'Receipt of payment confirmed. ATTP Secretariat can now see this transfer as received.'
+        );
     }
 
     public function purchaseOrderPdf(Request $request, ProcurementPurchaseOrder $purchaseOrder)
@@ -2332,10 +2259,44 @@ class ThinkTankPortalController extends Controller
     private function assertMemberPurchaseOrder(ConsortiumThinkTank $member, ProcurementPurchaseOrder $purchaseOrder): void
     {
         abort_unless(
-            $purchaseOrder->po_type === 'think_tank_transfer'
-            && (string) $purchaseOrder->think_tank_member_id === (string) $member->id,
+            (string) $purchaseOrder->think_tank_member_id === (string) $member->id
+            && (string) $purchaseOrder->consortium_id === (string) $member->consortium_id
+            && $this->currentFundingPurchaseOrders(
+                app(ThinkTankFundingSourceService::class)->incomingPurchaseOrdersQuery($member)
+            )
+                ->whereKey($purchaseOrder->id)
+                ->exists(),
             403
         );
+    }
+
+    private function currentFundingPurchaseOrders($query)
+    {
+        return $query->where(function ($asOf): void {
+            $asOf->where(function ($issued): void {
+                $issued->whereNotNull('issued_at')
+                    ->where('issued_at', '<=', now());
+            })->orWhere(function ($created): void {
+                $created->whereNull('issued_at')
+                    ->where('created_at', '<=', now());
+            });
+        });
+    }
+
+    private function paidFundingDisbursements($query)
+    {
+        return $query
+            ->whereNotNull('paid_at')
+            ->where('paid_at', '<=', now())
+            ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES);
+    }
+
+    private function confirmedFundingDisbursements($query)
+    {
+        return $this->paidFundingDisbursements($query)
+            ->where('recipient_confirmation_status', 'confirmed')
+            ->whereNotNull('recipient_confirmed_at')
+            ->where('recipient_confirmed_at', '<=', now());
     }
 
     private function assertMemberResearchOutput(ConsortiumThinkTank $member, ThinkTankResearchOutput $output): void

@@ -136,9 +136,27 @@
                     <div class="card-body">
                         <form class="row g-3" method="POST" action="{{ route('think-tanks-admin.funding.store') }}">
                             @csrf
+                            <input type="hidden" name="idempotency_key" value="{{ old('idempotency_key', $idempotencyKey) }}">
+                            <div class="col-md-12">
+                                <label class="form-label">Approved Portal Funding Request <span class="text-muted">(optional)</span></label>
+                                <select class="form-select" id="funding_request_id" name="funding_request_id">
+                                    <option value="">Record a direct Secretariat transfer</option>
+                                    @foreach ($approvedRequests as $approvedRequest)
+                                        <option
+                                            value="{{ $approvedRequest->id }}"
+                                            data-member-id="{{ $approvedRequest->think_tank_member_id }}"
+                                            data-amount="{{ $approvedRequest->amount_approved }}"
+                                            @selected(old('funding_request_id') === $approvedRequest->id)
+                                        >
+                                            {{ $approvedRequest->request_code }} - {{ $approvedRequest->member?->name }} - USD {{ number_format((float) $approvedRequest->amount_approved, 2) }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <div class="form-text">Selecting an approved portal request fulfils that same request; the system will not create a duplicate request.</div>
+                            </div>
                             <div class="col-md-12">
                                 <label class="form-label">Think Tank</label>
-                                <select class="form-select" name="think_tank_member_id" required>
+                                <select class="form-select" id="think_tank_member_id" name="think_tank_member_id" required>
                                     <option value="">Select think tank and consortium</option>
                                     @foreach ($thinkTanks as $thinkTank)
                                         <option value="{{ $thinkTank->id }}" @selected(old('think_tank_member_id') === $thinkTank->id)>{{ $thinkTank->name }} - {{ $thinkTank->consortium?->name }}</option>
@@ -148,7 +166,7 @@
 
                             <div class="col-md-4">
                                 <label class="form-label">Amount</label>
-                                <input class="form-control" type="number" step="0.01" min="0.01" max="{{ $summary['remaining'] }}" name="amount" value="{{ old('amount') }}" required>
+                                <input class="form-control" id="transfer_amount" type="number" step="0.01" min="0.01" max="{{ $summary['remaining'] }}" name="amount" value="{{ old('amount') }}" required>
                                 <div class="form-text">Cannot exceed the remaining sub-activity balance.</div>
                             </div>
                             <div class="col-md-4">
@@ -226,3 +244,24 @@
         </div>
     </div>
 @endsection
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const requestSelect = document.getElementById('funding_request_id');
+            const memberSelect = document.getElementById('think_tank_member_id');
+            const amountInput = document.getElementById('transfer_amount');
+
+            const applyApprovedRequest = () => {
+                const option = requestSelect?.selectedOptions?.[0];
+                if (!option?.value) return;
+
+                memberSelect.value = option.dataset.memberId || '';
+                amountInput.value = option.dataset.amount || '';
+            };
+
+            requestSelect?.addEventListener('change', applyApprovedRequest);
+            applyApprovedRequest();
+        });
+    </script>
+@endpush
