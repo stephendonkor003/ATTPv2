@@ -322,6 +322,7 @@ class ThinkTankMonitoringApiService
                 'projectYear' => (int) $filters['project_year'],
                 'reportingYear' => $filters['reporting_year'] ? (int) $filters['reporting_year'] : null,
                 'reportingPeriodId' => $filters['reporting_period_id'] ?: null,
+                'includeArchived' => (bool) ($filters['include_archived'] ?? false),
             ],
             'options' => [
                 'projectYears' => collect($filters['project_year_options'] ?? [1, 2, 3, 4])
@@ -330,6 +331,7 @@ class ThinkTankMonitoringApiService
                     'id' => (string) $period->id,
                     'label' => (string) $period->label,
                     'reportingYear' => $period->reporting_year ? (int) $period->reporting_year : null,
+                    'status' => $period->isActive() ? 'active' : 'historical',
                 ])->values()->all(),
                 'reportingYears' => $periods->pluck('reporting_year')->filter()->map(fn ($year): int => (int) $year)
                     ->unique()->sortDesc()->values()->all(),

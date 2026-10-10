@@ -1522,12 +1522,14 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->controller(MeDataEntryController::class)
             ->group(function () {
                 Route::post('forms', 'storeForm')->name('forms.store');
+                Route::post('forms/{form}/duplicate', 'duplicateForm')->name('forms.duplicate');
                 Route::put('forms/{form}', 'updateForm')->name('forms.update');
                 Route::post('forms/{form}/publish', 'publishForm')->name('forms.publish');
                 Route::post('forms/{form}/archive', 'archiveForm')->name('forms.archive');
 
                 Route::post('reporting-periods', 'storePeriod')->name('periods.store');
                 Route::put('reporting-periods/{period}', 'updatePeriod')->name('periods.update');
+                Route::post('reporting-periods/{period}/archive', 'archivePeriod')->name('periods.archive');
 
                 Route::post('collections', 'storeCollection')->name('collections.store');
                 Route::put('collections/{collection}', 'updateCollection')->name('collections.update');

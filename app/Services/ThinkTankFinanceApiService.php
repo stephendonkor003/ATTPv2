@@ -1631,6 +1631,26 @@ class ThinkTankFinanceApiService
             }
         }
 
+        $sameParent = $existing !== null
+            && (string) ($existing->parent_id ?? '') === (string) ($parentId ?? '');
+        if (! $sameParent) {
+            $parent = $parentId === null
+                ? null
+                : $lockedLines->first(fn (ThinkTankBudgetLine $line): bool => (string) $line->id === (string) $parentId);
+            $newDepth = $parent instanceof ThinkTankBudgetLine
+                ? $this->budgetHierarchyDepth($parent, $lockedLines) + 1
+                : 1;
+            $subtreeHeight = $existing instanceof ThinkTankBudgetLine
+                ? $this->budgetSubtreeHeight($existing, $lockedLines)
+                : 1;
+
+            if ($newDepth + $subtreeHeight - 1 > 4) {
+                throw ValidationException::withMessages([
+                    'parent_id' => ['Budget allocations may only use Program, Project, Activity, and Sub-activity levels.'],
+                ]);
+            }
+        }
+
         if ($existing) {
             $children = $lockedLines->filter(fn (ThinkTankBudgetLine $line): bool => (string) $line->parent_id === (string) $existing->id
                 && $line->status !== ThinkTankBudgetLine::STATUS_CLOSED
@@ -1666,6 +1686,57 @@ class ThinkTankFinanceApiService
                 ]);
             }
         }
+    }
+
+    private function budgetHierarchyDepth(ThinkTankBudgetLine $line, Collection $allLines): int
+    {
+        $depth = 1;
+        $seen = [(string) $line->id => true];
+        $cursor = $line;
+
+        while ($cursor->parent_id !== null) {
+            $parentId = (string) $cursor->parent_id;
+            if (isset($seen[$parentId])) {
+                throw ValidationException::withMessages([
+                    'parent_id' => ['The existing budget hierarchy contains a cycle and must be corrected first.'],
+                ]);
+            }
+            $seen[$parentId] = true;
+            $parent = $allLines->first(fn (ThinkTankBudgetLine $candidate): bool => (string) $candidate->id === $parentId);
+            if (! $parent instanceof ThinkTankBudgetLine) {
+                break;
+            }
+            $depth++;
+            $cursor = $parent;
+        }
+
+        return $depth;
+    }
+
+    private function budgetSubtreeHeight(ThinkTankBudgetLine $line, Collection $allLines): int
+    {
+        $height = 1;
+        $frontier = [(string) $line->id => 1];
+        $visited = [(string) $line->id => true];
+
+        while ($frontier !== []) {
+            $children = $allLines->filter(fn (ThinkTankBudgetLine $candidate): bool => $candidate->parent_id !== null
+                && array_key_exists((string) $candidate->parent_id, $frontier)
+            );
+            $next = [];
+            foreach ($children as $child) {
+                $childId = (string) $child->id;
+                if (isset($visited[$childId])) {
+                    continue;
+                }
+                $visited[$childId] = true;
+                $next[$childId] = $frontier[(string) $child->parent_id] + 1;
+                $height = max($height, $next[$childId]);
+            }
+            $frontier = $next;
+        }
+
+        return $height;
     }
 
     /** @param array<string, mixed> $attributes */

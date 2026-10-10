@@ -98,6 +98,7 @@ it('registers the exact versioned authentication user management monitoring and 
             'GET api/v1/think-tank/procurement/executions/reports',
             'GET api/v1/think-tank/procurement/executions/{execution}',
             'PATCH api/v1/think-tank/procurement/executions/{execution}',
+            'DELETE api/v1/think-tank/procurement/executions/{execution}',
             'GET api/v1/think-tank/procurement/executions/{execution}/applications',
             'GET api/v1/think-tank/procurement/executions/{execution}/applications/{submission}',
             'GET api/v1/think-tank/procurement/executions/{execution}/applications/{submission}/values/{value}/download',

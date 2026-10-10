@@ -39,6 +39,20 @@ function procurementExecutionService(): ThinkTankProcurementExecutionService
     return new ThinkTankProcurementExecutionService(new ThinkTankProcurementApiService);
 }
 
+it('shows STEP clearance ahead of a stale New designation without changing pending items', function () {
+    $cleared = (new ThinkTankProcurementItem)->forceFill([
+        'status' => ThinkTankProcurementItem::STATUS_NO_OBJECTION,
+        'step_activity_status' => ThinkTankProcurementItem::STEP_STATUS_NEW,
+    ]);
+    $pending = (new ThinkTankProcurementItem)->forceFill([
+        'status' => ThinkTankProcurementItem::STATUS_APPROVED,
+        'step_activity_status' => ThinkTankProcurementItem::STEP_STATUS_NEW,
+    ]);
+
+    expect($cleared->currentStepActivityStatus())->toBe(ThinkTankProcurementItem::STEP_STATUS_CLEARED)
+        ->and($pending->currentStepActivityStatus())->toBe(ThinkTankProcurementItem::STEP_STATUS_NEW);
+});
+
 it('provides method-specific bidder forms and a stable imported method fallback', function () {
     [, $bootedHere] = bootThinkTankProcurementExecutionApplication();
 
@@ -202,6 +216,7 @@ it('registers a tenant-scoped draft build and publication API with private and b
     expect($routes)->toContain(
         "Route::get('executions/eligible-items'",
         "Route::post('executions'",
+        "Route::delete('executions/{execution}'",
         "Route::put('executions/{execution}/form'",
         "Route::post('executions/{execution}/publish'",
         "Route::post('executions/{execution}/recall'",
@@ -213,6 +228,10 @@ it('registers a tenant-scoped draft build and publication API with private and b
         "->where('procurement_owner_type', 'think_tank')",
         'lockForUpdate()',
         'assertLockToken($procurement',
+        'Only an execution draft without applications can be deleted.',
+        "'procurement_id' => null",
+        "'deleted_by' => \$request->user()->id",
+        "'item_execution_draft_deleted'",
         "'status' => 'draft'",
         'STATUS_NO_OBJECTION',
         'verifiedDocumentPath',

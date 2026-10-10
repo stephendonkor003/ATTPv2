@@ -437,6 +437,70 @@ class ProcurementExecutionController extends Controller
         );
     }
 
+    public function destroy(Request $request, string $execution): JsonResponse
+    {
+        $this->assertJsonObject($request);
+        $this->rejectUnexpectedBody($request, ['lock_token']);
+        $data = $request->validate(['lock_token' => ['required', 'string', 'size:64']]);
+        $member = $this->member($request);
+
+        DB::transaction(function () use ($request, $member, $execution, $data): void {
+            $procurement = $this->lockedExecution($member, $execution);
+            abort_unless(
+                (string) $procurement->consortium_id === (string) $member->consortium_id,
+                404,
+            );
+            $this->execution->assertLockToken($procurement, $data['lock_token']);
+            abort_unless(
+                $this->execution->canEdit($procurement),
+                422,
+                'Only an execution draft without applications can be deleted.',
+            );
+
+            $item = ThinkTankProcurementItem::query()
+                ->where('procurement_id', $procurement->id)
+                ->whereHas('plan', fn ($plans) => $plans
+                    ->where('think_tank_member_id', $member->id)
+                    ->where('consortium_id', $member->consortium_id))
+                ->with(['plan', 'documents'])
+                ->lockForUpdate()
+                ->firstOrFail();
+            abort_unless(
+                (string) $item->plan_id === (string) $procurement->think_tank_procurement_plan_id,
+                409,
+                'The execution source no longer matches its approved plan item.',
+            );
+
+            $plan = $item->plan;
+            abort_unless($plan, 409, 'The approved plan for this execution is unavailable.');
+
+            $item->update([
+                'procurement_id' => null,
+                'updated_by' => $request->user()->id,
+                'portal_lock_version' => $item->nextPortalLockVersion(),
+            ]);
+            $procurement->update(['deleted_by' => $request->user()->id]);
+            $procurement->delete();
+
+            $this->workflow->event(
+                $plan,
+                $item,
+                $request->user(),
+                'item_execution_draft_deleted',
+                $item->status,
+                $item->status,
+                null,
+                ['procurement_id' => (string) $procurement->id, 'notification_suppressed' => true],
+            );
+        });
+
+        return ThinkTankApiResponse::success(
+            ['id' => $execution, 'deleted' => true, 'archived' => true],
+            200,
+            'Procurement execution draft deleted and retained in the audit history.',
+        );
+    }
+
     public function updateForm(Request $request, string $execution): JsonResponse
     {
         $this->assertJsonObject($request);

@@ -157,6 +157,10 @@ class ThinkTankProcurementItem extends BaseModel
 
     public function currentStepActivityStatus(): ?string
     {
+        if (in_array($this->status, [self::STATUS_NO_OBJECTION, self::STATUS_PUBLISHED], true)) {
+            return self::STEP_STATUS_CLEARED;
+        }
+
         $current = trim((string) $this->step_activity_status);
         if (in_array($current, [
             self::STEP_STATUS_NEW,
@@ -164,10 +168,6 @@ class ThinkTankProcurementItem extends BaseModel
             self::STEP_STATUS_CLEARED,
         ], true)) {
             return $current;
-        }
-
-        if (in_array($this->status, [self::STATUS_NO_OBJECTION, self::STATUS_PUBLISHED], true)) {
-            return self::STEP_STATUS_CLEARED;
         }
 
         $imported = $this->importedActivityStatus();

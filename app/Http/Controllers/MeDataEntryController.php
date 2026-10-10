@@ -34,7 +34,7 @@ class MeDataEntryController extends Controller
 {
     use ScopesAssignedPortfolios;
 
-    private const TABS = ['collections', 'forms', 'reports', 'submissions'];
+    private const TABS = ['collections', 'periods', 'forms', 'reports', 'submissions'];
 
     private const DUE_SOON_DAYS = 7;
 
@@ -134,13 +134,12 @@ class MeDataEntryController extends Controller
         $isDataEntryFragment = $request->ajax() && $request->boolean('fragment');
         $request->query->remove('fragment');
         $requestedTab = (string) $request->query('tab', 'collections');
-        $tab = $requestedTab === 'periods'
-            ? 'collections'
-            : (in_array($requestedTab, self::TABS, true)
-                ? $requestedTab
-                : 'collections');
+        $tab = in_array($requestedTab, self::TABS, true) ? $requestedTab : 'collections';
         $search = trim((string) $request->query('q', ''));
         $statusFilter = trim((string) $request->query('status', ''));
+        if ($tab === 'periods' && $statusFilter === '') {
+            $statusFilter = MeReportingPeriod::STATUS_ACTIVE;
+        }
         $searchTerm = '%'.addcslashes(Str::lower($search), '%_\\').'%';
 
         $portfolioQuery = Sector::query()->orderBy('name');
@@ -342,6 +341,39 @@ class MeDataEntryController extends Controller
                 ->latest('assigned_at')
                 ->paginate(15, ['*'], 'submissions_page')
                 ->withQueryString();
+        } elseif ($tab === 'periods') {
+            $periods = $this->scopedPeriodQuery($request, $portfolioId)
+                ->with('portfolio:id,name')
+                ->withCount('collections')
+                ->when($search !== '', function ($query) use ($searchTerm): void {
+                    $query->where(function ($periodQuery) use ($searchTerm): void {
+                        $periodQuery->whereRaw('LOWER(label) LIKE ?', [$searchTerm])
+                            ->orWhereRaw('LOWER(code) LIKE ?', [$searchTerm]);
+                    });
+                })
+                ->when(in_array($statusFilter, [
+                    MeReportingPeriod::STATUS_DRAFT,
+                    MeReportingPeriod::STATUS_ACTIVE,
+                    MeReportingPeriod::STATUS_CLOSED,
+                ], true), function ($query) use ($tab, $statusFilter): void {
+                    $query->where('status', $statusFilter);
+                    if ($tab === 'periods' && $statusFilter === MeReportingPeriod::STATUS_ACTIVE) {
+                        $query->where(function ($lifecycleQuery): void {
+                            $lifecycleQuery
+                                ->whereNull('lifecycle_status')
+                                ->orWhere('lifecycle_status', MeReportingPeriod::LIFECYCLE_OPEN);
+                        });
+                    }
+                })
+                ->orderByDesc('period_start')
+                ->paginate(12, ['*'], 'periods_page')
+                ->withQueryString();
+
+            if ($request->filled('edit_period')) {
+                $editingPeriod = $this->scopedPeriodQuery($request)
+                    ->with('portfolio:id,name')
+                    ->findOrFail((string) $request->query('edit_period'));
+            }
         } else {
             $collections = $this->scopedCollectionQuery($request, $portfolioId)
                 ->with([
@@ -412,7 +444,7 @@ class MeDataEntryController extends Controller
 
         $showFormBuilder = $tab === 'forms'
             && ($editingForm || $request->query('create') === 'form');
-        $showPeriodForm = $tab === 'collections'
+        $showPeriodForm = $tab === 'periods'
             && ($editingPeriod || $request->query('create') === 'period');
         $showCollectionForm = $tab === 'collections'
             && ($editingCollection || $request->query('create') === 'collection');
@@ -522,6 +554,49 @@ class MeDataEntryController extends Controller
         });
 
         return $this->redirectToTab('forms', 'Collection form created as a draft.');
+    }
+
+    public function duplicateForm(Request $request, MeDataEntryForm $form): RedirectResponse
+    {
+        $this->assertFormInScope($request, $form);
+        $form->load(['sections.fields', 'fields', 'indicators']);
+
+        $duplicate = DB::transaction(function () use ($form, $request): MeDataEntryForm {
+            $copy = $form->replicate(['id', 'code', 'version', 'status', 'created_by', 'updated_by']);
+            $copy->title = Str::limit('Copy of '.$form->title, 255, '');
+            $copy->version = 1;
+            $copy->status = MeDataEntryForm::STATUS_DRAFT;
+            $copy->created_by = $request->user()->id;
+            $copy->updated_by = $request->user()->id;
+            $copy->save();
+
+            $sectionIds = [];
+            foreach ($form->sections as $section) {
+                $sectionCopy = $section->replicate(['id', 'form_id']);
+                $copy->sections()->save($sectionCopy);
+                $sectionIds[(string) $section->id] = (string) $sectionCopy->id;
+            }
+
+            foreach ($form->fields as $field) {
+                $fieldCopy = $field->replicate(['id', 'form_id', 'section_id']);
+                $fieldCopy->section_id = $field->section_id
+                    ? ($sectionIds[(string) $field->section_id] ?? null)
+                    : null;
+                $copy->fields()->save($fieldCopy);
+            }
+
+            $fieldMappings = $copy->fields->map(fn (MeDataEntryFormField $field): array => [
+                'indicator_id' => $field->indicator_id,
+            ])->all();
+            $this->syncFormIndicators($copy, (string) $form->indicator_id, $fieldMappings);
+
+            return $copy;
+        });
+
+        return redirect()->route('budget.me.rebuild.data-entry', [
+            'tab' => 'forms',
+            'edit_form' => $duplicate->id,
+        ])->with('success', 'A new draft copy was created. Review and edit it before publishing.');
     }
 
     public function updateForm(Request $request, MeDataEntryForm $form): RedirectResponse
@@ -659,7 +734,7 @@ class MeDataEntryController extends Controller
             app(MeReportingNotificationService::class)->periodOpened($period);
         }
 
-        return $this->redirectToTab('collections', 'Reporting period created.');
+        return $this->redirectToTab('periods', 'Reporting period created.');
     }
 
     public function updatePeriod(Request $request, MeReportingPeriod $period): RedirectResponse
@@ -690,7 +765,29 @@ class MeDataEntryController extends Controller
             app(MeReportingNotificationService::class)->periodOpened($period);
         }
 
-        return $this->redirectToTab('collections', 'Reporting period updated.');
+        return $this->redirectToTab('periods', 'Reporting period updated.');
+    }
+
+    public function archivePeriod(Request $request, MeReportingPeriod $period): RedirectResponse
+    {
+        $this->assertPeriodInScope($request, $period);
+
+        DB::transaction(function () use ($period, $request): void {
+            $lockedPeriod = MeReportingPeriod::query()->lockForUpdate()->findOrFail($period->id);
+            if ($lockedPeriod->collections()->where('status', '!=', MeDataCollection::STATUS_CLOSED)->exists()) {
+                throw ValidationException::withMessages([
+                    'period' => 'Close every collection in this period before archiving it. No reporting history was removed.',
+                ]);
+            }
+
+            $lockedPeriod->update([
+                'status' => MeReportingPeriod::STATUS_CLOSED,
+                'lifecycle_status' => MeReportingPeriod::LIFECYCLE_CLOSED,
+                'updated_by' => $request->user()->id,
+            ]);
+        });
+
+        return $this->redirectToTab('periods', 'Reporting period archived. Historical submissions and approved results remain available.');
     }
 
     public function storeCollection(Request $request): RedirectResponse

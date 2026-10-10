@@ -196,6 +196,37 @@ it('keeps reporting periods canonical and resolves tenant targets before project
         ->and($dominantYear->invoke($service, collect([2, 3])))->toBe(3);
 });
 
+it('keeps archived Think Tank results opt-in and distinguishes open from historical periods', function () {
+    $root = dirname(__DIR__, 2);
+    $controller = file_get_contents($root.'/app/Http/Controllers/Api/V1/ThinkTank/MonitoringResultsController.php');
+    $scope = file_get_contents($root.'/app/Services/ThinkTankMonitoringResultsScopeService.php');
+    $api = file_get_contents($root.'/app/Services/ThinkTankMonitoringApiService.php');
+    $activePeriod = (new MeReportingPeriod)->forceFill([
+        'status' => MeReportingPeriod::STATUS_ACTIVE,
+        'lifecycle_status' => MeReportingPeriod::LIFECYCLE_OPEN,
+    ]);
+    $legacyOpenPeriod = (new MeReportingPeriod)->forceFill([
+        'status' => MeReportingPeriod::STATUS_ACTIVE,
+        'lifecycle_status' => null,
+    ]);
+    $historicalPeriod = (new MeReportingPeriod)->forceFill([
+        'status' => MeReportingPeriod::STATUS_CLOSED,
+        'lifecycle_status' => MeReportingPeriod::LIFECYCLE_CLOSED,
+    ]);
+
+    expect($activePeriod->isActive())->toBeTrue()
+        ->and($legacyOpenPeriod->isActive())->toBeTrue()
+        ->and($historicalPeriod->isActive())->toBeFalse()
+        ->and($controller)->toContain("'include_archived'")
+        ->toContain('FILTER_VALIDATE_BOOLEAN')
+        ->and($scope)->toContain('$includeArchived = false')
+        ->toContain('$period->isActive()')
+        ->toContain('! $includeArchived && ! $selectedPeriod->isActive()')
+        ->and($api)->toContain('includeArchived')
+        ->toContain('include_archived')
+        ->toContain('historical');
+});
+
 it('enforces the declared json and multipart mutation transports', function () {
     $api = new ThinkTankMonitoringApiService;
     $reports = new MonitoringReportsController($api);

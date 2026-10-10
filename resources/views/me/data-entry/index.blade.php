@@ -1915,11 +1915,21 @@
         $canManage = auth()->user()->can('me.data_entry.manage') || auth()->user()->can('me.configuration.manage');
         $tabLabels = [
             'collections' => ['label' => 'Think Tanks Data Collections', 'icon' => 'feather-users'],
+            'periods' => ['label' => 'Reporting Periods', 'icon' => 'feather-calendar'],
             'forms' => ['label' => 'Forms Generator', 'icon' => 'feather-file-plus'],
             'reports' => ['label' => 'Performance Reports', 'icon' => 'feather-bar-chart-2'],
             'submissions' => ['label' => 'Submissions', 'icon' => 'feather-send'],
         ];
         $pageGuides = [
+            'periods' => [
+                'title' => 'Manage active reporting periods',
+                'summary' => 'Review reporting windows and create or update periods before opening data collections for Think Tanks.',
+                'tips' => [
+                    ['title' => 'Set dates', 'text' => 'Use portfolio-specific start, end, opening and submission dates.'],
+                    ['title' => 'Open carefully', 'text' => 'An open period makes matching data collections available to assigned Think Tanks.'],
+                    ['title' => 'Track usage', 'text' => 'Check how many collections use each period before changing or closing it.'],
+                ],
+            ],
             'collections' => [
                 'title' => 'Plan and monitor what every think tank must submit',
                 'summary' => 'Each row joins one indicator, its collection form, reporting deadline and assigned think tanks. Use it to see who is expected to report, who has submitted and who still needs follow-up.',
@@ -1959,6 +1969,7 @@
         ];
         $pageGuide = $pageGuides[$tab];
         $statusChoices = match ($tab) {
+            'periods' => ['active' => 'Active', 'draft' => 'Draft', 'closed' => 'Closed'],
             'forms' => ['draft' => 'Draft', 'published' => 'Published', 'archived' => 'Archived'],
             'reports' => ['draft' => 'Draft', 'submitted' => 'Submitted', 'verified' => 'Verified', 'approved' => 'Approved', 'reviewed' => 'Legacy approved', 'archived' => 'Archived'],
             'submissions' => [
@@ -1976,6 +1987,7 @@
             default => ['draft' => 'Draft', 'open' => 'Open', 'closed' => 'Closed'],
         };
         $createTarget = match ($tab) {
+            'periods' => ['query' => ['tab' => 'periods', 'create' => 'period'], 'label' => 'Create reporting period'],
             'forms' => ['query' => ['tab' => 'forms', 'create' => 'form'], 'label' => 'Generate a form'],
             'collections' => ['query' => ['tab' => 'collections', 'create' => 'collection'], 'label' => 'Create collection'],
             'reports' => ['href' => route('budget.me.performance-reports.create'), 'label' => 'Create report'],
@@ -2847,7 +2859,7 @@
                             </div>
 
                             <div class="me-form-footer">
-                                <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections']) }}" class="btn btn-light border">Cancel</a>
+                                <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'periods']) }}" class="btn btn-light border">Cancel</a>
                                 <button type="submit" class="me-primary-action border-0"><i class="feather-save" aria-hidden="true"></i>{{ $editingPeriod ? 'Save period' : 'Create period' }}</button>
                             </div>
                         </form>
@@ -2980,15 +2992,15 @@
                 </section>
             @endif
 
-            @if ($tab === 'collections' && ! $showPeriodForm && ! $showCollectionForm)
+            @if (in_array($tab, ['collections', 'periods'], true) && ! $showPeriodForm && ! $showCollectionForm)
                 <section class="me-panel mb-3" aria-labelledby="reporting-schedule-title">
                     <div class="me-panel-header">
                         <div>
-                            <h2 class="me-panel-title" id="reporting-schedule-title">Reporting schedule</h2>
-                            <p class="me-panel-subtitle">A collection needs an open reporting period. Manage the schedule here before assigning a form to think tanks.</p>
+                            <h2 class="me-panel-title" id="reporting-schedule-title">{{ $tab === 'periods' ? 'Active reporting periods' : 'Reporting schedule' }}</h2>
+                            <p class="me-panel-subtitle">A collection needs an open reporting period. Archive a period only after all its collections are closed; historical submissions and approved results are retained.</p>
                         </div>
                         @if ($canManage)
-                            <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections', 'create' => 'period']) }}#data-entry-workspace" class="btn btn-sm btn-outline-success">
+                            <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'periods', 'create' => 'period']) }}#data-entry-workspace" class="btn btn-sm btn-outline-success">
                                 <i class="feather-calendar me-1" aria-hidden="true"></i>Add reporting period
                             </a>
                         @endif
@@ -3008,9 +3020,17 @@
                                     <div class="me-record-meta">{{ $period->period_start?->format('d M Y') }} &mdash; {{ $period->period_end?->format('d M Y') }}</div>
                                     <div class="me-record-meta">{{ number_format((int) $period->collections_count) }} {{ \Illuminate\Support\Str::plural('collection', (int) $period->collections_count) }}</div>
                                     @if ($canManage)
-                                        <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections', 'edit_period' => $period->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border mt-2">
-                                            <i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit schedule
-                                        </a>
+                                        <div class="me-row-actions mt-2">
+                                            <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'periods', 'edit_period' => $period->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border">
+                                                <i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit schedule
+                                            </a>
+                                            @if ($period->status === \App\Models\MeReportingPeriod::STATUS_ACTIVE && $period->isActive())
+                                                <form method="POST" action="{{ route('budget.me.data-entry.periods.archive', $period) }}" data-confirm="Archive this period? All collections must be closed first. Historical submissions and approved results will remain available.">
+                                                    @csrf
+                                                    <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="feather-archive me-1" aria-hidden="true"></i>Archive period</button>
+                                                </form>
+                                            @endif
+                                        </div>
                                     @endif
                                 </article>
                             @empty
@@ -3055,6 +3075,7 @@
                 $registerHasFilters = $registerSearch !== '' || $portfolioId || $registerStatusFilter !== '';
             @endphp
 
+            @unless ($tab === 'periods')
             <section class="me-panel" aria-labelledby="data-entry-register-title">
                 <div class="me-panel-header flex-column">
                     <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 w-100">
@@ -3286,6 +3307,10 @@
                                             </div>
                                             @if ($canManage)
                                                 <div class="me-row-actions justify-content-end">
+                                                    <form method="POST" action="{{ route('budget.me.data-entry.forms.duplicate', $form) }}" data-confirm="Create an editable draft copy of this form?">
+                                                        @csrf
+                                                        <button type="submit" class="btn btn-sm btn-outline-secondary" aria-label="Copy {{ $form->title }}"><i class="feather-copy" aria-hidden="true"></i> Copy</button>
+                                                    </form>
                                                     @if ($form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED)
                                                         <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'forms', 'edit_form' => $form->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border" aria-label="Edit {{ $form->title }}"><i class="feather-edit-2" aria-hidden="true"></i> Edit</a>
                                                     @endif
@@ -3341,14 +3366,17 @@
                                 <div class="me-row-actions justify-content-start mt-3">
                                     <button type="button" class="btn btn-sm btn-outline-info" data-preview-form="{{ $form->id }}" aria-haspopup="dialog" aria-controls="me-form-preview-modal"><i class="feather-eye me-1" aria-hidden="true"></i>Preview form</button>
                                 </div>
-                                @if ($canManage && $form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED)
+                                @if ($canManage)
                                     <div class="me-row-actions justify-content-start">
+                                        <form method="POST" action="{{ route('budget.me.data-entry.forms.duplicate', $form) }}" data-confirm="Create an editable draft copy of this form?">@csrf<button type="submit" class="btn btn-sm btn-outline-secondary"><i class="feather-copy me-1" aria-hidden="true"></i>Copy form</button></form>
+                                        @if ($form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED)
                                         <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'forms', 'edit_form' => $form->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit</a>
                                         @if ($form->status === \App\Models\MeDataEntryForm::STATUS_DRAFT)
                                             <form method="POST" action="{{ route('budget.me.data-entry.forms.publish', $form) }}" data-confirm="Publish this form? It will become available for new collections.">@csrf<button type="submit" class="btn btn-sm btn-outline-success"><i class="feather-upload-cloud me-1" aria-hidden="true"></i>Publish</button></form>
                                         @else
                                             <a href="{{ route('budget.me.performance-reports.create', ['form_id' => $form->id]) }}" class="btn btn-sm btn-outline-primary"><i class="feather-bar-chart-2 me-1" aria-hidden="true"></i>Report</a>
                                             <form method="POST" action="{{ route('budget.me.data-entry.forms.archive', $form) }}" data-confirm="Archive this form? It cannot be used for new collections.">@csrf<button type="submit" class="btn btn-sm btn-outline-danger"><i class="feather-archive me-1" aria-hidden="true"></i>Archive</button></form>
+                                        @endif
                                         @endif
                                     </div>
                                 @endif
@@ -3805,6 +3833,7 @@
                 @endif
                 @endif
             </section>
+            @endunless
         </div>
 
         @if ($canManage && $tab === 'collections' && ! $showPeriodForm && ! $showCollectionForm)

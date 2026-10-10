@@ -145,6 +145,10 @@ Route::prefix('v1/think-tank')
                                         ->whereUuid('execution')
                                         ->middleware('throttle:30,1,think-tank-procurement-execution-update')
                                         ->name('executions.update');
+                                    Route::delete('executions/{execution}', [ProcurementExecutionController::class, 'destroy'])
+                                        ->whereUuid('execution')
+                                        ->middleware('throttle:10,1,think-tank-procurement-execution-delete')
+                                        ->name('executions.destroy');
                                     Route::put('executions/{execution}/form', [ProcurementExecutionController::class, 'updateForm'])
                                         ->whereUuid('execution')
                                         ->middleware('throttle:20,1,think-tank-procurement-execution-form')

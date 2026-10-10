@@ -16,6 +16,7 @@ class ThinkTankMonitoringResultsScopeService
      * @return array{
      *     indicatorIds:array<int, string>,
      *     periods:Collection,
+     *     reportingPeriodId:?string,
      *     projectYear:int,
      *     projectYearOptions:array<int, int>,
      *     reportingYear:?int
@@ -26,6 +27,7 @@ class ThinkTankMonitoringResultsScopeService
         ?int $requestedProjectYear,
         ?int $requestedReportingYear,
         ?string $reportingPeriodId,
+        bool $includeArchived = false,
     ): array {
         $frameworkId = MeFramework::query()->current()->value('id');
         $assignments = MeDataCollectionAssignment::query()
@@ -36,12 +38,55 @@ class ThinkTankMonitoringResultsScopeService
                 'collection.form:id,indicator_id,status',
                 'collection.form.indicator:id,framework_id,project_component_id,is_active',
                 'collection.form.indicators:id,framework_id,project_component_id,is_active',
-                'collection.reportingPeriod:id,label,reporting_year,period_start',
+                'collection.reportingPeriod:id,label,reporting_year,period_start,status,lifecycle_status',
             ])
             ->get();
 
+        $assignedPeriods = $assignments
+            ->pluck('collection.reportingPeriod')
+            ->filter()
+            ->unique('id')
+            ->sortByDesc('period_start')
+            ->values();
+        $periods = $includeArchived
+            ? $assignedPeriods
+            : $assignedPeriods->filter(fn ($period): bool => $period->isActive())->values();
+        $selectedPeriod = filled($reportingPeriodId)
+            ? $assignedPeriods->first(fn ($period): bool => (string) $period->id === $reportingPeriodId)
+            : null;
+        if (filled($reportingPeriodId) && ($selectedPeriod === null || (! $includeArchived && ! $selectedPeriod->isActive()))) {
+            abort(404);
+        }
+        if ($selectedPeriod === null && $requestedReportingYear === null) {
+            $selectedPeriod = $periods->first();
+        }
+        $effectivePeriodId = $selectedPeriod ? (string) $selectedPeriod->id : null;
+
+        [$filterReportingYear, $benchmarkReportingYear] = $this->reportingYearContext(
+            $periods,
+            $requestedReportingYear,
+            $effectivePeriodId,
+        );
+
+        $scopedAssignments = $assignments->filter(function (MeDataCollectionAssignment $assignment) use (
+            $periods,
+            $effectivePeriodId,
+            $requestedReportingYear,
+        ): bool {
+            $period = $assignment->collection?->reportingPeriod;
+            if (! $period || ! $periods->contains('id', $period->id)) {
+                return false;
+            }
+            if ($effectivePeriodId !== null) {
+                return (string) $period->id === $effectivePeriodId;
+            }
+
+            return $requestedReportingYear !== null
+                && (int) $period->reporting_year === $requestedReportingYear;
+        });
+
         $indicatorIds = $frameworkId
-            ? $assignments->flatMap(function (MeDataCollectionAssignment $assignment) use ($frameworkId): Collection {
+            ? $scopedAssignments->flatMap(function (MeDataCollectionAssignment $assignment) use ($frameworkId): Collection {
                 $form = $assignment->collection?->form;
 
                 return collect([$form?->indicator])
@@ -51,29 +96,6 @@ class ThinkTankMonitoringResultsScopeService
                     ->pluck('id');
             })->filter()->map(fn ($id): string => (string) $id)->unique()->values()->all()
             : [];
-        $indicatorIdSet = collect($indicatorIds)->flip();
-        $periods = $assignments
-            ->filter(function (MeDataCollectionAssignment $assignment) use ($indicatorIdSet): bool {
-                $form = $assignment->collection?->form;
-                $formIndicatorIds = collect([$form?->indicator?->id])
-                    ->merge($form?->indicators?->pluck('id') ?? collect())
-                    ->filter()
-                    ->map(fn ($id): string => (string) $id);
-
-                return $formIndicatorIds->contains(fn (string $id): bool => $indicatorIdSet->has($id));
-            })
-            ->pluck('collection.reportingPeriod')
-            ->filter()
-            ->unique('id')
-            ->sortByDesc('period_start')
-            ->values();
-
-        [$filterReportingYear, $benchmarkReportingYear] = $this->reportingYearContext(
-            $periods,
-            $requestedReportingYear,
-            $reportingPeriodId,
-        );
-
         $indicators = $frameworkId && $indicatorIds !== []
             ? Indicator::query()
                 ->where('framework_id', $frameworkId)
@@ -133,6 +155,7 @@ class ThinkTankMonitoringResultsScopeService
         return [
             'indicatorIds' => $indicatorIds,
             'periods' => $periods,
+            'reportingPeriodId' => $effectivePeriodId,
             'projectYear' => (int) $selected,
             'projectYearOptions' => $options->all(),
             'reportingYear' => $filterReportingYear,

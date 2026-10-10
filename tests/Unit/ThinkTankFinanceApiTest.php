@@ -471,6 +471,58 @@ it('rejects overallocated children cycles and active children beneath inactive a
     }
 });
 
+it('limits Think Tank budget allocations to the four Secretariat hierarchy levels', function () {
+    [$application, $bootedHere] = bootThinkTankFinanceApiApplication();
+
+    try {
+        $service = financeApiService();
+        $guard = new ReflectionMethod($service, 'assertBudgetHierarchy');
+        $member = (new ConsortiumThinkTank)->forceFill([
+            'id' => '21000000-0000-4000-8000-000000000001',
+            'consortium_id' => '21000000-0000-4000-8000-000000000002',
+        ]);
+        $levels = collect([
+            ['id' => '21000000-0000-4000-8000-000000000003', 'parent_id' => null, 'amount' => '1000.00'],
+            ['id' => '21000000-0000-4000-8000-000000000004', 'parent_id' => '21000000-0000-4000-8000-000000000003', 'amount' => '800.00'],
+            ['id' => '21000000-0000-4000-8000-000000000005', 'parent_id' => '21000000-0000-4000-8000-000000000004', 'amount' => '500.00'],
+            ['id' => '21000000-0000-4000-8000-000000000006', 'parent_id' => '21000000-0000-4000-8000-000000000005', 'amount' => '250.00'],
+        ])->map(fn (array $line): ThinkTankBudgetLine => (new ThinkTankBudgetLine)->forceFill([
+            ...$line,
+            'currency' => 'USD',
+            'fiscal_year' => '2026',
+            'status' => ThinkTankBudgetLine::STATUS_ACTIVE,
+        ]));
+        $attributes = fn (string $parentId): array => [
+            'parent_id' => $parentId,
+            'fund_allocation_id' => null,
+            'procurement_item_id' => null,
+            'code' => 'NEW-LINE',
+            'name' => 'New allocation',
+            'description' => null,
+            'fiscal_year' => '2026',
+            'currency' => 'USD',
+            'amount' => '100.00',
+            'status' => ThinkTankBudgetLine::STATUS_ACTIVE,
+        ];
+
+        expect($guard->invoke($service, $member, $levels, $attributes('21000000-0000-4000-8000-000000000005')))
+            ->toBeNull()
+            ->and(fn () => $guard->invoke(
+                $service,
+                $member,
+                $levels,
+                $attributes('21000000-0000-4000-8000-000000000006'),
+            ))
+            ->toThrow(ValidationException::class, 'Program, Project, Activity, and Sub-activity');
+    } finally {
+        Mockery::close();
+        if ($bootedHere) {
+            restore_error_handler();
+            restore_exception_handler();
+        }
+    }
+});
+
 it('keeps executed budget classification immutable without an audited correction', function () {
     [$application, $bootedHere] = bootThinkTankFinanceApiApplication();
 
