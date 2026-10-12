@@ -1524,8 +1524,10 @@ Route::middleware(['auth', 'not.funding.partner'])
                 Route::post('forms', 'storeForm')->name('forms.store');
                 Route::post('forms/{form}/duplicate', 'duplicateForm')->name('forms.duplicate');
                 Route::put('forms/{form}', 'updateForm')->name('forms.update');
+                Route::post('forms/{form}/activate', 'activateForm')->name('forms.activate');
                 Route::post('forms/{form}/publish', 'publishForm')->name('forms.publish');
                 Route::post('forms/{form}/archive', 'archiveForm')->name('forms.archive');
+                Route::delete('forms/{form}', 'destroyForm')->name('forms.destroy');
 
                 Route::post('reporting-periods', 'storePeriod')->name('periods.store');
                 Route::put('reporting-periods/{period}', 'updatePeriod')->name('periods.update');

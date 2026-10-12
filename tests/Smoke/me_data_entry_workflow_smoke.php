@@ -85,6 +85,7 @@ class MeDataEntryWorkflowSmoke
             $this->assertEveryAnswerTypeWorks($context);
             $this->assertThinkTankIsolation($context, $workflow);
             $this->assertDraftAndClosedCollectionRules($context, $workflow);
+            $this->assertActiveNowCollectionWorkflow($context, $workflow);
 
             echo "ME_DATA_ENTRY_WORKFLOW_OK\n";
         } finally {
@@ -457,14 +458,6 @@ class MeDataEntryWorkflowSmoke
         $this->flushSession();
 
         $this->asAdmin($context['admin'])
-            ->get(route('budget.me.rebuild.data-entry', ['tab' => 'collections']))
-            ->assertOk()
-            ->assertSee('Fix reporting period')
-            ->assertSee('data-fix-period-modal', false)
-            ->assertSee('Save and open period')
-            ->assertSee(route('budget.me.data-entry.collections.reporting-period.fix', $collection), false);
-
-        $this->asAdmin($context['admin'])
             ->postWithCsrf(route('budget.me.data-entry.collections.reporting-period.fix', $collection), [
                 'fix_reporting_period_collection_id' => $collection->id,
                 'fix_submission_opens_at' => $opensAt,
@@ -745,15 +738,14 @@ class MeDataEntryWorkflowSmoke
             ->get(route('budget.me.rebuild.data-entry'))
             ->assertOk()
             ->assertSee('Data Entry and Performance Tracking')
-            ->assertSee('Think Tanks Data Collections')
-            ->assertSee('Forms Generator')
-            ->assertSee('Performance Reports')
-            ->assertSee('Submissions')
-            ->assertSee('How to use this page')
-            ->assertSee('Reporting schedule')
-            ->assertSee('Publish / Send to Think Tanks')
+            ->assertSee('Form creation')
+            ->assertSee('Data collection Bank')
+            ->assertDontSee('Think Tanks Data Collections')
+            ->assertDontSee('Reporting Periods')
+            ->assertDontSee('Performance Reports')
+            ->assertDontSee('How to use this page')
             ->assertSee($workflow['formTitle'])
-            ->assertSee($workflow['periodLabel']);
+            ->assertDontSee($workflow['periodLabel']);
 
         $this->asAdmin($admin)
             ->get(route('budget.me.rebuild.data-entry', [
@@ -790,6 +782,9 @@ class MeDataEntryWorkflowSmoke
         $createFormResponse
             ->assertOk()
             ->assertSee('Form sections and questions')
+            ->assertSee('1. Link an indicator to this form')
+            ->assertSee('2. Create the form')
+            ->assertSee('data-form-create-dialog', false)
             ->assertSee('General information')
             ->assertSee('Add another section')
             ->assertSee('Background colour')
@@ -2091,6 +2086,76 @@ class MeDataEntryWorkflowSmoke
             0,
             MeDataSubmission::query()->where('assignment_id', $assignment->id)->count(),
             'Closed collection accepted a draft or final submission.'
+        );
+    }
+
+    private function assertActiveNowCollectionWorkflow(array $context, array $workflow): void
+    {
+        $form = $workflow['form']->fresh();
+        $startDate = today()->toDateString();
+        $endDate = today()->addDays(30)->toDateString();
+
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.data-entry.forms.activate', $form), [
+                'activate_form_id' => $form->id,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'member_ids' => [$context['secondMember']->id],
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('budget.me.rebuild.data-entry', ['tab' => 'forms']));
+
+        $collection = MeDataCollection::query()
+            ->where('form_id', $form->id)
+            ->whereHas('assignments', fn ($query) => $query->where('think_tank_member_id', $context['secondMember']->id))
+            ->latest('created_at')
+            ->first();
+        $this->assertTrue((bool) $collection, 'Active Now did not create a collection for the selected Think Tank.');
+        $this->assertSame(MeDataCollection::STATUS_OPEN, $collection->status, 'Active Now did not open the collection.');
+        $this->assertSame($startDate, $collection->opens_at?->toDateString(), 'Collection opening date differs from the selected start date.');
+        $this->assertSame($endDate, $collection->closes_at?->toDateString(), 'Collection closing date differs from the selected end date.');
+
+        $period = $collection->reportingPeriod;
+        $this->assertTrue((bool) $period, 'Active Now did not create the linked reporting period.');
+        $this->assertSame(MeReportingPeriod::STATUS_ACTIVE, $period->status, 'Active Now left the period in a planned status.');
+        $this->assertSame(MeReportingPeriod::LIFECYCLE_OPEN, $period->lifecycle_status, 'Active Now did not open the reporting period.');
+        $this->assertSame($startDate, $period->period_start?->toDateString(), 'Reporting period start date differs from the selected start date.');
+        $this->assertSame($endDate, $period->period_end?->toDateString(), 'Reporting period end date differs from the selected end date.');
+
+        $assignment = $collection->assignments()->where('think_tank_member_id', $context['secondMember']->id)->first();
+        $this->assertTrue((bool) $assignment, 'The selected Think Tank was not assigned.');
+        $this->assertSame(
+            'open',
+            $this->app->make(ThinkTankMeAssignmentService::class)->stateFor($assignment),
+            'The Think Tank monitoring API does not classify the selected assignment as open.'
+        );
+
+        $overview = $this->app->make(ThinkTankMeAssignmentService::class)->overview($context['secondMember'], [], true);
+        $portalRegister = $this->app->make(\App\Services\ThinkTankMonitoringApiService::class)
+            ->assignmentRegister($overview);
+        $portalCard = collect($portalRegister['assignments'])->firstWhere('id', (string) $assignment->id);
+        $this->assertTrue(is_array($portalCard), 'The Think Tank monitoring API omitted the selected assignment.');
+        $this->assertSame('open', $portalCard['state'], 'The Think Tank API did not expose the collection as open.');
+        $this->assertTrue($portalCard['canEdit'], 'The Think Tank API did not allow the selected user to submit.');
+        $this->assertSame($startDate, $portalCard['periodStart'], 'The portal API returned the wrong opening date.');
+        $this->assertSame($endDate, $portalCard['periodEnd'], 'The portal API returned the wrong end date.');
+
+        $this->asThinkTank($context['secondUser'])
+            ->get(route('think-tank.me-data.show', $assignment))
+            ->assertOk()
+            ->assertSee($form->title)
+            ->assertSee('Submit data');
+
+        $this->asThinkTank($context['secondUser'])
+            ->postWithCsrf(route('think-tank.me-data.submit', $assignment), [
+                'answers' => [(string) $workflow['requiredField']->id => '12'],
+            ])
+            ->assertRedirect(route('think-tank.me-data.show', $assignment))
+            ->assertSessionHasNoErrors();
+
+        $this->assertTrue(
+            $assignment->fresh()->submission?->submitted_at !== null,
+            'The Think Tank could not submit during the Active Now window.'
         );
     }
 

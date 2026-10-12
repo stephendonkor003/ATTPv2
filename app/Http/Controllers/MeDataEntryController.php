@@ -20,7 +20,6 @@ use App\Models\Sector;
 use App\Models\SubActivity;
 use App\Models\User;
 use App\Services\MeReportingNotificationService;
-use App\Services\MeReportingReadinessService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -35,9 +34,7 @@ class MeDataEntryController extends Controller
 {
     use ScopesAssignedPortfolios;
 
-    private const TABS = ['collections', 'periods', 'forms', 'reports', 'submissions'];
-
-    private const DUE_SOON_DAYS = 7;
+    private const TABS = ['forms', 'collections'];
 
     private const DEFAULT_SECTION_DESCRIPTION = 'Complete the questions in this section using the most accurate information available. Review your answers before continuing to the next section.';
 
@@ -130,17 +127,14 @@ class MeDataEntryController extends Controller
         $this->middleware('permission:me.data_entry.manage|me.configuration.manage')->except('index');
     }
 
-    public function index(Request $request, MeReportingReadinessService $readinessService): View
+    public function index(Request $request): View
     {
         $isDataEntryFragment = $request->ajax() && $request->boolean('fragment');
         $request->query->remove('fragment');
-        $requestedTab = (string) $request->query('tab', 'collections');
-        $tab = in_array($requestedTab, self::TABS, true) ? $requestedTab : 'collections';
+        $requestedTab = (string) $request->query('tab', 'forms');
+        $tab = in_array($requestedTab, self::TABS, true) ? $requestedTab : 'forms';
         $search = trim((string) $request->query('q', ''));
         $statusFilter = trim((string) $request->query('status', ''));
-        if ($tab === 'periods' && $statusFilter === '') {
-            $statusFilter = MeReportingPeriod::STATUS_ACTIVE;
-        }
         $searchTerm = '%'.addcslashes(Str::lower($search), '%_\\').'%';
 
         $portfolioQuery = Sector::query()->orderBy('name');
@@ -148,43 +142,10 @@ class MeDataEntryController extends Controller
             $this->applyAssignedPortfolioScopeToSectors($portfolioQuery, $request->user());
         }
         $portfolios = $portfolioQuery->get(['id', 'name', 'status']);
-        $reportingReadiness = $isDataEntryFragment
-            ? []
-            : $readinessService->assess($portfolios->pluck('id'));
 
         $portfolioId = trim((string) $request->query('portfolio_id', '')) ?: null;
         if ($portfolioId && ! $portfolios->contains(fn (Sector $portfolio): bool => (string) $portfolio->id === $portfolioId)) {
             abort(403, 'You do not have access to the selected portfolio.');
-        }
-
-        $summary = [];
-        if (! $isDataEntryFragment) {
-            $summaryCollectionQuery = $this->scopedCollectionQuery($request);
-            $summary = [
-                'open' => (clone $summaryCollectionQuery)
-                    ->where('status', MeDataCollection::STATUS_OPEN)
-                    ->count(),
-                'due_soon' => (clone $summaryCollectionQuery)
-                    ->where('status', MeDataCollection::STATUS_OPEN)
-                    ->whereBetween('due_at', [now(), now()->addDays(self::DUE_SOON_DAYS)])
-                    ->count(),
-                'submitted' => $this->scopedSubmissionQuery($request)
-                    ->where(function ($query): void {
-                        $statuses = [
-                            MeDataSubmission::STATUS_SUBMITTED,
-                            MeDataSubmission::STATUS_RESUBMITTED,
-                            MeDataSubmission::STATUS_UNDER_REVIEW,
-                            MeDataSubmission::STATUS_VALIDATED,
-                            MeDataSubmission::STATUS_VERIFIED,
-                            MeDataSubmission::STATUS_APPROVED,
-                        ];
-                        $query->whereIn('workflow_status', $statuses)
-                            ->orWhere(function ($legacyQuery) use ($statuses): void {
-                                $legacyQuery->whereNull('workflow_status')->whereIn('status', $statuses);
-                            });
-                    })
-                    ->count(),
-            ];
         }
 
         $forms = null;
@@ -209,6 +170,9 @@ class MeDataEntryController extends Controller
                     'sections:id,form_id,section_key,name,description,background_color,sort_order',
                     'sections.fields:id,form_id,section_id,label,help_text,field_type,options,validation,unit_label,is_required,sort_order',
                     'fields:id,form_id,section_id,label,help_text,field_type,options,validation,unit_label,is_required,sort_order',
+                    'collections' => fn ($query) => $query
+                        ->where('status', MeDataCollection::STATUS_OPEN)
+                        ->with('reportingPeriod:id,status,lifecycle_status,period_start,period_end'),
                 ])
                 ->withCount([
                     'fields',
@@ -469,6 +433,13 @@ class MeDataEntryController extends Controller
         $publishedForms = collect();
         $activePeriods = collect();
         $availableThinkTanks = collect();
+        if ($tab === 'forms' || $showCollectionForm) {
+            $availableThinkTanks = ConsortiumThinkTank::query()
+                ->with('consortium:id,name')
+                ->where('status', 'active')
+                ->orderBy('name')
+                ->get(['id', 'consortium_id', 'name', 'country', 'status']);
+        }
         if ($showCollectionForm) {
             $publishedForms = $this->scopedFormQuery($request)
                 ->where('status', MeDataEntryForm::STATUS_PUBLISHED)
@@ -486,19 +457,6 @@ class MeDataEntryController extends Controller
                 ->orderByDesc('period_start')
                 ->get(['id', 'portfolio_id', 'code', 'label', 'period_start', 'period_end']);
 
-            $existingMemberIds = $editingCollection
-                ? $editingCollection->assignments->pluck('think_tank_member_id')->filter()->all()
-                : [];
-            $availableThinkTanks = ConsortiumThinkTank::query()
-                ->with('consortium:id,name')
-                ->where(function ($query) use ($existingMemberIds): void {
-                    $query->where('status', 'active');
-                    if ($existingMemberIds !== []) {
-                        $query->orWhereIn('id', $existingMemberIds);
-                    }
-                })
-                ->orderBy('name')
-                ->get(['id', 'consortium_id', 'name', 'country', 'status']);
         }
 
         return view('me.data-entry.index', compact(
@@ -507,7 +465,6 @@ class MeDataEntryController extends Controller
             'statusFilter',
             'portfolioId',
             'portfolios',
-            'summary',
             'forms',
             'periods',
             'collections',
@@ -526,7 +483,6 @@ class MeDataEntryController extends Controller
             'publishedForms',
             'activePeriods',
             'availableThinkTanks',
-            'reportingReadiness',
             'isDataEntryFragment'
         ));
     }
@@ -661,32 +617,7 @@ class MeDataEntryController extends Controller
     public function publishForm(Request $request, MeDataEntryForm $form): RedirectResponse
     {
         $this->assertFormInScope($request, $form);
-        if ($form->status === MeDataEntryForm::STATUS_ARCHIVED) {
-            throw ValidationException::withMessages(['form' => 'Archived forms cannot be published.']);
-        }
-        if (! $form->sections()->exists() || ! $form->fields()->exists()) {
-            throw ValidationException::withMessages(['fields' => 'Add at least one section with one question before publishing this form.']);
-        }
-        if (! $form->indicator_id) {
-            throw ValidationException::withMessages(['indicator_id' => 'Link this template to a performance indicator before publishing it.']);
-        }
-        if (! $form->project_component_id) {
-            throw ValidationException::withMessages([
-                'project_component_id' => 'Link this template to a project component before publishing it.',
-            ]);
-        }
-        $this->validateProjectComponent(
-            (string) $form->portfolio_id,
-            (string) $form->project_component_id
-        );
-        $this->validateTemplateIndicator(
-            (string) $form->portfolio_id,
-            (string) $form->project_component_id,
-            (string) $form->indicator_id
-        );
-        if ($form->sections()->whereDoesntHave('fields')->exists() || $form->fields()->whereNull('section_id')->exists()) {
-            throw ValidationException::withMessages(['fields' => 'Every section must contain at least one question before this form can be published.']);
-        }
+        $this->assertFormReadyForCollection($form);
 
         DB::transaction(function () use ($form, $request): void {
             $form->update([
@@ -696,6 +627,114 @@ class MeDataEntryController extends Controller
         });
 
         return $this->redirectToTab('forms', 'Collection form published and ready for a collection.');
+    }
+
+    public function activateForm(Request $request, MeDataEntryForm $form, MeReportingNotificationService $notifications): RedirectResponse
+    {
+        $this->assertFormInScope($request, $form);
+
+        $validated = $request->validate([
+            'activate_form_id' => ['required', 'uuid', Rule::in([(string) $form->id])],
+            'start_date' => ['required', 'date_format:Y-m-d'],
+            'end_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:start_date'],
+            'member_ids' => ['required', 'array', 'min:1', 'max:500'],
+            'member_ids.*' => ['required', 'uuid', 'distinct', Rule::exists((new ConsortiumThinkTank)->getTable(), 'id')],
+        ]);
+
+        $memberIds = collect($validated['member_ids'])->map(fn ($id): string => (string) $id)->unique()->values();
+        $activeMemberIds = ConsortiumThinkTank::query()
+            ->whereIn('id', $memberIds->all())
+            ->where('status', 'active')
+            ->pluck('id')
+            ->map(fn ($id): string => (string) $id);
+        if ($memberIds->diff($activeMemberIds)->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'member_ids' => 'Only active Think Tanks can be assigned to a collection.',
+            ]);
+        }
+
+        $start = Carbon::createFromFormat('Y-m-d', $validated['start_date'])->startOfDay();
+        $end = Carbon::createFromFormat('Y-m-d', $validated['end_date'])->endOfDay();
+        $collection = DB::transaction(function () use ($form, $request, $memberIds, $start, $end): MeDataCollection {
+            $form = $this->scopedFormQuery($request)
+                ->whereKey($form->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $this->assertFormReadyForCollection($form);
+
+            if ($form->status === MeDataEntryForm::STATUS_DRAFT) {
+                $form->update([
+                    'status' => MeDataEntryForm::STATUS_PUBLISHED,
+                    'updated_by' => $request->user()->id,
+                ]);
+            }
+
+            $label = Str::limit(
+                $form->title.' ('.$start->format('d M Y').' - '.$end->format('d M Y').')',
+                150,
+                ''
+            );
+            $period = MeReportingPeriod::query()->create([
+                'portfolio_id' => $form->portfolio_id,
+                'code' => $this->nextReportingPeriodCode($form->title.'-'.$start->format('Ymd').'-'.$end->format('Ymd'), $end->year),
+                'label' => $label,
+                'period_type' => MeReportingPeriod::TYPE_CUSTOM,
+                'period_start' => $start->toDateString(),
+                'period_end' => $end->toDateString(),
+                'status' => MeReportingPeriod::STATUS_ACTIVE,
+                'reporting_year' => $end->year,
+                'submission_opens_at' => $start,
+                'submission_deadline' => $end,
+                'lifecycle_status' => MeReportingPeriod::LIFECYCLE_OPEN,
+                'created_by' => $request->user()->id,
+                'updated_by' => $request->user()->id,
+            ]);
+
+            $collection = MeDataCollection::query()->create([
+                'form_id' => $form->id,
+                'reporting_period_id' => $period->id,
+                'instructions' => $form->instructions,
+                'opens_at' => $start,
+                'due_at' => $end,
+                'closes_at' => $end,
+                'status' => MeDataCollection::STATUS_OPEN,
+                'created_by' => $request->user()->id,
+                'updated_by' => $request->user()->id,
+            ]);
+            $this->syncAssignments($collection, $memberIds, (string) $request->user()->id);
+
+            return $collection->load(['form.indicator:id,indicator_code,name', 'reportingPeriod', 'assignments']);
+        });
+
+        $delivery = $notifications->collectionPublished($collection);
+        $message = 'Collection opened for '.$memberIds->count().' Think Tank'.($memberIds->count() === 1 ? '' : 's').'.';
+        if ($delivery['sent'] > 0) {
+            $message .= ' '.$delivery['sent'].' portal notification'.($delivery['sent'] === 1 ? ' was' : 's were').' sent.';
+        }
+        if ($delivery['unreachable_think_tanks'] > 0) {
+            $message .= ' '.$delivery['unreachable_think_tanks'].' assigned Think Tank'.($delivery['unreachable_think_tanks'] === 1 ? ' has' : 's have').' no active portal account.';
+        }
+
+        return $this->redirectToTab('forms', $message);
+    }
+
+    public function destroyForm(Request $request, MeDataEntryForm $form): RedirectResponse
+    {
+        $this->assertFormInScope($request, $form);
+        if ($form->collections()->exists() || $form->performanceReports()->exists()) {
+            throw ValidationException::withMessages([
+                'form' => 'This form is linked to collection or performance records and cannot be deleted. Archive it to keep its history.',
+            ]);
+        }
+
+        DB::transaction(function () use ($form): void {
+            $form->indicators()->detach();
+            $form->fields()->delete();
+            $form->sections()->delete();
+            $form->delete();
+        });
+
+        return $this->redirectToTab('forms', 'Form deleted.');
     }
 
     public function archiveForm(Request $request, MeDataEntryForm $form): RedirectResponse
@@ -1735,6 +1774,35 @@ class MeDataEntryController extends Controller
             throw ValidationException::withMessages([
                 'project_component_id' => 'The selected project component does not belong to the selected portfolio.',
             ]);
+        }
+    }
+
+    private function assertFormReadyForCollection(MeDataEntryForm $form): void
+    {
+        if ($form->status === MeDataEntryForm::STATUS_ARCHIVED) {
+            throw ValidationException::withMessages(['form' => 'Archived forms cannot be opened for data collection.']);
+        }
+        if (! $form->sections()->exists() || ! $form->fields()->exists()) {
+            throw ValidationException::withMessages(['fields' => 'Add at least one section with one question before opening a collection.']);
+        }
+        if (! $form->indicator_id) {
+            throw ValidationException::withMessages(['indicator_id' => 'Link this form to a performance indicator before opening a collection.']);
+        }
+        if (! $form->project_component_id) {
+            throw ValidationException::withMessages([
+                'project_component_id' => 'Link this form to a project component before opening a collection.',
+            ]);
+        }
+
+        $this->validateProjectComponent((string) $form->portfolio_id, (string) $form->project_component_id);
+        $this->validateTemplateIndicator(
+            (string) $form->portfolio_id,
+            (string) $form->project_component_id,
+            (string) $form->indicator_id
+        );
+
+        if ($form->sections()->whereDoesntHave('fields')->exists() || $form->fields()->whereNull('section_id')->exists()) {
+            throw ValidationException::withMessages(['fields' => 'Every section must contain at least one question before opening a collection.']);
         }
     }
 

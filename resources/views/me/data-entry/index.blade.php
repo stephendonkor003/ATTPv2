@@ -1521,6 +1521,223 @@
             opacity: .38;
         }
 
+        .me-data-entry .me-form-create-dialog,
+        .me-data-entry .me-activate-dialog {
+            max-width: none;
+            padding: 0;
+            border: 0;
+            color: #193746;
+            background: transparent;
+        }
+
+        .me-data-entry .me-form-create-dialog[open] {
+            display: block;
+            width: min(1160px, calc(100vw - 32px));
+            max-height: calc(100dvh - 32px);
+            overflow: auto;
+            border-radius: 20px;
+            box-shadow: 0 24px 80px rgba(12, 36, 48, .3);
+        }
+
+        .me-data-entry .me-form-create-dialog::backdrop,
+        .me-data-entry .me-activate-dialog::backdrop {
+            background: rgba(13, 36, 48, .56);
+            backdrop-filter: blur(4px);
+        }
+
+        .me-data-entry .me-form-create-dialog .me-panel {
+            margin: 0;
+            border: 0;
+            border-radius: 20px;
+            box-shadow: none;
+        }
+
+        .me-data-entry .me-form-create-dialog .me-panel-header {
+            position: sticky;
+            z-index: 2;
+            top: 0;
+            background: #fff;
+        }
+
+        .me-data-entry .me-activate-dialog[open] {
+            display: block;
+            width: min(650px, calc(100vw - 28px));
+            max-height: calc(100dvh - 28px);
+            overflow: auto;
+            border-radius: 20px;
+            background: #fff;
+            box-shadow: 0 24px 80px rgba(12, 36, 48, .3);
+        }
+
+        .me-data-entry .me-activate-dialog form { margin: 0; }
+
+        .me-data-entry .me-activate-dialog-header {
+            display: flex;
+            align-items: flex-start;
+            gap: .9rem;
+            padding: 1.3rem 1.4rem 1rem;
+            border-bottom: 1px solid #e5edf0;
+        }
+
+        .me-data-entry .me-activate-dialog-icon,
+        .me-data-entry .me-bank-indicator-icon {
+            display: grid;
+            flex: 0 0 auto;
+            width: 42px;
+            height: 42px;
+            place-items: center;
+            border-radius: 13px;
+            color: #147d59;
+            background: #e8f7ef;
+            font-size: 1.1rem;
+        }
+
+        .me-data-entry .me-activate-dialog-header h2 {
+            margin: .15rem 0 .25rem;
+            color: #173b4b;
+            font-size: 1.25rem;
+            font-weight: 800;
+        }
+
+        .me-data-entry .me-activate-dialog-header p {
+            margin: 0;
+            color: #71838d;
+            font-size: .86rem;
+        }
+
+        .me-data-entry .me-activate-dialog-body { padding: 1.1rem 1.4rem; }
+
+        .me-data-entry .me-activate-indicator {
+            display: grid;
+            gap: .25rem;
+            padding: .8rem .9rem;
+            border: 1px solid #dfe9ec;
+            border-radius: 12px;
+            background: #f8fbfc;
+        }
+
+        .me-data-entry .me-activate-indicator small,
+        .me-data-entry .me-activate-thinktanks-heading small {
+            color: #73858f;
+            font-size: .75rem;
+        }
+
+        .me-data-entry .me-activate-indicator strong { color: #173b4b; }
+
+        .me-data-entry .me-activate-thinktanks-heading {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .75rem;
+            margin-top: 1.25rem;
+        }
+
+        .me-data-entry .me-activate-thinktanks-heading > div { display: grid; gap: .15rem; }
+        .me-data-entry .me-activate-thinktank-tools { display: flex; gap: .5rem; margin: .7rem 0; }
+        .me-data-entry .me-activate-thinktank-tools input { flex: 1 1 180px; min-width: 100px; }
+
+        .me-data-entry .me-activate-thinktank-list {
+            display: grid;
+            gap: .45rem;
+            max-height: 255px;
+            overflow: auto;
+            padding: .35rem;
+            border: 1px solid #e4ecef;
+            border-radius: 13px;
+            background: #fbfdfd;
+        }
+
+        .me-data-entry .me-activate-thinktank {
+            display: flex;
+            align-items: flex-start;
+            gap: .7rem;
+            padding: .65rem .7rem;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
+        .me-data-entry .me-activate-thinktank:hover { border-color: #d8e7e2; background: #f3faf6; }
+        .me-data-entry .me-activate-thinktank input { margin-top: .18rem; }
+        .me-data-entry .me-activate-thinktank span { display: grid; gap: .12rem; }
+        .me-data-entry .me-activate-thinktank strong { color: #23424f; font-size: .88rem; }
+        .me-data-entry .me-activate-thinktank small { color: #788a92; font-size: .75rem; }
+
+        .me-data-entry .me-activate-dialog-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: .6rem;
+            padding: .9rem 1.4rem 1.2rem;
+            border-top: 1px solid #e5edf0;
+        }
+
+        .me-data-entry .me-active-now { display: inline-flex; align-items: center; gap: .45rem; white-space: nowrap; }
+
+        .me-data-entry .me-live-dot {
+            position: relative;
+            display: inline-block;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #35d08b;
+            box-shadow: 0 0 0 3px rgba(53, 208, 139, .18);
+            animation: me-live-pulse 1.45s ease-out infinite;
+        }
+
+        @keyframes me-live-pulse {
+            0% { box-shadow: 0 0 0 0 rgba(53, 208, 139, .45); }
+            75%, 100% { box-shadow: 0 0 0 7px rgba(53, 208, 139, 0); }
+        }
+
+        .me-data-entry .me-status.collecting { color: #126b49; background: #dcf7e9; }
+        .me-data-entry .me-status.scheduled { color: #28588c; background: #eaf3ff; }
+        .me-data-entry .me-status.archived,
+        .me-data-entry .me-status.closed { color: #657781; background: #eef2f4; }
+
+        .me-data-entry .me-bank-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+            gap: 1rem;
+            padding: 1rem;
+        }
+
+        .me-data-entry .me-filter-grid-bank { grid-template-columns: minmax(0, 1fr) auto; }
+
+        .me-data-entry .me-bank-card {
+            display: flex;
+            min-width: 0;
+            flex-direction: column;
+            padding: 1.15rem;
+            border: 1px solid #e1eaed;
+            border-radius: 17px;
+            background: linear-gradient(160deg, #fff 0%, #fbfdfd 100%);
+            box-shadow: 0 6px 20px rgba(20, 54, 67, .045);
+        }
+
+        .me-data-entry .me-bank-card-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+        .me-data-entry .me-bank-indicator-code { margin-top: 1rem; color: #147d59; font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+        .me-data-entry .me-bank-card h3 { margin: .25rem 0 0; color: #193b4a; font-size: 1.05rem; font-weight: 800; line-height: 1.35; }
+        .me-data-entry .me-bank-card-meta { min-height: 2.35rem; margin: .4rem 0 .9rem; color: #75868f; font-size: .78rem; }
+        .me-data-entry .me-bank-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin-bottom: .9rem; }
+        .me-data-entry .me-bank-counts > div { display: grid; gap: .15rem; padding: .7rem .55rem; border-radius: 11px; background: #f1f7f7; text-align: center; }
+        .me-data-entry .me-bank-counts strong { color: #183f4d; font-size: 1.35rem; line-height: 1; }
+        .me-data-entry .me-bank-counts span { color: #71848d; font-size: .68rem; }
+        .me-data-entry .me-bank-progress-label { display: flex; justify-content: space-between; margin-bottom: .35rem; color: #71848d; font-size: .75rem; }
+        .me-data-entry .me-bank-progress-label strong { color: #1c7658; }
+        .me-data-entry .me-bank-card .progress { height: 7px; overflow: hidden; border-radius: 8px; background: #e8efef; }
+        .me-data-entry .me-bank-card-footer { display: flex; align-items: center; justify-content: space-between; gap: .6rem; margin-top: 1rem; padding-top: .8rem; border-top: 1px solid #e9eff1; }
+        .me-data-entry .me-bank-card-footer > span { display: flex; align-items: center; gap: .35rem; color: #778990; font-size: .72rem; }
+
+        @media (max-width: 575.98px) {
+            .me-data-entry .me-activate-dialog-header,
+            .me-data-entry .me-activate-dialog-body { padding-right: 1rem; padding-left: 1rem; }
+            .me-data-entry .me-activate-dialog-footer { padding-right: 1rem; padding-left: 1rem; }
+            .me-data-entry .me-activate-thinktank-tools { flex-wrap: wrap; }
+            .me-data-entry .me-activate-thinktank-tools input { flex-basis: 100%; }
+            .me-data-entry .me-bank-grid { padding: .75rem; }
+            .me-data-entry .me-bank-card { padding: 1rem; }
+        }
+
         .me-data-entry .me-member-picker {
             scrollbar-color: #8aaab6 #edf3f5;
             scrollbar-width: thin;
@@ -1914,83 +2131,15 @@
     @php
         $canManage = auth()->user()->can('me.data_entry.manage') || auth()->user()->can('me.configuration.manage');
         $tabLabels = [
-            'collections' => ['label' => 'Think Tanks Data Collections', 'icon' => 'feather-users'],
-            'periods' => ['label' => 'Reporting Periods', 'icon' => 'feather-calendar'],
-            'forms' => ['label' => 'Forms Generator', 'icon' => 'feather-file-plus'],
-            'reports' => ['label' => 'Performance Reports', 'icon' => 'feather-bar-chart-2'],
-            'submissions' => ['label' => 'Submissions', 'icon' => 'feather-send'],
+            'forms' => ['label' => 'Form creation', 'icon' => 'feather-file-plus'],
+            'collections' => ['label' => 'Data collection Bank', 'icon' => 'feather-archive'],
         ];
-        $pageGuides = [
-            'periods' => [
-                'title' => 'Manage active reporting periods',
-                'summary' => 'Review reporting windows and create or update periods before opening data collections for Think Tanks.',
-                'tips' => [
-                    ['title' => 'Set dates', 'text' => 'Use portfolio-specific start, end, opening and submission dates.'],
-                    ['title' => 'Open carefully', 'text' => 'An open period makes matching data collections available to assigned Think Tanks.'],
-                    ['title' => 'Track usage', 'text' => 'Check how many collections use each period before changing or closing it.'],
-                ],
-            ],
-            'collections' => [
-                'title' => 'Plan and monitor what every think tank must submit',
-                'summary' => 'Each row joins one indicator, its collection form, reporting deadline and assigned think tanks. Use it to see who is expected to report, who has submitted and who still needs follow-up.',
-                'tips' => [
-                    ['title' => 'Set the schedule', 'text' => 'Create a reporting period before opening a collection.'],
-                    ['title' => 'Assign and publish', 'text' => 'Choose every think tank expected to supply data, then use Publish / Send to Think Tanks.'],
-                    ['title' => 'Follow progress', 'text' => 'Compare submitted, draft and not-started counts before the due date.'],
-                ],
-            ],
-            'forms' => [
-                'title' => 'Generate the form used to collect indicator evidence',
-                'summary' => 'A form defines the questions a think tank answers. Every form must have one primary performance indicator and may map numeric questions to additional indicators.',
-                'tips' => [
-                    ['title' => 'Choose the indicator', 'text' => 'Select the project component and the exact indicator the form will collect.'],
-                    ['title' => 'Build clear questions', 'text' => 'Group questions into sections and explain what evidence respondents should provide.'],
-                    ['title' => 'Publish when ready', 'text' => 'Draft forms can be edited; published forms can be used in a data collection.'],
-                ],
-            ],
-            'reports' => [
-                'title' => 'Turn approved indicator data into a performance report',
-                'summary' => 'Use this page to prepare, review and approve periodic performance reports after the underlying indicator submissions and evidence are ready.',
-                'tips' => [
-                    ['title' => 'Prepare', 'text' => 'Select the reporting period and complete every required result section.'],
-                    ['title' => 'Review', 'text' => 'Check indicator coverage, explanations and supporting documents.'],
-                    ['title' => 'Approve', 'text' => 'Only approved results should be treated as official performance evidence.'],
-                ],
-            ],
-            'submissions' => [
-                'title' => 'Review every think tank assignment by indicator',
-                'summary' => 'This register includes all assigned think tanks, even when they have not started. Use the indicator, period and status columns to identify missing, draft, submitted and approved returns.',
-                'tips' => [
-                    ['title' => 'Find the think tank', 'text' => 'Search by organization, country, indicator, form or reporting period.'],
-                    ['title' => 'Check completeness', 'text' => 'Review the answer count, submission date and current workflow status.'],
-                    ['title' => 'Take action', 'text' => 'Open submitted work for review and follow up on assignments that have not started.'],
-                ],
-            ],
-        ];
-        $pageGuide = $pageGuides[$tab];
         $statusChoices = match ($tab) {
-            'periods' => ['active' => 'Active', 'draft' => 'Draft', 'closed' => 'Closed'],
             'forms' => ['draft' => 'Draft', 'published' => 'Published', 'archived' => 'Archived'],
-            'reports' => ['draft' => 'Draft', 'submitted' => 'Submitted', 'verified' => 'Verified', 'approved' => 'Approved', 'reviewed' => 'Legacy approved', 'archived' => 'Archived'],
-            'submissions' => [
-                'not_started' => 'Not started',
-                'draft' => 'Draft',
-                'submitted' => 'Submitted',
-                'resubmitted' => 'Resubmitted',
-                'under_review' => 'Under review',
-                'returned' => 'Returned',
-                'validated' => 'Validated',
-                'verified' => 'Verified',
-                'approved' => 'Approved',
-                'rejected' => 'Rejected',
-            ],
             default => ['draft' => 'Draft', 'open' => 'Open', 'closed' => 'Closed'],
         };
         $createTarget = match ($tab) {
-            'periods' => ['query' => ['tab' => 'periods', 'create' => 'period'], 'label' => 'Create reporting period'],
-            'forms' => ['query' => ['tab' => 'forms', 'create' => 'form'], 'label' => 'Generate a form'],
-            'collections' => ['query' => ['tab' => 'collections', 'create' => 'collection'], 'label' => 'Create collection'],
-            'reports' => ['href' => route('budget.me.performance-reports.create'), 'label' => 'Create report'],
+            'forms' => ['query' => ['tab' => 'forms', 'create' => 'form'], 'label' => 'Create form'],
             default => null,
         };
         $createHref = $createTarget
@@ -2006,92 +2155,12 @@
                     <div class="me-eyebrow"><i class="feather-edit-3" aria-hidden="true"></i> Monitoring &amp; Evaluation</div>
                     <h1>Data Entry and Performance Tracking</h1>
                     <p>
-                        Use four clear work areas to generate indicator forms, collect think-tank data, monitor submissions, and prepare performance reports.
+                        Create indicator forms, open dated collections and follow Think Tank submissions in two simple work areas.
                     </p>
                 </div>
 
-                <div data-me-data-entry-hero-action>
-                    @include('me.data-entry.partials.hero-actions')
-                </div>
             </div>
         </header>
-
-        <section class="me-summary-grid" aria-label="Data entry summary">
-            <article class="me-summary-card">
-                <span class="me-summary-icon"><i class="feather-unlock" aria-hidden="true"></i></span>
-                <div>
-                    <div class="me-summary-value">{{ number_format((int) ($summary['open'] ?? 0)) }}</div>
-                    <div class="me-summary-label">Open collections</div>
-                </div>
-            </article>
-            <article class="me-summary-card">
-                <span class="me-summary-icon"><i class="feather-clock" aria-hidden="true"></i></span>
-                <div>
-                    <div class="me-summary-value">{{ number_format((int) ($summary['due_soon'] ?? 0)) }}</div>
-                    <div class="me-summary-label">Due in the next 7 days</div>
-                </div>
-            </article>
-            <article class="me-summary-card">
-                <span class="me-summary-icon"><i class="feather-send" aria-hidden="true"></i></span>
-                <div>
-                    <div class="me-summary-value">{{ number_format((int) ($summary['submitted'] ?? 0)) }}</div>
-                    <div class="me-summary-label">Submitted or reviewed</div>
-                </div>
-            </article>
-            @if ($canManage)
-                <article class="me-summary-card">
-                    <span class="me-summary-icon"><i class="feather-check-circle" aria-hidden="true"></i></span>
-                    <div>
-                        <div class="me-summary-value">{{ (int) ($reportingReadiness['percentage'] ?? 0) }}%</div>
-                        <div class="me-summary-label">Reporting readiness</div>
-                    </div>
-                </article>
-            @endif
-        </section>
-
-        @if ($canManage)
-            <details class="me-readiness">
-                <summary>
-                    <span class="me-readiness-summary-icon"><i class="feather-shield" aria-hidden="true"></i></span>
-                    <span class="me-readiness-summary-copy">
-                        <strong id="reporting-readiness-title">Think-tank reporting readiness</strong>
-                        <small>{{ number_format((int) ($reportingReadiness['completed'] ?? 0)) }} of {{ number_format((int) ($reportingReadiness['total'] ?? 0)) }} setup controls complete</small>
-                    </span>
-                    <span class="me-readiness-state {{ ($reportingReadiness['ready'] ?? false) ? 'is-ready' : 'needs-action' }}">
-                        {{ ($reportingReadiness['ready'] ?? false) ? 'Ready' : 'Action required' }}
-                    </span>
-                    <i class="feather-chevron-down me-readiness-chevron" aria-hidden="true"></i>
-                </summary>
-                <div class="me-readiness-body" aria-labelledby="reporting-readiness-title">
-                    <div class="me-readiness-progress">
-                        <div>
-                            <strong>Commissioning checklist</strong>
-                            <small>Live controls from the current database. Complete every gate before reporting begins.</small>
-                        </div>
-                        <div class="progress" role="progressbar" aria-label="Reporting readiness" aria-valuenow="{{ (int) ($reportingReadiness['percentage'] ?? 0) }}" aria-valuemin="0" aria-valuemax="100">
-                            <div class="progress-bar" style="width: {{ (int) ($reportingReadiness['percentage'] ?? 0) }}%"></div>
-                        </div>
-                    </div>
-                    <div class="me-readiness-grid">
-                        @foreach (($reportingReadiness['gates'] ?? []) as $readinessGate)
-                            <article class="me-readiness-gate {{ $readinessGate['complete'] ? 'is-complete' : 'needs-action' }}">
-                                <div class="me-readiness-gate-head">
-                                    <span class="me-readiness-gate-icon"><i class="{{ $readinessGate['complete'] ? 'feather-check' : 'feather-alert-circle' }}" aria-hidden="true"></i></span>
-                                    <div>
-                                        <strong>{{ $readinessGate['label'] }}</strong>
-                                        <small>{{ $readinessGate['value'] }}</small>
-                                    </div>
-                                </div>
-                                <p>{{ $readinessGate['detail'] }}</p>
-                                <a href="{{ route($readinessGate['route'], $readinessGate['query']) }}">
-                                    {{ $readinessGate['action'] }} <i class="feather-arrow-right" aria-hidden="true"></i>
-                                </a>
-                            </article>
-                        @endforeach
-                    </div>
-                </div>
-            </details>
-        @endif
 
     @endunless
 
@@ -2099,9 +2168,6 @@
             data-me-data-entry-fragment
             data-page-title="{{ $tabLabels[$tab]['label'] }} | M&amp;E Data Entry and Performance Tracking"
         >
-        <template data-me-data-entry-hero-action-template>
-            @include('me.data-entry.partials.hero-actions')
-        </template>
         @if ($tab === 'reports')
             <div class="me-report-dashboard-callout">
                 <div>
@@ -2113,25 +2179,6 @@
                 </a>
             </div>
         @endif
-
-        <section class="me-page-guide" aria-labelledby="me-page-guide-title">
-            <div class="me-page-guide-intro">
-                <span class="me-page-guide-icon"><i class="feather-help-circle" aria-hidden="true"></i></span>
-                <div>
-                    <div class="me-eyebrow">How to use this page</div>
-                    <h2 id="me-page-guide-title">{{ $pageGuide['title'] }}</h2>
-                    <p>{{ $pageGuide['summary'] }}</p>
-                </div>
-            </div>
-            <div class="me-workflow-guide" aria-label="Page guidance">
-                @foreach ($pageGuide['tips'] as $tipIndex => $tip)
-                    <article class="me-workflow-step">
-                        <span class="me-workflow-number">{{ $tipIndex + 1 }}</span>
-                        <div><strong>{{ $tip['title'] }}</strong><small>{{ $tip['text'] }}</small></div>
-                    </article>
-                @endforeach
-            </div>
-        </section>
 
         @if (session('success'))
             <div class="alert alert-success border-0 shadow-sm" role="status">
@@ -2170,6 +2217,7 @@
 
         <div id="data-entry-workspace">
             @if ($canManage && $showFormBuilder)
+                <dialog class="me-form-create-dialog" aria-labelledby="form-builder-title" data-form-create-dialog data-auto-open="true" data-list-url="{{ route('budget.me.rebuild.data-entry', ['tab' => 'forms']) }}">
                 @php
                     $fieldTypeGroups = [
                         'Number' => [
@@ -2299,6 +2347,7 @@
                         @if ($editingForm)
                             <span class="me-status {{ $editingForm->status }}">{{ $editingForm->status }}</span>
                         @endif
+                        <button type="button" class="btn btn-light border ms-auto" data-form-dialog-close aria-label="Close form builder"><i class="feather-x" aria-hidden="true"></i></button>
                     </div>
                     <div class="me-panel-body">
                         @if ($formLocked)
@@ -2325,7 +2374,7 @@
                             @endif
 
                             <div class="me-form-section">
-                                <div class="me-form-section-title">Template details</div>
+                                <div class="me-form-section-title">1. Link an indicator to this form</div>
                                 <div class="row g-3">
                                     <div class="col-lg-4">
                                         <label class="form-label" for="form-portfolio">Portfolio <span class="text-danger">*</span></label>
@@ -2408,6 +2457,12 @@
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+
+                            <div class="me-form-section">
+                                <div class="me-form-section-title">2. Create the form</div>
+                                <div class="row g-3">
                                     <div class="col-lg-4">
                                         <label class="form-label" for="form-code">Template code</label>
                                         <input
@@ -2452,9 +2507,8 @@
                                         @error('instructions')<div class="invalid-feedback">{{ $message }}</div>@enderror
                                     </div>
                                 </div>
-                            </div>
 
-                            <div class="me-form-section">
+                            <div class="form-builder-questions">
                                 <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2 mb-3">
                                     <div>
                                         <div class="me-form-section-title mb-1">Form sections and questions</div>
@@ -2759,6 +2813,8 @@
                                 @endif
                             </div>
 
+                            </div>
+
                             <div class="me-form-footer">
                                 <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'forms']) }}" class="btn btn-light border">Cancel</a>
                                 <button type="submit" class="me-primary-action border-0">
@@ -2768,6 +2824,7 @@
                         </form>
                     </div>
                 </section>
+                </dialog>
             @elseif ($canManage && $showPeriodForm)
                 <section class="me-panel" aria-labelledby="period-form-title">
                     <div class="me-panel-header">
@@ -2953,73 +3010,14 @@
                 </section>
             @endif
 
-            @if (in_array($tab, ['collections', 'periods'], true) && ! $showPeriodForm && ! $showCollectionForm)
-                <section class="me-panel mb-3" aria-labelledby="reporting-schedule-title">
-                    <div class="me-panel-header">
-                        <div>
-                            <h2 class="me-panel-title" id="reporting-schedule-title">{{ $tab === 'periods' ? 'Active reporting periods' : 'Reporting schedule' }}</h2>
-                            <p class="me-panel-subtitle">A collection needs an open reporting period. Archive a period only after all its collections are closed; historical submissions and approved results are retained.</p>
-                        </div>
-                        @if ($canManage)
-                            <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'periods', 'create' => 'period']) }}#data-entry-workspace" class="btn btn-sm btn-outline-success">
-                                <i class="feather-calendar me-1" aria-hidden="true"></i>Add reporting period
-                            </a>
-                        @endif
-                    </div>
-                    <div class="me-panel-body">
-                        <div class="me-schedule-grid">
-                            @forelse ($periods as $period)
-                                <article class="me-schedule-card">
-                                    <div class="d-flex align-items-start justify-content-between gap-2">
-                                        <div>
-                                            <span class="me-code">{{ $period->code }}</span>
-                                            <div class="me-record-title">{{ $period->label }}</div>
-                                        </div>
-                                        <span class="me-status {{ $period->lifecycle_status }}">{{ str($period->lifecycle_status)->replace('_', ' ')->title() }}</span>
-                                    </div>
-                                    <div class="me-record-meta">{{ $period->portfolio?->name ?: 'Portfolio unavailable' }}</div>
-                                    <div class="me-record-meta">{{ $period->period_start?->format('d M Y') }} &mdash; {{ $period->period_end?->format('d M Y') }}</div>
-                                    <div class="me-record-meta">{{ number_format((int) $period->collections_count) }} {{ \Illuminate\Support\Str::plural('collection', (int) $period->collections_count) }}</div>
-                                    @if ($canManage)
-                                        <div class="me-row-actions mt-2">
-                                            <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'periods', 'edit_period' => $period->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border">
-                                                <i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit schedule
-                                            </a>
-                                            @if ($period->status === \App\Models\MeReportingPeriod::STATUS_ACTIVE && $period->isActive())
-                                                <form method="POST" action="{{ route('budget.me.data-entry.periods.archive', $period) }}" data-confirm="Archive this period? All collections must be closed first. Historical submissions and approved results will remain available.">
-                                                    @csrf
-                                                    <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="feather-archive me-1" aria-hidden="true"></i>Archive period</button>
-                                                </form>
-                                            @endif
-                                        </div>
-                                    @endif
-                                </article>
-                            @empty
-                                <div class="me-empty-state py-4">
-                                    <h3 class="h6 fw-bold mb-1">No reporting period yet</h3>
-                                    <p class="me-muted small mb-0">Create the first reporting period before opening a think-tank data collection.</p>
-                                </div>
-                            @endforelse
-                        </div>
-                        @if ($periods->hasPages())
-                            <div class="me-pagination-wrap mt-3">{{ $periods->links() }}</div>
-                        @endif
-                    </div>
-                </section>
-            @endif
-
             @php
                 $registerTitle = match ($tab) {
-                    'forms' => 'Generated forms',
-                    'reports' => 'Quarterly performance reports',
-                    'submissions' => 'Think-tank submissions by indicator',
-                    default => 'Indicator collection tracker',
+                    'forms' => 'Form creation',
+                    default => 'Data collection Bank',
                 };
                 $registerSubtitle = match ($tab) {
-                    'forms' => 'Create, link, publish and retire reusable indicator collection forms.',
-                    'reports' => 'Create, complete and review quarterly indicator performance reports.',
-                    'submissions' => 'See every assigned think tank, its indicator and how far the submission has progressed.',
-                    default => 'See the indicator, linked form, reporting deadline, assigned think tanks and submission progress together.',
+                    'forms' => 'Create forms, link them to indicators, then activate collection windows for selected Think Tanks.',
+                    default => 'Search by indicator and see submitted and outstanding Think Tank counts.',
                 };
                 $currentPaginator = match ($tab) {
                     'forms' => $forms,
@@ -3056,32 +3054,34 @@
                         @endif
                     </div>
 
-                    <form method="GET" action="{{ route('budget.me.rebuild.data-entry') }}" class="me-filter-grid {{ $tab === 'submissions' ? 'me-submission-filter-grid' : '' }}" role="search" aria-label="Filter {{ strtolower($registerTitle) }}">
+                    <form method="GET" action="{{ route('budget.me.rebuild.data-entry') }}" class="me-filter-grid {{ $tab === 'collections' ? 'me-filter-grid-bank' : '' }}" role="search" aria-label="Search {{ strtolower($registerTitle) }}">
                         <input type="hidden" name="tab" value="{{ $tab }}">
                         <div>
-                            <label class="{{ $tab === 'submissions' ? 'me-filter-label' : 'visually-hidden' }}" for="data-entry-search">{{ $tab === 'submissions' ? 'Search submissions' : 'Search '.strtolower($registerTitle) }}</label>
-                            <input type="search" id="data-entry-search" name="q" class="form-control" value="{{ $registerSearch }}" placeholder="{{ $tab === 'submissions' ? 'Participant, indicator, template or period' : 'Search code, title or participant' }}">
+                            <label class="visually-hidden" for="data-entry-search">Search {{ strtolower($registerTitle) }}</label>
+                            <input type="search" id="data-entry-search" name="q" class="form-control" value="{{ $registerSearch }}" placeholder="{{ $tab === 'forms' ? 'Search forms or indicators' : 'Search indicators or Think Tanks' }}">
                         </div>
-                        <div>
-                            <label class="{{ $tab === 'submissions' ? 'me-filter-label' : 'visually-hidden' }}" for="data-entry-portfolio-filter">{{ $tab === 'submissions' ? 'Portfolio' : 'Filter by portfolio' }}</label>
-                            <select id="data-entry-portfolio-filter" name="portfolio_id" class="form-select">
-                                <option value="">All portfolios</option>
-                                @foreach ($portfolios as $portfolio)
-                                    <option value="{{ $portfolio->id }}" @selected((string) $portfolioId === (string) $portfolio->id)>{{ $portfolio->name }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label class="{{ $tab === 'submissions' ? 'me-filter-label' : 'visually-hidden' }}" for="data-entry-status-filter">{{ $tab === 'submissions' ? 'Status' : 'Filter by status' }}</label>
-                            <select id="data-entry-status-filter" name="status" class="form-select">
-                                <option value="">All statuses</option>
-                                @foreach ($statusChoices as $filterStatus => $filterLabel)
-                                    <option value="{{ $filterStatus }}" @selected($registerStatusFilter === $filterStatus)>{{ $filterLabel }}</option>
-                                @endforeach
-                            </select>
-                        </div>
+                        @if ($tab === 'forms')
+                            <div>
+                                <label class="visually-hidden" for="data-entry-portfolio-filter">Filter by portfolio</label>
+                                <select id="data-entry-portfolio-filter" name="portfolio_id" class="form-select">
+                                    <option value="">All portfolios</option>
+                                    @foreach ($portfolios as $portfolio)
+                                        <option value="{{ $portfolio->id }}" @selected((string) $portfolioId === (string) $portfolio->id)>{{ $portfolio->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="visually-hidden" for="data-entry-status-filter">Filter by form status</label>
+                                <select id="data-entry-status-filter" name="status" class="form-select">
+                                    <option value="">All statuses</option>
+                                    @foreach ($statusChoices as $filterStatus => $filterLabel)
+                                        <option value="{{ $filterStatus }}" @selected($registerStatusFilter === $filterStatus)>{{ $filterLabel }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        @endif
                         <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-outline-success flex-grow-1"><i class="feather-search me-1" aria-hidden="true"></i>{{ $tab === 'submissions' ? 'Search submissions' : 'Filter' }}</button>
+                            <button type="submit" class="btn btn-outline-success flex-grow-1"><i class="feather-search me-1" aria-hidden="true"></i>Search</button>
                             @if ($registerHasFilters)
                                 <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => $tab]) }}" class="btn btn-light border" aria-label="Clear filters"><i class="feather-x" aria-hidden="true"></i></a>
                             @endif
@@ -3105,13 +3105,13 @@
                             @if ($registerHasFilters)
                                 {{ $tab === 'submissions' ? 'Try a different participant, indicator, template, period, portfolio or status.' : 'Try a different search term, portfolio or status.' }}
                             @elseif ($tab === 'forms')
-                                Create the first form template to define what participants will report.
+                                Create the first form and link it to a performance indicator.
                             @elseif ($tab === 'reports')
                                 Choose a published form, quarter and year to create the first performance report.
                             @elseif ($tab === 'submissions')
                                 Assigned think tanks will appear here, including those that have not started.
                             @else
-                                Publish a form and activate a period, then create the first collection.
+                                Use Active Now on a saved form to open the first collection for selected Think Tanks.
                             @endif
                         </p>
                         @if ($canManage && $createTarget && $tab !== 'submissions' && ! $registerHasFilters)
@@ -3132,71 +3132,6 @@
                     @endif
 
                     @if ($tab === 'forms')
-                    @php
-                        $formPreviewProfiles = $forms->getCollection()->mapWithKeys(function ($form) use ($canManage): array {
-                            $fieldProfile = function ($field): array {
-                                $options = collect($field->options ?? [])->map(function ($option): string {
-                                    if (is_array($option)) {
-                                        return (string) ($option['label'] ?? $option['value'] ?? '');
-                                    }
-
-                                    return trim((string) $option);
-                                })->filter()->values()->all();
-
-                                return [
-                                    'id' => (string) $field->id,
-                                    'label' => $field->label,
-                                    'help' => $field->help_text,
-                                    'type' => $field->field_type,
-                                    'type_label' => str($field->field_type)->replace('_', ' ')->headline()->toString(),
-                                    'unit' => $field->unit_label,
-                                    'required' => (bool) $field->is_required,
-                                    'options' => $options,
-                                ];
-                            };
-                            $sections = $form->sections->map(function ($section) use ($fieldProfile): array {
-                                return [
-                                    'name' => $section->name,
-                                    'description' => $section->description,
-                                    'color' => $section->background_color ?: '#EFF6FF',
-                                    'fields' => $section->fields->map($fieldProfile)->values()->all(),
-                                ];
-                            })->values();
-                            $assignedFieldIds = $form->sections->flatMap->fields->pluck('id');
-                            $orphanFields = $form->fields
-                                ->reject(fn ($field) => $assignedFieldIds->contains($field->id))
-                                ->map($fieldProfile)
-                                ->values();
-                            if ($orphanFields->isNotEmpty()) {
-                                $sections->push([
-                                    'name' => $sections->isEmpty() ? 'General information' : 'Additional questions',
-                                    'description' => 'Complete the following questions using the most accurate information available.',
-                                    'color' => '#F8FAFC',
-                                    'fields' => $orphanFields->all(),
-                                ]);
-                            }
-
-                            return [(string) $form->id => [
-                                'code' => $form->code,
-                                'title' => $form->title,
-                                'description' => $form->description,
-                                'instructions' => $form->instructions,
-                                'status' => str($form->status)->headline()->toString(),
-                                'version' => $form->version,
-                                'portfolio' => $form->portfolio?->name ?: 'Portfolio unavailable',
-                                'component' => $form->projectComponent?->name ?: 'Component not linked',
-                                'indicator' => $form->indicator
-                                    ? trim(($form->indicator->indicator_code ?: 'No code').' — '.$form->indicator->name)
-                                    : 'No indicator linked',
-                                'responsible' => $form->responsiblePerson?->name ?: 'Not assigned',
-                                'sections' => $sections->all(),
-                                'field_count' => (int) $form->fields_count,
-                                'edit_url' => $canManage && $form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED
-                                    ? route('budget.me.rebuild.data-entry', ['tab' => 'forms', 'edit_form' => $form->id]).'#data-entry-workspace'
-                                    : null,
-                            ]];
-                        });
-                    @endphp
                     <div class="table-responsive me-register-desktop me-data-table-region" role="region" aria-label="Scrollable form template register" tabindex="0">
                         <table class="table me-register-table me-form-template-table align-middle">
                             <caption class="visually-hidden">Collection form templates</caption>
@@ -3204,27 +3139,47 @@
                                 <col class="me-form-col-template">
                                 <col class="me-form-col-indicator">
                                 <col class="me-form-col-portfolio">
-                                <col class="me-form-col-ownership">
-                                <col class="me-form-col-usage">
+                                <col class="me-form-col-portfolio">
                                 <col class="me-form-col-actions">
                             </colgroup>
                             <thead>
                                 <tr>
-                                    <th>Template</th>
+                                    <th>Form</th>
                                     <th>Linked indicator</th>
                                     <th>Portfolio</th>
-                                    <th>Ownership</th>
-                                    <th>Usage</th>
+                                    <th>Status</th>
                                     <th class="text-end">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach ($forms as $form)
+                                    @php
+                                        $formHasOpenCollection = $form->collections->isNotEmpty();
+                                        $formIsCollecting = $form->collections->contains(fn ($collection) => $collection->isAcceptingSubmissions() && $collection->reportingPeriod?->isOpenForSubmission());
+                                        $formIsScheduled = $form->collections->contains(fn ($collection) => $collection->opens_at?->isFuture() || $collection->reportingPeriod?->submissionWindowStartsAt()?->isFuture());
+                                        $formStatusLabel = match (true) {
+                                            $form->status === \App\Models\MeDataEntryForm::STATUS_ARCHIVED => 'Archived',
+                                            $form->status === \App\Models\MeDataEntryForm::STATUS_DRAFT => 'Pending setup',
+                                            $formIsCollecting => 'Currently collecting data',
+                                            $formIsScheduled => 'Scheduled',
+                                            $formHasOpenCollection => 'Collection window ended',
+                                            default => 'Ready to activate',
+                                        };
+                                        $formStatusTone = match (true) {
+                                            $form->status === \App\Models\MeDataEntryForm::STATUS_ARCHIVED => 'archived',
+                                            $form->status === \App\Models\MeDataEntryForm::STATUS_DRAFT => 'draft',
+                                            $formIsCollecting => 'collecting',
+                                            $formIsScheduled => 'scheduled',
+                                            $formHasOpenCollection => 'closed',
+                                            default => 'published',
+                                        };
+                                        $formCanBeDeleted = (int) $form->collections_count === 0 && (int) $form->performance_reports_count === 0;
+                                    @endphp
                                     <tr>
                                         <td>
                                             <span class="me-code">{{ $form->code }}</span>
                                             <div class="me-record-title">{{ $form->title }}</div>
-                                            <div class="me-record-meta">Version {{ $form->version }} · {{ \Illuminate\Support\Str::limit($form->description ?: 'No description provided', 90) }}</div>
+                                            <div class="me-record-meta">{{ number_format((int) $form->fields_count) }} questions · {{ number_format((int) $form->sections->count()) }} sections</div>
                                         </td>
                                         <td>
                                             @if ($form->indicator)
@@ -3247,48 +3202,24 @@
                                         </td>
                                         <td>
                                             <div class="fw-semibold small text-dark">{{ $form->portfolio?->name ?: 'Portfolio unavailable' }}</div>
-                                            <div class="me-record-meta mt-1">
-                                                {{ $form->projectComponent?->project_id ? $form->projectComponent->project_id.' · ' : '' }}{{ $form->projectComponent?->name ?: 'Component not linked' }}
-                                            </div>
-                                            <span class="me-status {{ $form->status }} mt-2">{{ $form->status }}</span>
                                         </td>
                                         <td>
-                                            <div class="small fw-semibold text-dark">{{ $form->responsiblePerson?->name ?: 'Not assigned' }}</div>
-                                            <div class="me-record-meta">{{ $form->projectComponent?->governanceNode?->name ?: 'Directorate not assigned' }}</div>
-                                            <div class="me-record-meta">{{ number_format((int) $form->fields_count) }} {{ \Illuminate\Support\Str::plural('field', (int) $form->fields_count) }}</div>
+                                            <span class="me-status {{ $formStatusTone }}">{{ $formStatusLabel }}</span>
                                         </td>
                                         <td>
-                                            <div class="small fw-semibold text-dark">{{ number_format((int) $form->collections_count) }} collections</div>
-                                            <div class="me-record-meta">{{ number_format((int) $form->performance_reports_count) }} performance reports</div>
-                                            <div class="me-record-meta">{{ number_format((int) $form->submitted_collections_count) }} collections with submissions</div>
-                                        </td>
-                                        <td>
-                                            <div class="me-row-actions justify-content-end mb-1">
-                                                <button type="button" class="btn btn-sm btn-outline-info" data-preview-form="{{ $form->id }}" aria-haspopup="dialog" aria-controls="me-form-preview-modal" aria-label="Preview {{ $form->title }}"><i class="feather-eye" aria-hidden="true"></i> Preview form</button>
-                                            </div>
                                             @if ($canManage)
                                                 <div class="me-row-actions justify-content-end">
-                                                    <form method="POST" action="{{ route('budget.me.data-entry.forms.duplicate', $form) }}" data-confirm="Create an editable draft copy of this form?">
-                                                        @csrf
-                                                        <button type="submit" class="btn btn-sm btn-outline-secondary" aria-label="Copy {{ $form->title }}"><i class="feather-copy" aria-hidden="true"></i> Copy</button>
-                                                    </form>
+                                                    @if ($form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED)
+                                                        <button type="button" class="btn btn-sm btn-success me-active-now" data-activate-form data-action="{{ route('budget.me.data-entry.forms.activate', $form) }}" data-form-id="{{ $form->id }}" data-form-title="{{ $form->title }}" data-indicator-label="{{ $form->indicator ? trim(($form->indicator->indicator_code ? $form->indicator->indicator_code.' - ' : '').$form->indicator->name) : 'Indicator not linked' }}" aria-haspopup="dialog" aria-controls="me-activate-form-modal"><span class="me-live-dot" aria-hidden="true"></span>Active Now</button>
+                                                    @endif
                                                     @if ($form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED)
                                                         <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'forms', 'edit_form' => $form->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border" aria-label="Edit {{ $form->title }}"><i class="feather-edit-2" aria-hidden="true"></i> Edit</a>
                                                     @endif
-                                                    @if ($form->status === \App\Models\MeDataEntryForm::STATUS_DRAFT)
-                                                        <form method="POST" action="{{ route('budget.me.data-entry.forms.publish', $form) }}" data-confirm="Publish this form? It will become available for new collections.">
-                                                            @csrf
-                                                            <button type="submit" class="btn btn-sm btn-outline-success"><i class="feather-upload-cloud" aria-hidden="true"></i> Publish</button>
-                                                        </form>
-                                                    @elseif ($form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED)
-                                                        <a href="{{ route('budget.me.performance-reports.create', ['form_id' => $form->id]) }}" class="btn btn-sm btn-outline-primary">
-                                                            <i class="feather-bar-chart-2" aria-hidden="true"></i> Report
-                                                        </a>
-                                                        <form method="POST" action="{{ route('budget.me.data-entry.forms.archive', $form) }}" data-confirm="Archive this form? It cannot be used for new collections.">
-                                                            @csrf
-                                                            <button type="submit" class="btn btn-sm btn-outline-danger" aria-label="Archive {{ $form->title }}"><i class="feather-archive" aria-hidden="true"></i></button>
-                                                        </form>
-                                                    @endif
+                                                    <form method="POST" action="{{ route('budget.me.data-entry.forms.destroy', $form) }}" data-confirm="Delete this form permanently?">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger" aria-label="Delete {{ $form->title }}" @disabled(! $formCanBeDeleted) title="{{ $formCanBeDeleted ? 'Delete form' : 'Forms with collection history can only be archived' }}"><i class="feather-trash-2" aria-hidden="true"></i> Delete</button>
+                                                    </form>
                                                 </div>
                                             @else
                                                 <div class="text-end me-muted small">View only</div>
@@ -3302,10 +3233,32 @@
 
                     <div class="me-mobile-register">
                         @foreach ($forms as $form)
+                            @php
+                                $formHasOpenCollection = $form->collections->isNotEmpty();
+                                $formIsCollecting = $form->collections->contains(fn ($collection) => $collection->isAcceptingSubmissions() && $collection->reportingPeriod?->isOpenForSubmission());
+                                $formIsScheduled = $form->collections->contains(fn ($collection) => $collection->opens_at?->isFuture() || $collection->reportingPeriod?->submissionWindowStartsAt()?->isFuture());
+                                $formStatusLabel = match (true) {
+                                    $form->status === \App\Models\MeDataEntryForm::STATUS_ARCHIVED => 'Archived',
+                                    $form->status === \App\Models\MeDataEntryForm::STATUS_DRAFT => 'Pending setup',
+                                    $formIsCollecting => 'Currently collecting data',
+                                    $formIsScheduled => 'Scheduled',
+                                    $formHasOpenCollection => 'Collection window ended',
+                                    default => 'Ready to activate',
+                                };
+                                $formStatusTone = match (true) {
+                                    $form->status === \App\Models\MeDataEntryForm::STATUS_ARCHIVED => 'archived',
+                                    $form->status === \App\Models\MeDataEntryForm::STATUS_DRAFT => 'draft',
+                                    $formIsCollecting => 'collecting',
+                                    $formIsScheduled => 'scheduled',
+                                    $formHasOpenCollection => 'closed',
+                                    default => 'published',
+                                };
+                                $formCanBeDeleted = (int) $form->collections_count === 0 && (int) $form->performance_reports_count === 0;
+                            @endphp
                             <article class="me-mobile-card">
                                 <div class="d-flex align-items-start justify-content-between gap-2">
                                     <div><span class="me-code">{{ $form->code }}</span><h3 class="me-record-title mb-0">{{ $form->title }}</h3></div>
-                                    <span class="me-status {{ $form->status }}">{{ $form->status }}</span>
+                                    <span class="me-status {{ $formStatusTone }}">{{ $formStatusLabel }}</span>
                                 </div>
                                 <div class="me-mobile-facts">
                                     <div class="me-mobile-fact"><small>Portfolio</small><strong>{{ $form->portfolio?->name ?: 'Unavailable' }}</strong></div>
@@ -3324,73 +3277,19 @@
                                     <div class="me-mobile-fact"><small>Structure</small><strong>{{ $form->fields_count }} fields · v{{ $form->version }}</strong></div>
                                     <div class="me-mobile-fact"><small>Usage</small><strong>{{ $form->collections_count }} collections · {{ $form->performance_reports_count }} reports</strong></div>
                                 </div>
-                                <div class="me-row-actions justify-content-start mt-3">
-                                    <button type="button" class="btn btn-sm btn-outline-info" data-preview-form="{{ $form->id }}" aria-haspopup="dialog" aria-controls="me-form-preview-modal"><i class="feather-eye me-1" aria-hidden="true"></i>Preview form</button>
-                                </div>
                                 @if ($canManage)
                                     <div class="me-row-actions justify-content-start">
-                                        <form method="POST" action="{{ route('budget.me.data-entry.forms.duplicate', $form) }}" data-confirm="Create an editable draft copy of this form?">@csrf<button type="submit" class="btn btn-sm btn-outline-secondary"><i class="feather-copy me-1" aria-hidden="true"></i>Copy form</button></form>
                                         @if ($form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED)
-                                        <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'forms', 'edit_form' => $form->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit</a>
-                                        @if ($form->status === \App\Models\MeDataEntryForm::STATUS_DRAFT)
-                                            <form method="POST" action="{{ route('budget.me.data-entry.forms.publish', $form) }}" data-confirm="Publish this form? It will become available for new collections.">@csrf<button type="submit" class="btn btn-sm btn-outline-success"><i class="feather-upload-cloud me-1" aria-hidden="true"></i>Publish</button></form>
-                                        @else
-                                            <a href="{{ route('budget.me.performance-reports.create', ['form_id' => $form->id]) }}" class="btn btn-sm btn-outline-primary"><i class="feather-bar-chart-2 me-1" aria-hidden="true"></i>Report</a>
-                                            <form method="POST" action="{{ route('budget.me.data-entry.forms.archive', $form) }}" data-confirm="Archive this form? It cannot be used for new collections.">@csrf<button type="submit" class="btn btn-sm btn-outline-danger"><i class="feather-archive me-1" aria-hidden="true"></i>Archive</button></form>
+                                            <button type="button" class="btn btn-sm btn-success me-active-now" data-activate-form data-action="{{ route('budget.me.data-entry.forms.activate', $form) }}" data-form-id="{{ $form->id }}" data-form-title="{{ $form->title }}" data-indicator-label="{{ $form->indicator ? trim(($form->indicator->indicator_code ? $form->indicator->indicator_code.' - ' : '').$form->indicator->name) : 'Indicator not linked' }}" aria-haspopup="dialog" aria-controls="me-activate-form-modal"><span class="me-live-dot" aria-hidden="true"></span>Active Now</button>
+                                            <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'forms', 'edit_form' => $form->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit</a>
                                         @endif
-                                        @endif
+                                        <form method="POST" action="{{ route('budget.me.data-entry.forms.destroy', $form) }}" data-confirm="Delete this form permanently?">@csrf @method('DELETE')<button type="submit" class="btn btn-sm btn-outline-danger" aria-label="Delete {{ $form->title }}" @disabled(! $formCanBeDeleted) title="{{ $formCanBeDeleted ? 'Delete form' : 'Forms with collection history can only be archived' }}"><i class="feather-trash-2 me-1" aria-hidden="true"></i>Delete</button></form>
                                     </div>
                                 @endif
                             </article>
                         @endforeach
                     </div>
 
-                    <script type="application/json" data-form-preview-data>@json($formPreviewProfiles)</script>
-                    <div
-                        class="me-form-preview-modal"
-                        id="me-form-preview-modal"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="me-form-preview-title"
-                        aria-hidden="true"
-                        tabindex="-1"
-                        data-form-preview-modal
-                    >
-                        <div class="me-form-preview-dialog">
-                            <header class="me-form-preview-header">
-                                <div class="me-form-preview-header-main">
-                                    <div>
-                                        <div class="me-form-preview-eyebrow"><span data-form-preview-code>FORM</span><span>·</span><span data-form-preview-status>Preview</span><span>·</span><span>Version <span data-form-preview-version>1</span></span></div>
-                                        <h2 id="me-form-preview-title" data-form-preview-title>Form preview</h2>
-                                        <p data-form-preview-description>Review how the reporting form will appear to respondents.</p>
-                                    </div>
-                                    <button type="button" class="me-form-preview-close" data-form-preview-close aria-label="Close form preview"><i class="feather-x" aria-hidden="true"></i></button>
-                                </div>
-                                <div class="me-form-preview-meta">
-                                    <div><small>Linked indicator</small><strong data-form-preview-indicator>Not linked</strong></div>
-                                    <div><small>Portfolio</small><strong data-form-preview-portfolio>Unavailable</strong></div>
-                                    <div><small>Project component</small><strong data-form-preview-component>Unavailable</strong></div>
-                                    <div><small>Responsible person</small><strong data-form-preview-responsible>Not assigned</strong></div>
-                                </div>
-                            </header>
-                            <div class="me-form-preview-body">
-                                <div class="me-form-preview-canvas">
-                                    <div class="me-form-preview-intro">
-                                        <h3>Instructions for the respondent</h3>
-                                        <p data-form-preview-instructions>Complete every required question and review the information before submitting.</p>
-                                    </div>
-                                    <div class="me-form-preview-sections" data-form-preview-sections></div>
-                                </div>
-                            </div>
-                            <footer class="me-form-preview-footer">
-                                <div class="me-form-preview-footer-note"><i class="feather-eye me-1" aria-hidden="true"></i>Preview only. No information entered here will be saved.</div>
-                                <div class="me-form-preview-footer-actions">
-                                    <a href="#" class="btn btn-outline-primary d-none" data-form-preview-edit><i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit template</a>
-                                    <button type="button" class="btn btn-success" data-form-preview-close><i class="feather-check me-1" aria-hidden="true"></i>Close preview</button>
-                                </div>
-                            </footer>
-                        </div>
-                    </div>
                 @elseif ($tab === 'reports')
                     <div class="table-responsive me-register-desktop me-data-table-region" role="region" aria-label="Scrollable performance report register" tabindex="0">
                         <table class="table me-register-table me-performance-report-table align-middle">
@@ -3629,161 +3528,59 @@
                         @endforeach
                     </div>
                 @else
-                    <div class="table-responsive me-register-desktop me-data-table-region" role="region" aria-label="Scrollable data collection register" tabindex="0">
-                        <table class="table me-register-table me-collection-table align-middle">
-                            <caption class="visually-hidden">Data collections and progress</caption>
-                            <colgroup>
-                                <col style="width: 260px">
-                                <col style="width: 250px">
-                                <col style="width: 250px">
-                                <col style="width: 260px">
-                                <col style="width: 230px">
-                                <col style="width: 250px">
-                            </colgroup>
-                            <thead>
-                                <tr>
-                                    <th>Indicator</th>
-                                    <th>Linked form</th>
-                                    <th>When data is needed</th>
-                                    <th>Assigned think tanks</th>
-                                    <th>Submission progress</th>
-                                    <th class="text-end">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($collections as $collection)
-                                    @php
-                                        $submittedAssignments = $collection->assignments->filter(fn ($assignment) => (bool) $assignment->submission?->submitted_at);
-                                        $draftAssignments = $collection->assignments->filter(fn ($assignment) => $assignment->submission && ! $assignment->submission->submitted_at);
-                                        $notStartedAssignments = $collection->assignments->filter(fn ($assignment) => ! $assignment->submission);
-                                        $submittedCount = $submittedAssignments->count();
-                                        $completion = $collection->assignments_count > 0 ? min(100, round(($submittedCount / $collection->assignments_count) * 100)) : 0;
-                                        $isPastDue = $collection->due_at && now()->isAfter($collection->due_at) && $collection->status !== \App\Models\MeDataCollection::STATUS_CLOSED;
-                                        $collectionIndicator = $collection->form?->indicator;
-                                    @endphp
-                                    <tr>
-                                        <td>
-                                            @if ($collectionIndicator?->indicator_code)<span class="me-code">{{ $collectionIndicator->indicator_code }}</span>@endif
-                                            <div class="me-record-title">{{ $collectionIndicator?->name ?: 'Indicator unavailable' }}</div>
-                                            <div class="me-record-meta">Unit: {{ $collectionIndicator?->unit?->symbol ?: ($collectionIndicator?->unit?->name ?: 'Not configured') }}</div>
-                                        </td>
-                                        <td>
-                                            <span class="me-code">{{ $collection->form?->code ?: 'No code' }}</span>
-                                            <div class="me-record-title">{{ $collection->form?->title ?: 'Form unavailable' }}</div>
-                                            <div class="me-record-meta">{{ $collection->form?->portfolio?->name ?: 'Portfolio unavailable' }}</div>
-                                            <span class="me-status {{ $collection->status }} mt-2">{{ $collection->status }}</span>
-                                        </td>
-                                        <td>
-                                            <div class="small fw-semibold text-dark">Due {{ $collection->due_at?->format('d M Y, H:i') ?: 'Not set' }}</div>
-                                            <div class="me-record-meta">{{ $collection->reportingPeriod?->label ?: 'Period unavailable' }}@if ($collection->reportingPeriod?->code) &middot; {{ $collection->reportingPeriod->code }}@endif</div>
-                                            <div class="me-record-meta">Open {{ $collection->opens_at?->format('d M Y') ?: 'not set' }} &middot; Close {{ $collection->closes_at?->format('d M Y') ?: 'not set' }}</div>
-                                            @if ($isPastDue)<span class="text-danger small fw-semibold"><i class="feather-alert-circle me-1" aria-hidden="true"></i>Past due</span>@endif
-                                        </td>
-                                        <td>
-                                            <div class="small fw-semibold text-dark">{{ number_format((int) $collection->assignments_count) }} {{ \Illuminate\Support\Str::plural('think tank', (int) $collection->assignments_count) }}</div>
-                                            <div class="me-record-meta">{{ $collection->assignments->take(3)->pluck('thinkTank.name')->filter()->join(', ') ?: 'No think tank assigned' }}@if ($collection->assignments_count > 3) +{{ $collection->assignments_count - 3 }} more @endif</div>
-                                        </td>
-                                        <td>
-                                            <div class="small fw-semibold text-dark">{{ $submittedCount }} / {{ $collection->assignments_count }} submitted</div>
-                                            <div class="progress mt-2" style="height: 6px" role="progressbar" aria-label="Submission progress" aria-valuenow="{{ $completion }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" style="width: {{ $completion }}%"></div></div>
-                                            <div class="me-progress-breakdown">
-                                                <span class="me-progress-chip is-complete">{{ $submittedCount }} submitted</span>
-                                                <span class="me-progress-chip">{{ $draftAssignments->count() }} draft</span>
-                                                <span class="me-progress-chip is-pending">{{ $notStartedAssignments->count() }} not started</span>
-                                            </div>
-                                            @if ($submittedAssignments->isNotEmpty())
-                                                <div class="me-record-meta">Submitted by: {{ $submittedAssignments->take(3)->pluck('thinkTank.name')->filter()->join(', ') }}@if ($submittedCount > 3) +{{ $submittedCount - 3 }} more @endif</div>
-                                            @endif
-                                        </td>
-                                        <td>
-                                            @if ($canManage)
-                                                <div class="me-row-actions justify-content-end">
-                                                    @if ($collection->assignments_count > 0)
-                                                        <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'submissions', 'q' => $collection->form?->code]) }}" class="btn btn-sm btn-outline-primary"><i class="feather-file-text" aria-hidden="true"></i> Submissions</a>
-                                                    @endif
-                                                    @if ($collection->status !== \App\Models\MeDataCollection::STATUS_CLOSED)
-                                                        <button
-                                                            type="button"
-                                                            class="btn btn-sm {{ $collection->reportingPeriod?->isActive() ? 'btn-outline-warning' : 'btn-warning' }}"
-                                                            data-fix-reporting-period
-                                                            data-action="{{ route('budget.me.data-entry.collections.reporting-period.fix', $collection) }}"
-                                                            data-collection-id="{{ $collection->id }}"
-                                                            data-period-code="{{ $collection->reportingPeriod?->code }}"
-                                                            data-period-label="{{ $collection->reportingPeriod?->label }}"
-                                                            data-period-coverage="{{ $collection->reportingPeriod?->period_start?->format('d M Y') }} — {{ $collection->reportingPeriod?->period_end?->format('d M Y') }}"
-                                                            data-period-status="{{ str($collection->reportingPeriod?->status ?: 'Unavailable')->headline() }}"
-                                                            data-period-lifecycle="{{ str($collection->reportingPeriod?->lifecycle_status ?: 'Unavailable')->headline() }}"
-                                                            data-submission-opens="{{ $collection->reportingPeriod?->submission_opens_at?->format('Y-m-d\TH:i') }}"
-                                                            data-submission-deadline="{{ $collection->reportingPeriod?->submission_deadline?->format('Y-m-d\TH:i') }}"
-                                                            data-review-deadline="{{ $collection->reportingPeriod?->review_deadline?->format('Y-m-d\TH:i') }}"
-                                                        ><i class="feather-calendar" aria-hidden="true"></i> Fix reporting period</button>
-                                                        <form method="POST" action="{{ route('budget.me.data-entry.collections.publish', $collection) }}" data-confirm="{{ $collection->status === \App\Models\MeDataCollection::STATUS_DRAFT ? 'Publish this collection and notify every assigned think tank? The linked form will appear in their M&E portal.' : 'Send this open collection to assigned think tanks again? Accounts already notified today will not receive a duplicate.' }}">
-                                                            @csrf
-                                                            <button type="submit" class="btn btn-sm btn-success"><i class="feather-send" aria-hidden="true"></i> Publish / Send to Think Tanks</button>
-                                                        </form>
-                                                        <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections', 'edit_collection' => $collection->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2" aria-hidden="true"></i> Edit</a>
-                                                        <form method="POST" action="{{ route('budget.me.data-entry.collections.close', $collection) }}" data-confirm="Close this collection? Participants will no longer be able to submit.">@csrf<button type="submit" class="btn btn-sm btn-outline-danger"><i class="feather-lock" aria-hidden="true"></i> Close</button></form>
-                                                    @endif
-                                                </div>
-                                            @elseif (! $canManage)
-                                                <div class="text-end me-muted small">View only</div>
-                                            @endif
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="me-mobile-register">
+                    <div class="me-bank-grid">
                         @foreach ($collections as $collection)
                             @php
-                                $submittedCount = $collection->assignments->filter(fn ($assignment) => (bool) $assignment->submission?->submitted_at)->count();
-                                $draftCount = $collection->assignments->filter(fn ($assignment) => $assignment->submission && ! $assignment->submission->submitted_at)->count();
-                                $notStartedCount = $collection->assignments->filter(fn ($assignment) => ! $assignment->submission)->count();
+                                $submittedStatuses = [
+                                    \App\Models\MeDataSubmission::STATUS_SUBMITTED,
+                                    \App\Models\MeDataSubmission::STATUS_RESUBMITTED,
+                                    \App\Models\MeDataSubmission::STATUS_UNDER_REVIEW,
+                                    \App\Models\MeDataSubmission::STATUS_VALIDATED,
+                                    \App\Models\MeDataSubmission::STATUS_VERIFIED,
+                                    \App\Models\MeDataSubmission::STATUS_APPROVED,
+                                ];
+                                $submittedAssignments = $collection->assignments->filter(fn ($assignment) => $assignment->submission && ($assignment->submission->submitted_at || in_array($assignment->submission->effectiveStatus(), $submittedStatuses, true)));
+                                $submittedCount = $submittedAssignments->count();
+                                $notSubmittedCount = max(0, (int) $collection->assignments_count - $submittedCount);
                                 $completion = $collection->assignments_count > 0 ? min(100, round(($submittedCount / $collection->assignments_count) * 100)) : 0;
                                 $collectionIndicator = $collection->form?->indicator;
+                                $isCollecting = $collection->isAcceptingSubmissions() && $collection->reportingPeriod?->isOpenForSubmission();
+                                $isScheduled = $collection->opens_at?->isFuture() || $collection->reportingPeriod?->submissionWindowStartsAt()?->isFuture();
+                                $collectionState = match (true) {
+                                    $collection->status === \App\Models\MeDataCollection::STATUS_CLOSED => 'Closed',
+                                    $collection->status === \App\Models\MeDataCollection::STATUS_DRAFT => 'Pending',
+                                    $isCollecting => 'Collecting data',
+                                    $isScheduled => 'Scheduled',
+                                    default => 'Window ended',
+                                };
+                                $collectionStateTone = match ($collectionState) {
+                                    'Collecting data' => 'collecting',
+                                    'Scheduled' => 'scheduled',
+                                    'Pending' => 'draft',
+                                    default => 'closed',
+                                };
                             @endphp
-                            <article class="me-mobile-card">
-                                <div class="d-flex align-items-start justify-content-between gap-2"><div><span class="me-code">{{ $collectionIndicator?->indicator_code ?: 'No indicator code' }}</span><h3 class="me-record-title mb-0">{{ $collectionIndicator?->name ?: 'Indicator unavailable' }}</h3></div><span class="me-status {{ $collection->status }}">{{ $collection->status }}</span></div>
-                                <div class="me-mobile-facts">
-                                    <div class="me-mobile-fact"><small>Linked form</small><strong>{{ $collection->form?->title ?: 'Unavailable' }}</strong></div>
-                                    <div class="me-mobile-fact"><small>Period</small><strong>{{ $collection->reportingPeriod?->label ?: 'Unavailable' }}</strong></div>
-                                    <div class="me-mobile-fact"><small>Due</small><strong>{{ $collection->due_at?->format('d M Y, H:i') }}</strong></div>
-                                    <div class="me-mobile-fact"><small>Assigned</small><strong>{{ $collection->assignments_count }} think tanks</strong></div>
-                                    <div class="me-mobile-fact"><small>Submitted</small><strong>{{ $submittedCount }} / {{ $collection->assignments_count }}</strong></div>
-                                    <div class="me-mobile-fact"><small>Still pending</small><strong>{{ $draftCount }} draft &middot; {{ $notStartedCount }} not started</strong></div>
+                            <article class="me-bank-card">
+                                <div class="me-bank-card-head">
+                                    <span class="me-bank-indicator-icon"><i class="feather-target" aria-hidden="true"></i></span>
+                                    <span class="me-status {{ $collectionStateTone }}">{{ $collectionState }}</span>
                                 </div>
-                                <div class="progress mb-3" style="height: 6px" role="progressbar" aria-label="Submission progress" aria-valuenow="{{ $completion }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" style="width: {{ $completion }}%"></div></div>
-                                @if ($canManage)
-                                    <div class="me-row-actions justify-content-start">
-                                        @if ($collection->assignments_count > 0)
-                                            <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'submissions', 'q' => $collection->form?->code]) }}" class="btn btn-sm btn-outline-primary"><i class="feather-file-text me-1" aria-hidden="true"></i>Submissions</a>
-                                        @endif
-                                        @if ($collection->status !== \App\Models\MeDataCollection::STATUS_CLOSED)
-                                            <button
-                                                type="button"
-                                                class="btn btn-sm {{ $collection->reportingPeriod?->isActive() ? 'btn-outline-warning' : 'btn-warning' }}"
-                                                data-fix-reporting-period
-                                                data-action="{{ route('budget.me.data-entry.collections.reporting-period.fix', $collection) }}"
-                                                data-collection-id="{{ $collection->id }}"
-                                                data-period-code="{{ $collection->reportingPeriod?->code }}"
-                                                data-period-label="{{ $collection->reportingPeriod?->label }}"
-                                                data-period-coverage="{{ $collection->reportingPeriod?->period_start?->format('d M Y') }} — {{ $collection->reportingPeriod?->period_end?->format('d M Y') }}"
-                                                data-period-status="{{ str($collection->reportingPeriod?->status ?: 'Unavailable')->headline() }}"
-                                                data-period-lifecycle="{{ str($collection->reportingPeriod?->lifecycle_status ?: 'Unavailable')->headline() }}"
-                                                data-submission-opens="{{ $collection->reportingPeriod?->submission_opens_at?->format('Y-m-d\TH:i') }}"
-                                                data-submission-deadline="{{ $collection->reportingPeriod?->submission_deadline?->format('Y-m-d\TH:i') }}"
-                                                data-review-deadline="{{ $collection->reportingPeriod?->review_deadline?->format('Y-m-d\TH:i') }}"
-                                            ><i class="feather-calendar me-1" aria-hidden="true"></i>Fix reporting period</button>
-                                            <form method="POST" action="{{ route('budget.me.data-entry.collections.publish', $collection) }}" data-confirm="{{ $collection->status === \App\Models\MeDataCollection::STATUS_DRAFT ? 'Publish this collection and notify every assigned think tank? The linked form will appear in their M&E portal.' : 'Send this open collection to assigned think tanks again? Accounts already notified today will not receive a duplicate.' }}">
-                                                @csrf
-                                                <button type="submit" class="btn btn-sm btn-success"><i class="feather-send me-1" aria-hidden="true"></i>Publish / Send to Think Tanks</button>
-                                            </form>
-                                            <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections', 'edit_collection' => $collection->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit</a>
-                                            <form method="POST" action="{{ route('budget.me.data-entry.collections.close', $collection) }}" data-confirm="Close this collection? Participants will no longer be able to submit.">@csrf<button type="submit" class="btn btn-sm btn-outline-danger"><i class="feather-lock me-1" aria-hidden="true"></i>Close</button></form>
-                                        @endif
-                                    </div>
-                                @endif
+                                <div class="me-bank-indicator-code">{{ $collectionIndicator?->indicator_code ?: 'Indicator' }}</div>
+                                <h3>{{ $collectionIndicator?->name ?: 'Indicator unavailable' }}</h3>
+                                <p class="me-bank-card-meta">{{ $collection->form?->portfolio?->name ?: 'Portfolio unavailable' }} &middot; {{ $collection->form?->title ?: 'Form unavailable' }}<br>{{ $collection->reportingPeriod?->label ?: 'Reporting period' }}</p>
+                                <div class="me-bank-counts">
+                                    <div><strong>{{ number_format($submittedCount) }}</strong><span>Submitted</span></div>
+                                    <div><strong>{{ number_format($notSubmittedCount) }}</strong><span>Not submitted</span></div>
+                                    <div><strong>{{ number_format((int) $collection->assignments_count) }}</strong><span>Think Tanks</span></div>
+                                </div>
+                                <div class="me-bank-progress-label"><span>Submission progress</span><strong>{{ $completion }}%</strong></div>
+                                <div class="progress" role="progressbar" aria-label="Submission progress" aria-valuenow="{{ $completion }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" style="width: {{ $completion }}%"></div></div>
+                                <div class="me-bank-card-footer">
+                                    <span><i class="feather-calendar" aria-hidden="true"></i>{{ $collection->opens_at?->format('d M Y') ?: 'Not set' }} &mdash; {{ $collection->closes_at?->format('d M Y') ?: 'Not set' }}</span>
+                                    @if ($canManage && $collection->assignments_count > 0)
+                                        <a href="{{ route('budget.me.submission-reviews.index') }}" class="btn btn-sm btn-light border">View submissions <i class="feather-arrow-right ms-1" aria-hidden="true"></i></a>
+                                    @endif
+                                </div>
                             </article>
                         @endforeach
                     </div>
@@ -3794,96 +3591,68 @@
                 @endif
                 @endif
             </section>
+        @if ($canManage && $tab === 'forms')
+            @php
+                $activationFormId = (string) old('activate_form_id', '');
+                $selectedThinkTankIds = collect(old('member_ids', []))->map(fn ($id) => (string) $id);
+            @endphp
+            <dialog class="me-activate-dialog" id="me-activate-form-modal" aria-labelledby="me-activate-form-title" data-activate-form-dialog data-auto-open="{{ $activationFormId !== '' ? 'true' : 'false' }}">
+                <form method="POST" action="{{ $activationFormId !== '' ? route('budget.me.data-entry.forms.activate', $activationFormId) : '#' }}" data-activate-form-dialog-form>
+                    @csrf
+                    <input type="hidden" name="activate_form_id" value="{{ $activationFormId }}" data-activate-form-id>
+                    <header class="me-activate-dialog-header">
+                        <div class="me-activate-dialog-icon"><i class="feather-send" aria-hidden="true"></i></div>
+                        <div class="flex-grow-1">
+                            <div class="me-eyebrow">Open data collection</div>
+                            <h2 id="me-activate-form-title">Active Now</h2>
+                            <p><span data-activate-form-name>{{ $activationFormId !== '' ? 'Selected form' : 'Choose the Think Tanks and dates for this collection.' }}</span></p>
+                        </div>
+                        <button type="button" class="btn btn-light border" data-activate-close aria-label="Close"><i class="feather-x" aria-hidden="true"></i></button>
+                    </header>
+                    <div class="me-activate-dialog-body">
+                        <div class="me-activate-indicator"><small>Linked indicator</small><strong data-activate-indicator>{{ $activationFormId !== '' ? 'Indicator linked to selected form' : 'Select a form from the table' }}</strong></div>
+                        <div class="row g-3 mt-1">
+                            <div class="col-sm-6">
+                                <label class="form-label" for="activate-start-date">Start date <span class="text-danger">*</span></label>
+                                <input type="date" id="activate-start-date" name="start_date" class="form-control @error('start_date') is-invalid @enderror" value="{{ old('start_date', today()->toDateString()) }}" required data-activate-start>
+                                @error('start_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="form-label" for="activate-end-date">End date <span class="text-danger">*</span></label>
+                                <input type="date" id="activate-end-date" name="end_date" class="form-control @error('end_date') is-invalid @enderror" value="{{ old('end_date', today()->addDays(30)->toDateString()) }}" required data-activate-end>
+                                @error('end_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+                        </div>
+                        <div class="me-activate-thinktanks-heading">
+                            <div><strong>Think Tanks</strong><small>Select who can submit this form during the dates above.</small></div>
+                            <span class="me-status planned" data-activate-selected-count aria-live="polite">{{ $selectedThinkTankIds->count() }} selected</span>
+                        </div>
+                        <div class="me-activate-thinktank-tools">
+                            <input type="search" class="form-control" placeholder="Search Think Tanks" aria-label="Search Think Tanks" data-activate-thinktank-search>
+                            <button type="button" class="btn btn-light border" data-activate-select-visible>Select visible</button>
+                            <button type="button" class="btn btn-light border" data-activate-clear>Clear</button>
+                        </div>
+                        <div class="me-activate-thinktank-list" data-activate-thinktank-list>
+                            @forelse ($availableThinkTanks as $thinkTank)
+                                <label class="me-activate-thinktank" data-thinktank-row data-search="{{ str($thinkTank->name.' '.$thinkTank->country.' '.$thinkTank->consortium?->name)->lower() }}">
+                                    <input class="form-check-input" type="checkbox" name="member_ids[]" value="{{ $thinkTank->id }}" @checked($selectedThinkTankIds->contains((string) $thinkTank->id)) data-activate-thinktank-option>
+                                    <span><strong>{{ $thinkTank->name }}</strong><small>{{ $thinkTank->consortium?->name ?: 'Consortium not set' }}{{ $thinkTank->country ? ' · '.$thinkTank->country : '' }}</small></span>
+                                </label>
+                            @empty
+                                <div class="me-empty-state py-3"><p class="mb-0">No active Think Tanks are available to assign.</p></div>
+                            @endforelse
+                        </div>
+                        @error('member_ids')<div class="text-danger small mt-2">{{ $message }}</div>@enderror
+                    </div>
+                    <footer class="me-activate-dialog-footer">
+                        <button type="button" class="btn btn-light border" data-activate-close>Cancel</button>
+                        <button type="submit" class="btn btn-success"><span class="me-live-dot" aria-hidden="true"></span>Open collection</button>
+                    </footer>
+                </form>
+            </dialog>
+        @endif
             @endunless
         </div>
-
-        @if ($canManage && $tab === 'collections' && ! $showPeriodForm && ! $showCollectionForm)
-            @php
-                $fixPeriodCollectionId = (string) old('fix_reporting_period_collection_id', '');
-                $fixPeriodHasErrors = collect([
-                    'fix_reporting_period_collection_id',
-                    'fix_submission_opens_at',
-                    'fix_submission_deadline',
-                    'fix_review_deadline',
-                ])->contains(fn (string $field): bool => $errors->has($field));
-            @endphp
-            <div
-                class="modal fade me-period-fix-modal"
-                id="me-fix-reporting-period-modal"
-                tabindex="-1"
-                role="dialog"
-                aria-labelledby="me-fix-reporting-period-title"
-                aria-hidden="true"
-                data-fix-period-modal
-                data-auto-open="{{ $fixPeriodCollectionId !== '' && $fixPeriodHasErrors ? 'true' : 'false' }}"
-            >
-                <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-                    <div class="modal-content">
-                        <form
-                            method="POST"
-                            action="{{ $fixPeriodCollectionId !== '' ? route('budget.me.data-entry.collections.reporting-period.fix', $fixPeriodCollectionId) : '#' }}"
-                            data-fix-period-form
-                        >
-                            @csrf
-                            <input type="hidden" name="fix_reporting_period_collection_id" value="{{ $fixPeriodCollectionId }}" data-fix-period-collection-id>
-                            <input type="hidden" name="fix_period_code" value="{{ old('fix_period_code') }}" data-fix-period-code-input>
-                            <input type="hidden" name="fix_period_label" value="{{ old('fix_period_label') }}" data-fix-period-label-input>
-                            <input type="hidden" name="fix_period_coverage" value="{{ old('fix_period_coverage') }}" data-fix-period-coverage-input>
-
-                            <div class="modal-header">
-                                <div class="me-period-fix-title">
-                                    <span><i class="feather-calendar" aria-hidden="true"></i></span>
-                                    <div>
-                                        <h2 class="modal-title" id="me-fix-reporting-period-title">Fix reporting period</h2>
-                                        <p>Correct the submission window and open the linked period without leaving Data Collections.</p>
-                                    </div>
-                                </div>
-                                <button type="button" class="btn-close" data-fix-period-close aria-label="Close"></button>
-                            </div>
-
-                            <div class="modal-body p-3 p-md-4">
-                                <div class="me-period-fix-summary" aria-label="Linked reporting period">
-                                    <div class="me-period-fix-fact"><small>Reporting period</small><strong data-fix-period-identity>{{ trim(old('fix_period_code').' — '.old('fix_period_label'), ' —') ?: 'Select a collection' }}</strong></div>
-                                    <div class="me-period-fix-fact"><small>Coverage dates</small><strong data-fix-period-coverage>{{ old('fix_period_coverage') ?: 'Not available' }}</strong></div>
-                                    <div class="me-period-fix-fact"><small>Current state</small><strong data-fix-period-state>Will be changed to Active / Open</strong></div>
-                                </div>
-
-                                <div class="row g-3">
-                                    <div class="col-md-4">
-                                        <label class="form-label" for="fix-submission-opens">Submission opens</label>
-                                        <input type="datetime-local" id="fix-submission-opens" name="fix_submission_opens_at" class="form-control @error('fix_submission_opens_at') is-invalid @enderror" value="{{ old('fix_submission_opens_at') }}" data-fix-submission-opens>
-                                        <span class="me-field-help">Leave blank to allow submissions immediately after publishing.</span>
-                                        @error('fix_submission_opens_at')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label" for="fix-submission-deadline">Submission deadline</label>
-                                        <input type="datetime-local" id="fix-submission-deadline" name="fix_submission_deadline" class="form-control @error('fix_submission_deadline') is-invalid @enderror" value="{{ old('fix_submission_deadline') }}" data-fix-submission-deadline>
-                                        <span class="me-field-help">Use a future deadline, or leave blank if the collection dates control access.</span>
-                                        @error('fix_submission_deadline')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label" for="fix-review-deadline">Review deadline</label>
-                                        <input type="datetime-local" id="fix-review-deadline" name="fix_review_deadline" class="form-control @error('fix_review_deadline') is-invalid @enderror" value="{{ old('fix_review_deadline') }}" data-fix-review-deadline>
-                                        <span class="me-field-help">Optional deadline for the ATTP review team.</span>
-                                        @error('fix_review_deadline')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                    </div>
-                                </div>
-
-                                <div class="me-period-fix-note">
-                                    <i class="feather-info" aria-hidden="true"></i>
-                                    <div><strong class="d-block mb-1">What saving will do</strong>The system will set this reporting period to <strong>Active / Open</strong>. It will not send the collection automatically; use <strong>Publish / Send to Think Tanks</strong> after this modal closes.</div>
-                                </div>
-                            </div>
-
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-light border" data-fix-period-close>Cancel</button>
-                                <button type="submit" class="btn btn-success"><i class="feather-unlock me-1" aria-hidden="true"></i>Save and open period</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        @endif
 
         @if ($canManage && $showFormBuilder && !($formLocked ?? false))
             <template id="data-entry-field-template">
@@ -4067,296 +3836,101 @@
                 });
             });
 
-            const fixPeriodModal = document.querySelector('[data-fix-period-modal]');
-            if (fixPeriodModal && fixPeriodModal.dataset.initialized !== 'true') {
-                fixPeriodModal.dataset.initialized = 'true';
-                const fixPeriodForm = fixPeriodModal.querySelector('[data-fix-period-form]');
-                let fixPeriodTrigger = null;
-                const setText = (selector, value, fallback) => {
-                    const target = fixPeriodModal.querySelector(selector);
-                    if (target) target.textContent = value || fallback;
-                };
-                const setValue = (selector, value) => {
-                    const target = fixPeriodModal.querySelector(selector);
-                    if (target) target.value = value || '';
-                };
-
-                const populateFixPeriodModal = (trigger) => {
-                    if (!trigger || !fixPeriodForm) return;
-
-                    fixPeriodForm.action = trigger.dataset.action || '#';
-                    setValue('[data-fix-period-collection-id]', trigger.dataset.collectionId);
-                    setValue('[data-fix-period-code-input]', trigger.dataset.periodCode);
-                    setValue('[data-fix-period-label-input]', trigger.dataset.periodLabel);
-                    setValue('[data-fix-period-coverage-input]', trigger.dataset.periodCoverage);
-                    setValue('[data-fix-submission-opens]', trigger.dataset.submissionOpens);
-                    setValue('[data-fix-submission-deadline]', trigger.dataset.submissionDeadline);
-                    setValue('[data-fix-review-deadline]', trigger.dataset.reviewDeadline);
-                    setText('[data-fix-period-identity]', [trigger.dataset.periodCode, trigger.dataset.periodLabel].filter(Boolean).join(' — '), 'Reporting period unavailable');
-                    setText('[data-fix-period-coverage]', trigger.dataset.periodCoverage, 'Coverage dates unavailable');
-                    setText('[data-fix-period-state]', [trigger.dataset.periodStatus, trigger.dataset.periodLifecycle].filter(Boolean).join(' / '), 'State unavailable');
-                    fixPeriodForm.dataset.meFormDirty = 'false';
-                };
-
-                const openFixPeriodModal = (trigger = null) => {
-                    if (trigger) {
-                        fixPeriodTrigger = trigger;
-                        populateFixPeriodModal(trigger);
-                    }
-
-                    fixPeriodModal.classList.add('show', 'is-open');
-                    fixPeriodModal.style.display = 'block';
-                    fixPeriodModal.setAttribute('aria-hidden', 'false');
-                    fixPeriodModal.setAttribute('aria-modal', 'true');
-                    document.body.classList.add('me-period-fix-open');
-
-                    window.requestAnimationFrame(() => {
-                        const focusTarget = fixPeriodModal.querySelector('.is-invalid')
-                            || fixPeriodModal.querySelector('[data-fix-submission-opens]')
-                            || fixPeriodModal.querySelector('[data-fix-period-close]');
-                        focusTarget?.focus({ preventScroll: true });
-                    });
-                };
-
-                const closeFixPeriodModal = () => {
-                    fixPeriodModal.classList.remove('show', 'is-open');
-                    fixPeriodModal.style.removeProperty('display');
-                    fixPeriodModal.setAttribute('aria-hidden', 'true');
-                    fixPeriodModal.removeAttribute('aria-modal');
-                    document.body.classList.remove('me-period-fix-open');
-                    if (fixPeriodForm) fixPeriodForm.dataset.meFormDirty = 'false';
-                    fixPeriodTrigger?.focus({ preventScroll: true });
-                };
-
-                document.querySelectorAll('[data-fix-reporting-period]').forEach((trigger) => {
-                    if (trigger.dataset.fixPeriodInitialized === 'true') return;
-                    trigger.dataset.fixPeriodInitialized = 'true';
-                    trigger.addEventListener('click', (event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        openFixPeriodModal(trigger);
-                    });
-                });
-
-                fixPeriodModal.querySelectorAll('[data-fix-period-close]').forEach((button) => {
-                    button.addEventListener('click', closeFixPeriodModal);
-                });
-
-                fixPeriodModal.addEventListener('mousedown', (event) => {
-                    if (event.target === fixPeriodModal) closeFixPeriodModal();
-                });
-
-                fixPeriodModal.addEventListener('keydown', (event) => {
-                    if (event.key !== 'Escape') return;
-                    event.preventDefault();
-                    closeFixPeriodModal();
-                });
-
-                if (fixPeriodModal.dataset.autoOpen === 'true') {
-                    window.requestAnimationFrame(() => openFixPeriodModal());
+            const formCreateDialog = document.querySelector('[data-form-create-dialog]');
+            if (formCreateDialog && formCreateDialog.dataset.initialized !== 'true') {
+                formCreateDialog.dataset.initialized = 'true';
+                if (formCreateDialog.dataset.autoOpen === 'true' && !formCreateDialog.open) {
+                    formCreateDialog.showModal();
                 }
-            }
-
-            const formPreviewModal = document.querySelector('[data-form-preview-modal]');
-            if (formPreviewModal && formPreviewModal.dataset.initialized !== 'true') {
-                formPreviewModal.dataset.initialized = 'true';
-                const previewDataNode = document.querySelector('[data-form-preview-data]');
-                const previewSections = formPreviewModal.querySelector('[data-form-preview-sections]');
-                const previewEditLink = formPreviewModal.querySelector('[data-form-preview-edit]');
-                let previewProfiles = {};
-                let previewTrigger = null;
-                try {
-                    previewProfiles = JSON.parse(previewDataNode?.textContent || '{}');
-                } catch (error) {
-                    previewProfiles = {};
-                }
-
-                const setPreviewText = (selector, value, fallback = 'Not available') => {
-                    formPreviewModal.querySelectorAll(selector).forEach((element) => {
-                        element.textContent = value || fallback;
+                formCreateDialog.querySelectorAll('[data-form-dialog-close]').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        formCreateDialog.close();
+                        window.location.assign(formCreateDialog.dataset.listUrl || '?tab=forms');
                     });
-                };
-
-                const createPreviewChoices = (options) => {
-                    const list = document.createElement('div');
-                    list.className = 'me-preview-choice-list';
-                    (options.length ? options : ['Option 1', 'Option 2']).forEach((option) => {
-                        const choice = document.createElement('span');
-                        choice.className = 'me-preview-choice';
-                        choice.textContent = option;
-                        list.appendChild(choice);
-                    });
-                    return list;
-                };
-
-                const createPreviewControl = (field) => {
-                    const type = field.type || 'text';
-                    const options = Array.isArray(field.options) ? field.options : [];
-                    if (['radio', 'checkbox', 'yes_no'].includes(type)) {
-                        return createPreviewChoices(type === 'yes_no' ? ['Yes', 'No'] : options);
-                    }
-                    if (['rating', 'scale'].includes(type)) {
-                        return createPreviewChoices(options.length ? options : ['1', '2', '3', '4', '5']);
-                    }
-
-                    const control = document.createElement('div');
-                    control.className = 'me-preview-control';
-                    if (type === 'textarea') {
-                        control.classList.add('is-textarea');
-                        control.textContent = 'Enter a detailed response...';
-                    } else if (['select', 'multiselect'].includes(type)) {
-                        control.textContent = options.length
-                            ? `Select ${type === 'multiselect' ? 'one or more' : 'an option'}: ${options.join(', ')}`
-                            : 'Select an option';
-                    } else if (['file', 'image'].includes(type)) {
-                        control.textContent = type === 'image' ? 'Choose image file' : 'Choose supporting file';
-                    } else {
-                        const placeholders = {
-                            integer: 'Enter a whole number',
-                            number: 'Enter a number',
-                            percentage: 'Enter percentage',
-                            currency: 'Enter amount',
-                            email: 'name@example.org',
-                            phone: 'Enter telephone number',
-                            url: 'https://',
-                            date: 'Select date',
-                            time: 'Select time',
-                            datetime: 'Select date and time',
-                            month: 'Select month',
-                            year: 'Enter year',
-                        };
-                        control.textContent = placeholders[type] || 'Enter response';
-                    }
-                    return control;
-                };
-
-                const renderPreviewSections = (sections) => {
-                    if (!previewSections) return;
-                    previewSections.replaceChildren();
-                    (sections || []).forEach((section, sectionIndex) => {
-                        const article = document.createElement('section');
-                        article.className = 'me-preview-section';
-                        const color = /^#[0-9a-f]{6}$/i.test(section.color || '') ? section.color : '#EFF6FF';
-                        article.style.setProperty('--preview-section-color', color);
-
-                        const heading = document.createElement('header');
-                        heading.className = 'me-preview-section-head';
-                        const title = document.createElement('h4');
-                        title.textContent = `${sectionIndex + 1}. ${section.name || 'Untitled section'}`;
-                        const description = document.createElement('p');
-                        description.textContent = section.description || 'Complete the questions in this section.';
-                        heading.append(title, description);
-
-                        const fields = document.createElement('div');
-                        fields.className = 'me-preview-fields';
-                        (section.fields || []).forEach((field, fieldIndex) => {
-                            const wrapper = document.createElement('div');
-                            wrapper.className = 'me-preview-field';
-                            if (['textarea', 'radio', 'checkbox', 'multiselect', 'file', 'image'].includes(field.type)) {
-                                wrapper.classList.add('is-wide');
-                            }
-                            const label = document.createElement('label');
-                            label.className = 'me-preview-label';
-                            label.append(`${fieldIndex + 1}. ${field.label || 'Untitled question'}`);
-                            if (field.required) {
-                                const required = document.createElement('em');
-                                required.textContent = ' *';
-                                label.appendChild(required);
-                            }
-                            if (field.unit) {
-                                const unit = document.createElement('span');
-                                unit.className = 'text-muted fw-normal';
-                                unit.textContent = ` (${field.unit})`;
-                                label.appendChild(unit);
-                            }
-                            wrapper.append(label, createPreviewControl(field));
-                            if (field.help) {
-                                const help = document.createElement('small');
-                                help.className = 'me-preview-help';
-                                help.textContent = field.help;
-                                wrapper.appendChild(help);
-                            }
-                            fields.appendChild(wrapper);
-                        });
-
-                        if (!(section.fields || []).length) {
-                            const empty = document.createElement('div');
-                            empty.className = 'text-muted small p-3';
-                            empty.textContent = 'No questions have been added to this section.';
-                            fields.appendChild(empty);
-                        }
-                        article.append(heading, fields);
-                        previewSections.appendChild(article);
-                    });
-
-                    if (!(sections || []).length) {
-                        const empty = document.createElement('div');
-                        empty.className = 'alert alert-warning mb-0';
-                        empty.textContent = 'This template has no sections or questions to preview yet.';
-                        previewSections.appendChild(empty);
-                    }
-                };
-
-                const populateFormPreview = (profile) => {
-                    setPreviewText('[data-form-preview-code]', profile.code, 'FORM');
-                    setPreviewText('[data-form-preview-status]', profile.status, 'Draft');
-                    setPreviewText('[data-form-preview-version]', profile.version, '1');
-                    setPreviewText('[data-form-preview-title]', profile.title, 'Form preview');
-                    setPreviewText('[data-form-preview-description]', profile.description, 'Review how this reporting form will appear to respondents.');
-                    setPreviewText('[data-form-preview-indicator]', profile.indicator, 'No indicator linked');
-                    setPreviewText('[data-form-preview-portfolio]', profile.portfolio);
-                    setPreviewText('[data-form-preview-component]', profile.component);
-                    setPreviewText('[data-form-preview-responsible]', profile.responsible, 'Not assigned');
-                    setPreviewText('[data-form-preview-instructions]', profile.instructions, 'Complete every required question and review the information before submitting.');
-                    renderPreviewSections(profile.sections || []);
-
-                    if (previewEditLink) {
-                        previewEditLink.classList.toggle('d-none', !profile.edit_url);
-                        previewEditLink.href = profile.edit_url || '#';
-                    }
-                };
-
-                const openFormPreview = (trigger) => {
-                    const profile = previewProfiles[trigger.dataset.previewForm];
-                    if (!profile) return;
-                    previewTrigger = trigger;
-                    populateFormPreview(profile);
-                    formPreviewModal.classList.add('is-open');
-                    formPreviewModal.setAttribute('aria-hidden', 'false');
-                    document.body.classList.add('me-form-preview-open');
-                    window.requestAnimationFrame(() => formPreviewModal.querySelector('[data-form-preview-close]')?.focus({ preventScroll: true }));
-                };
-
-                const closeFormPreview = () => {
-                    formPreviewModal.classList.remove('is-open');
-                    formPreviewModal.setAttribute('aria-hidden', 'true');
-                    document.body.classList.remove('me-form-preview-open');
-                    previewTrigger?.focus({ preventScroll: true });
-                };
-
-                document.querySelectorAll('[data-preview-form]').forEach((trigger) => {
-                    if (trigger.dataset.previewInitialized === 'true') return;
-                    trigger.dataset.previewInitialized = 'true';
-                    trigger.addEventListener('click', () => openFormPreview(trigger));
                 });
-                formPreviewModal.querySelectorAll('[data-form-preview-close]').forEach((button) => {
-                    button.addEventListener('click', closeFormPreview);
-                });
-                previewEditLink?.addEventListener('click', closeFormPreview);
-                formPreviewModal.addEventListener('mousedown', (event) => {
-                    if (event.target === formPreviewModal) closeFormPreview();
-                });
-                formPreviewModal.addEventListener('keydown', (event) => {
-                    if (event.key !== 'Escape') return;
-                    event.preventDefault();
-                    closeFormPreview();
+                formCreateDialog.addEventListener('click', (event) => {
+                    if (event.target === formCreateDialog) {
+                        formCreateDialog.close();
+                        window.location.assign(formCreateDialog.dataset.listUrl || '?tab=forms');
+                    }
                 });
             }
 
-            const firstInvalid = document.querySelector('.me-data-entry .is-invalid');
-            if (firstInvalid) {
-                firstInvalid.focus({ preventScroll: true });
-                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const activateDialog = document.querySelector('[data-activate-form-dialog]');
+            if (activateDialog && activateDialog.dataset.initialized !== 'true') {
+                activateDialog.dataset.initialized = 'true';
+                const activateForm = activateDialog.querySelector('[data-activate-form-dialog-form]');
+                const activateFormId = activateDialog.querySelector('[data-activate-form-id]');
+                const activateName = activateDialog.querySelector('[data-activate-form-name]');
+                const activateIndicator = activateDialog.querySelector('[data-activate-indicator]');
+                const startDate = activateDialog.querySelector('[data-activate-start]');
+                const endDate = activateDialog.querySelector('[data-activate-end]');
+                const tankSearch = activateDialog.querySelector('[data-activate-thinktank-search]');
+                const tankRows = [...activateDialog.querySelectorAll('[data-thinktank-row]')];
+                const tankOptions = [...activateDialog.querySelectorAll('[data-activate-thinktank-option]')];
+                const selectedCount = activateDialog.querySelector('[data-activate-selected-count]');
+                const localDate = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                const refreshSelectedCount = () => {
+                    const count = tankOptions.filter((option) => option.checked).length;
+                    if (selectedCount) selectedCount.textContent = `${count} selected`;
+                };
+                const openActivateDialog = (trigger) => {
+                    if (!activateForm || !trigger) return;
+                    activateForm.action = trigger.dataset.action || '#';
+                    if (activateFormId) activateFormId.value = trigger.dataset.formId || '';
+                    if (activateName) activateName.textContent = trigger.dataset.formTitle || 'Selected form';
+                    if (activateIndicator) activateIndicator.textContent = trigger.dataset.indicatorLabel || 'Indicator not linked';
+                    const today = new Date();
+                    const endDefault = new Date(today);
+                    endDefault.setDate(endDefault.getDate() + 30);
+                    if (startDate) startDate.value = localDate(today);
+                    if (endDate) endDate.value = localDate(endDefault);
+                    if (endDate && startDate) endDate.min = startDate.value;
+                    if (tankSearch) tankSearch.value = '';
+                    tankOptions.forEach((option) => { option.checked = false; });
+                    tankRows.forEach((row) => { row.hidden = false; });
+                    refreshSelectedCount();
+                    if (!activateDialog.open) activateDialog.showModal();
+                };
+
+                document.querySelectorAll('[data-activate-form]').forEach((trigger) => {
+                    if (trigger.dataset.activateInitialized === 'true') return;
+                    trigger.dataset.activateInitialized = 'true';
+                    trigger.addEventListener('click', () => openActivateDialog(trigger));
+                });
+                activateDialog.querySelectorAll('[data-activate-close]').forEach((button) => {
+                    button.addEventListener('click', () => activateDialog.close());
+                });
+                activateDialog.querySelector('[data-activate-select-visible]')?.addEventListener('click', () => {
+                    tankRows.filter((row) => !row.hidden).forEach((row) => {
+                        const option = row.querySelector('[data-activate-thinktank-option]');
+                        if (option) option.checked = true;
+                    });
+                    refreshSelectedCount();
+                });
+                activateDialog.querySelector('[data-activate-clear]')?.addEventListener('click', () => {
+                    tankOptions.forEach((option) => { option.checked = false; });
+                    refreshSelectedCount();
+                });
+                tankOptions.forEach((option) => option.addEventListener('change', refreshSelectedCount));
+                tankSearch?.addEventListener('input', () => {
+                    const term = tankSearch.value.trim().toLocaleLowerCase();
+                    tankRows.forEach((row) => {
+                        row.hidden = term !== '' && !row.dataset.search.toLocaleLowerCase().includes(term);
+                    });
+                });
+                startDate?.addEventListener('change', () => {
+                    if (!endDate || !startDate.value) return;
+                    endDate.min = startDate.value;
+                    if (endDate.value && endDate.value < startDate.value) endDate.value = startDate.value;
+                });
+                if (activateDialog.dataset.autoOpen === 'true' && !activateDialog.open) {
+                    activateDialog.showModal();
+                    refreshSelectedCount();
+                }
+                activateDialog.addEventListener('click', (event) => {
+                    if (event.target === activateDialog) activateDialog.close();
+                });
             }
 
             const builder = document.querySelector('[data-form-builder]');
@@ -5044,11 +4618,6 @@
                 try {
                     const replacement = await requestFragment(url, activeRequest.signal);
                     if (sequence !== navigationSequence) return;
-
-                    const heroTemplate = replacement.querySelector('[data-me-data-entry-hero-action-template]');
-                    const heroSlot = document.querySelector('[data-me-data-entry-hero-action]');
-                    if (heroTemplate && heroSlot) heroSlot.innerHTML = heroTemplate.innerHTML;
-                    heroTemplate?.remove();
 
                     const existing = document.querySelector('[data-me-data-entry-fragment]');
                     if (!existing) throw new Error('The current data-entry workspace is unavailable.');
