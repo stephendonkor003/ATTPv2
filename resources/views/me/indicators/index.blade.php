@@ -46,6 +46,33 @@
             </div>
         </header>
 
+        @unless ($showIndicatorForm)
+            <section class="me-portfolio-scope" aria-label="Filter the indicator register by portfolio">
+                <div class="me-portfolio-scope-copy">
+                    <span class="me-portfolio-scope-icon"><i class="feather-filter" aria-hidden="true"></i></span>
+                    <div>
+                        <h2>Choose a portfolio</h2>
+                        <p>The indicator table and summary below update to this portfolio.</p>
+                    </div>
+                </div>
+                <form method="GET" action="{{ route('budget.me.indicators.index') }}" class="me-portfolio-scope-form" data-portfolio-scope-form>
+                    @if (filled($search))
+                        <input type="hidden" name="q" value="{{ $search }}">
+                    @endif
+                    <label for="indicator-portfolio-filter">Portfolio</label>
+                    <select id="indicator-portfolio-filter" name="portfolio_id" class="form-select" data-portfolio-scope-select>
+                        <option value="">All authorized portfolios</option>
+                        @foreach ($portfolioOptions as $portfolio)
+                            <option value="{{ $portfolio->id }}" @selected((string) $portfolioFilter === (string) $portfolio->id)>
+                                {{ $portfolio->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                    <button type="submit" class="me-portfolio-scope-submit">Apply</button>
+                </form>
+            </section>
+        @endunless
+
         <section class="me-summary-grid" aria-label="Indicator register summary">
             <article class="me-summary-card">
                 <span class="me-summary-icon"><i class="feather-list" aria-hidden="true"></i></span>
@@ -120,6 +147,16 @@
     <script src="{{ asset('admin/assets/vendors/js/dataTables.bs5.min.js') }}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            const portfolioForm = document.querySelector('[data-portfolio-scope-form]');
+            const portfolioSelect = portfolioForm?.querySelector('[data-portfolio-scope-select]');
+            portfolioSelect?.addEventListener('change', () => {
+                if (typeof portfolioForm.requestSubmit === 'function') {
+                    portfolioForm.requestSubmit();
+                } else {
+                    portfolioForm.submit();
+                }
+            });
+
             const table = document.querySelector('[data-indicator-register-table]');
             const toolbar = document.querySelector('[data-indicator-table-toolbar]');
             if (!(table instanceof HTMLTableElement) || !(toolbar instanceof HTMLElement)) {

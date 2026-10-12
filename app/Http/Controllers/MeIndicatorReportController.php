@@ -52,7 +52,7 @@ class MeIndicatorReportController extends Controller
     public function index(Request $request, MeIndicatorReportService $service): View
     {
         $context = $this->context($request);
-        $data = $service->build($context['serviceFilters'], $context['filters']['mode']);
+        $data = $service->build($context['serviceFilters'], $context['filters']['mode'], true);
 
         return view('me.indicator-reports.index', array_merge($data, $context, [
             'modes' => self::MODES,

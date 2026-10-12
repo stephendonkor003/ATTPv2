@@ -6,17 +6,16 @@ use App\Exports\MeIndicatorsManagementReportExport;
 use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\Activity;
 use App\Models\Indicator;
+use App\Models\IndicatorCodeHistory;
 use App\Models\IndicatorDefinition;
-use App\Models\IndicatorDisaggregation;
 use App\Models\IndicatorMethodology;
 use App\Models\IndicatorResult;
 use App\Models\IndicatorSurveyLink;
 use App\Models\IndicatorTarget;
 use App\Models\IndicatorUnit;
+use App\Models\MeDisaggregationDimension;
 use App\Models\MeKnowledgeEvidenceItem;
 use App\Models\MeRepositoryFolder;
-use App\Models\MeDisaggregationDimension;
-use App\Models\IndicatorCodeHistory;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\ReportingFrequency;
@@ -26,13 +25,14 @@ use App\Models\User;
 use App\Support\MeSurvey;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Closure;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Maatwebsite\Excel\Facades\Excel;
 
 class MeIndicatorController extends Controller
@@ -67,8 +67,21 @@ class MeIndicatorController extends Controller
             || $request->query('tab') === 'settings';
         $ownerRequired = false;
 
+        $portfolioOptionsQuery = Sector::query()->orderBy('name');
+        if ($this->userHasAssignedPortfolioScope()) {
+            $this->applyAssignedPortfolioScopeToSectors($portfolioOptionsQuery);
+        }
+        $portfolioOptions = $portfolioOptionsQuery->get(['id', 'name']);
+        $portfolioFilter = trim((string) $request->query('portfolio_id', ''));
+        if (! $portfolioOptions->contains(fn (Sector $portfolio): bool => (string) $portfolio->id === $portfolioFilter)) {
+            $portfolioFilter = '';
+        }
+
         $registryQuery = Indicator::query();
         $this->scopeIndicatorsForCurrentPortfolio($registryQuery);
+        if ($portfolioFilter !== '') {
+            $this->scopeIndicatorsForPortfolio($registryQuery, $portfolioFilter);
+        }
         if ($componentFilter !== '') {
             $registryQuery->where('project_component_id', $componentFilter);
         }
@@ -164,12 +177,20 @@ class MeIndicatorController extends Controller
             $this->applyAssignedPortfolioScopeToProjects($componentOptionsQuery);
         }
         $componentOptions = $componentOptionsQuery->get(['id', 'project_id', 'name', 'program_id']);
+        if ($portfolioFilter !== '') {
+            $componentOptions = $componentOptions
+                ->filter(fn (Project $component): bool => (string) $component->program?->sector_id === $portfolioFilter)
+                ->values();
+        }
 
         $componentCountQuery = Indicator::query()
             ->whereNotNull('project_component_id')
             ->selectRaw('project_component_id, COUNT(*) as aggregate')
             ->groupBy('project_component_id');
         $this->scopeIndicatorsForCurrentPortfolio($componentCountQuery);
+        if ($portfolioFilter !== '') {
+            $this->scopeIndicatorsForPortfolio($componentCountQuery, $portfolioFilter);
+        }
         $componentCounts = $componentCountQuery
             ->pluck('aggregate', 'project_component_id')
             ->map(fn ($count) => (int) $count);
@@ -293,6 +314,8 @@ class MeIndicatorController extends Controller
             'componentOptions',
             'componentCounts',
             'componentFilter',
+            'portfolioOptions',
+            'portfolioFilter',
             'disaggregationDimensions',
             'summary',
             'search',
@@ -533,9 +556,10 @@ class MeIndicatorController extends Controller
     {
         $searchTerm = trim((string) $request->query('q', ''));
         $componentId = trim((string) $request->query('component_id', ''));
+        $portfolioId = $this->reportPortfolioFilter($request->query('portfolio_id'));
         $userNamesById = User::query()->pluck('name', 'id');
 
-        $allIndicators = $this->collectIndicatorsWithRelations($componentId);
+        $allIndicators = $this->collectIndicatorsWithRelations($componentId, $portfolioId);
         $statusRowsById = $allIndicators
             ->map(fn (Indicator $indicator) => $this->buildStatusRow($indicator))
             ->keyBy('id');
@@ -562,9 +586,10 @@ class MeIndicatorController extends Controller
     {
         $searchTerm = trim((string) $request->query('q', ''));
         $componentId = trim((string) $request->query('component_id', ''));
+        $portfolioId = $this->reportPortfolioFilter($request->query('portfolio_id'));
         $userNamesById = User::query()->pluck('name', 'id');
 
-        $allIndicators = $this->collectIndicatorsWithRelations($componentId);
+        $allIndicators = $this->collectIndicatorsWithRelations($componentId, $portfolioId);
         $statusRowsById = $allIndicators
             ->map(fn (Indicator $indicator) => $this->buildStatusRow($indicator))
             ->keyBy('id');
@@ -1250,6 +1275,45 @@ class MeIndicatorController extends Controller
         }
     }
 
+    protected function scopeIndicatorsForPortfolio(Builder $query, string $portfolioId): void
+    {
+        $query->whereHasMorph(
+            'indicatorable',
+            [Sector::class, Program::class, Project::class, Activity::class, SubActivity::class],
+            function (Builder $ownerQuery, string $ownerType) use ($portfolioId): void {
+                match ($ownerType) {
+                    Sector::class => $ownerQuery->whereKey($portfolioId),
+                    Program::class => $ownerQuery->where('sector_id', $portfolioId),
+                    Project::class => $ownerQuery->whereHas(
+                        'program',
+                        fn (Builder $programQuery) => $programQuery->where('sector_id', $portfolioId)
+                    ),
+                    Activity::class => $ownerQuery->whereHas(
+                        'project.program',
+                        fn (Builder $programQuery) => $programQuery->where('sector_id', $portfolioId)
+                    ),
+                    SubActivity::class => $ownerQuery->whereHas(
+                        'activity.project.program',
+                        fn (Builder $programQuery) => $programQuery->where('sector_id', $portfolioId)
+                    ),
+                    default => $ownerQuery->whereRaw('1 = 0'),
+                };
+            }
+        );
+    }
+
+    protected function reportPortfolioFilter(mixed $value): ?string
+    {
+        $portfolioId = trim((string) $value);
+        if (! Str::isUuid($portfolioId)) {
+            return null;
+        }
+
+        $this->assertPortfolioInCurrentScope($portfolioId);
+
+        return $portfolioId;
+    }
+
     protected function scopeIndicatorConfigurationQuery($query): void
     {
         $query->whereNotNull('portfolio_id');
@@ -1631,7 +1695,7 @@ class MeIndicatorController extends Controller
         return Carbon::parse($value)->format('Y-m-d H:i');
     }
 
-    protected function collectIndicatorsWithRelations(?string $componentId = null): Collection
+    protected function collectIndicatorsWithRelations(?string $componentId = null, ?string $portfolioId = null): Collection
     {
         $query = Indicator::with([
             'indicatorable',
@@ -1647,6 +1711,9 @@ class MeIndicatorController extends Controller
             'unit:id,name,symbol',
         ]);
         $this->scopeIndicatorsForCurrentPortfolio($query);
+        if ($portfolioId !== null) {
+            $this->scopeIndicatorsForPortfolio($query, $portfolioId);
+        }
         if (filled($componentId)) {
             $query->where('project_component_id', $componentId);
         }

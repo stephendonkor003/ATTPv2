@@ -216,6 +216,14 @@
     .mel-indicator-reports .ir-mode-check { color: var(--ir-green); opacity: 0; }
     .mel-indicator-reports .ir-mode-tab.active .ir-mode-check { opacity: 1; }
 
+    .mel-indicator-reports [hidden] { display: none !important; }
+    .mel-indicator-reports .ir-analysis-tabs { display: flex; gap: .45rem; margin: 1rem 0 .65rem; padding: .35rem; border: 1px solid var(--ir-line); border-radius: .78rem; background: #edf4f6; }
+    .mel-indicator-reports .ir-analysis-tab { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: .4rem; padding: .58rem .85rem; border: 1px solid transparent; border-radius: .58rem; color: #506a76; background: transparent; font: inherit; font-size: .68rem; font-weight: 820; cursor: pointer; }
+    .mel-indicator-reports .ir-analysis-tab:hover { color: var(--ir-navy); }
+    .mel-indicator-reports .ir-analysis-tab.active { border-color: #d6e5e9; color: var(--ir-navy); background: #fff; box-shadow: 0 2px 6px rgba(21,59,89,.07); }
+    .mel-indicator-reports .ir-analysis-tab:focus-visible { outline: 3px solid rgba(45,142,163,.22); outline-offset: 2px; }
+    .mel-indicator-reports [role="tabpanel"][data-ir-view-panel] { margin-top: .65rem; }
+
     .mel-indicator-reports .ir-panel {
         min-width: 0;
         overflow: hidden;
@@ -375,6 +383,20 @@
     .mel-indicator-reports .ir-source-table { width: 100%; min-width: 960px; border-collapse: collapse; font-size: .61rem; }
     .mel-indicator-reports .ir-source-table th { padding: .55rem; border: 1px solid #dce7ea; color: #526a75; background: #edf4f6; font-size: .52rem; text-transform: uppercase; }
     .mel-indicator-reports .ir-source-table td { padding: .58rem; border: 1px solid #e0e9ec; vertical-align: top; background: #fff; }
+    .mel-indicator-reports .ir-submission-ledger { margin-top: 1rem; }
+    .mel-indicator-reports .ir-submission-table { min-width: 1080px; }
+    .mel-indicator-reports .ir-submission-table > tbody > tr > td { vertical-align: middle; }
+    .mel-indicator-reports .ir-submission-table .ir-title { display: block; max-width: 260px; margin-top: .2rem; color: #203f4e; font-weight: 830; line-height: 1.4; }
+    .mel-indicator-reports .ir-submission-details > summary { list-style: none; }
+    .mel-indicator-reports .ir-submission-details > summary::-webkit-details-marker { display: none; }
+    .mel-indicator-reports .ir-submission-details[open] > summary { color: #fff; border-color: var(--ir-blue); background: var(--ir-blue); }
+    .mel-indicator-reports .ir-submission-detail-body { min-width: min(1080px, 82vw); max-width: 1160px; padding: .8rem; border: 1px solid #dce7eb; border-radius: .7rem; background: #f8fbfc; }
+    .mel-indicator-reports .ir-submission-section-title { margin: .9rem 0 .45rem; color: var(--ir-navy); font-size: .68rem; font-weight: 850; }
+    .mel-indicator-reports .ir-submission-instructions { margin: .4rem 0 .8rem; }
+    .mel-indicator-reports .ir-answer-table { min-width: 720px; }
+    .mel-indicator-reports .ir-answer-table td { overflow-wrap: anywhere; }
+    .mel-indicator-reports .ir-submission-answer { max-width: 420px; white-space: pre-wrap; }
+    .mel-indicator-reports .ir-submission-notes { margin-top: .7rem; }
     .mel-indicator-reports .ir-link-list { display: grid; gap: .35rem; }
     .mel-indicator-reports .ir-evidence-item { display: flex; justify-content: space-between; gap: .65rem; padding: .48rem .55rem; border: 1px solid #e0e9ec; border-radius: .5rem; background: #fff; }
     .mel-indicator-reports .ir-evidence-item strong { display: block; color: #2b4b5a; font-size: .62rem; }
@@ -414,6 +436,7 @@
     @media (max-width: 820px) {
         .mel-indicator-reports .ir-mode-tabs,
         .mel-indicator-reports .ir-grid { grid-template-columns: 1fr; }
+        .mel-indicator-reports .ir-submission-detail-body { min-width: min(720px, 78vw); }
         .mel-indicator-reports .ir-grid > .ir-panel + .ir-panel { margin-top: 0; }
         .mel-indicator-reports .ir-project-grid { grid-template-columns: 1fr; }
         .mel-indicator-reports .ir-definition-grid { grid-template-columns: 1fr; }
@@ -439,6 +462,12 @@
         .mel-indicator-reports .ir-facts,
         .mel-indicator-reports .ir-detail-facts { grid-template-columns: 1fr; }
         .mel-indicator-reports .ir-panel-head { align-items: flex-start; flex-direction: column; }
+        .mel-indicator-reports .ir-analysis-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .mel-indicator-reports .ir-analysis-tab { padding-right: .45rem; padding-left: .45rem; font-size: .61rem; }
+        .mel-indicator-reports .ir-submission-toolbar .ir-toolbar-fields { width: 100%; }
+        .mel-indicator-reports .ir-submission-toolbar .form-control,
+        .mel-indicator-reports .ir-submission-toolbar .form-select { width: 100%; }
+        .mel-indicator-reports .ir-submission-detail-body { min-width: 76vw; padding: .55rem; }
         .mel-indicator-reports .ir-project-stats { grid-template-columns: 1fr; }
         .mel-indicator-reports .ir-scroll-tip { flex-direction: column; }
     }

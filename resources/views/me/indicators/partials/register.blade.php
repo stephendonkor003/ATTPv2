@@ -36,10 +36,10 @@
         </div>
 
         <div class="me-register-export-actions">
-            <a href="{{ route('budget.me.indicators.report.excel', ['q' => $search, 'component_id' => $componentFilter]) }}" class="btn btn-light border" title="Export filtered indicators to Excel">
+            <a href="{{ route('budget.me.indicators.report.excel', ['q' => $search, 'component_id' => $componentFilter, 'portfolio_id' => $portfolioFilter]) }}" class="btn btn-light border" title="Export filtered indicators to Excel">
                 <i class="feather-download"></i> Excel
             </a>
-            <a href="{{ route('budget.me.indicators.report.pdf', ['q' => $search, 'component_id' => $componentFilter]) }}" class="btn btn-light border" title="Export filtered indicators to PDF">
+            <a href="{{ route('budget.me.indicators.report.pdf', ['q' => $search, 'component_id' => $componentFilter, 'portfolio_id' => $portfolioFilter]) }}" class="btn btn-light border" title="Export filtered indicators to PDF">
                 <i class="feather-file-text"></i> PDF
             </a>
         </div>

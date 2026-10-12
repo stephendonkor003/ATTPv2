@@ -52,6 +52,90 @@
         line-height: 1.65;
     }
 
+    .me-results-framework .me-portfolio-scope {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.25rem;
+        margin-top: 1rem;
+        padding: .95rem 1.1rem;
+        border: 1px solid var(--me-border);
+        border-radius: .85rem;
+        background: #fff;
+        box-shadow: 0 6px 18px rgba(20, 42, 33, .04);
+    }
+
+    .me-results-framework .me-portfolio-scope-copy,
+    .me-results-framework .me-portfolio-scope-form {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        min-width: 0;
+    }
+
+    .me-results-framework .me-portfolio-scope-icon {
+        display: grid;
+        flex: 0 0 auto;
+        width: 2.5rem;
+        height: 2.5rem;
+        place-items: center;
+        border-radius: .7rem;
+        color: var(--me-green-700);
+        background: var(--me-green-100);
+    }
+
+    .me-results-framework .me-portfolio-scope h2 {
+        margin: 0;
+        color: var(--me-green-950);
+        font-size: .84rem;
+        font-weight: 800;
+    }
+
+    .me-results-framework .me-portfolio-scope p {
+        margin: .2rem 0 0;
+        color: var(--me-muted);
+        font-size: .7rem;
+    }
+
+    .me-results-framework .me-portfolio-scope-form label {
+        margin: 0;
+        color: #53665d;
+        font-size: .69rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .me-results-framework .me-portfolio-scope-form .form-select {
+        width: min(360px, 34vw);
+        min-width: 220px;
+        min-height: 40px;
+        border-color: #cfded6;
+        border-radius: .58rem;
+        font-size: .76rem;
+    }
+
+    .me-results-framework .me-portfolio-scope-form .form-select:focus {
+        border-color: var(--me-green-700);
+        box-shadow: 0 0 0 .2rem rgba(17, 122, 89, .12);
+    }
+
+    .me-results-framework .me-portfolio-scope-submit {
+        min-height: 40px;
+        padding: .55rem .85rem;
+        border: 1px solid var(--me-green-800);
+        border-radius: .58rem;
+        color: #fff;
+        background: var(--me-green-800);
+        font-size: .72rem;
+        font-weight: 800;
+    }
+
+    .me-results-framework .me-portfolio-scope-submit:hover,
+    .me-results-framework .me-portfolio-scope-submit:focus-visible {
+        border-color: var(--me-green-950);
+        background: var(--me-green-950);
+    }
+
     .me-results-framework .me-primary-action {
         display: inline-flex;
         align-items: center;
@@ -1341,6 +1425,26 @@
     }
 
     @media (max-width: 767.98px) {
+        .me-results-framework .me-portfolio-scope {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .me-results-framework .me-portfolio-scope-form {
+            align-items: stretch;
+            flex-wrap: wrap;
+        }
+
+        .me-results-framework .me-portfolio-scope-form label {
+            width: 100%;
+        }
+
+        .me-results-framework .me-portfolio-scope-form .form-select {
+            width: auto;
+            min-width: 0;
+            flex: 1 1 180px;
+        }
+
         .me-results-framework .me-panel-header {
             align-items: stretch;
             flex-direction: column;

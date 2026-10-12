@@ -20,6 +20,7 @@
     $projectRows = collect($projectRows ?? []);
     $contributionRows = collect($contributionRows ?? []);
     $evidenceRows = collect($evidenceRows ?? []);
+    $thinkTankSubmissionRows = collect($thinkTankSubmissionRows ?? []);
     $performanceDistribution = collect($performanceDistribution ?? []);
     $reportSummary = $reportSummary ?? [];
     $quality = $quality ?? [];
@@ -78,6 +79,13 @@
             'value' => round((float) $row['achievement_percent'], 1),
             'color' => data_get($row, 'classification.color', '#64748b'),
         ])->values();
+    $sourceChartRows = $contributionRows
+        ->filter(fn (array $row) => is_numeric($row['actual'] ?? null))
+        ->map(fn (array $row) => [
+            'label' => trim(($row['organization'] ?? 'Think Tank').(($row['period'] ?? null) ? ' · '.$row['period'] : '')),
+            'value' => (float) $row['actual'],
+        ])
+        ->values();
 @endphp
 
 <div class="mel-indicator-reports">
@@ -352,7 +360,13 @@
                     </div>
                 </section>
 
-                <section class="ir-panel" aria-labelledby="ir-contributions-title">
+                <nav class="ir-analysis-tabs ir-no-print" role="tablist" aria-label="Indicator report data views">
+                    <button type="button" class="ir-analysis-tab active" role="tab" id="ir-data-tab" aria-controls="ir-data-panel" aria-selected="true" data-ir-view-tab="table"><i class="feather-table" aria-hidden="true"></i> Data table</button>
+                    <button type="button" class="ir-analysis-tab" role="tab" id="ir-submission-tab" aria-controls="ir-submission-ledger-panel" aria-selected="false" data-ir-view-tab="submissions"><i class="feather-inbox" aria-hidden="true"></i> Think Tank submissions</button>
+                    <button type="button" class="ir-analysis-tab" role="tab" id="ir-chart-tab" aria-controls="ir-chart-panel" aria-selected="false" data-ir-view-tab="charts"><i class="feather-bar-chart-2" aria-hidden="true"></i> Graphical analysis</button>
+                </nav>
+
+                <section class="ir-panel" id="ir-data-panel" role="tabpanel" aria-labelledby="ir-data-tab" data-ir-view-panel="table">
                     <div class="ir-panel-head"><div><h2 id="ir-contributions-title">Approved source contributions</h2><p>Every organization-level value used to produce the selected indicator result.</p></div><span class="ir-badge">{{ $contributionRows->count() }} {{ str('contribution')->plural($contributionRows->count()) }}</span></div>
                     @if($contributionRows->isEmpty())
                         <div class="ir-empty"><span class="ir-empty-mark">SRC</span><strong>No approved source contribution is available</strong><p>The indicator profile remains reportable, but no finally approved value matches this period and contributor scope.</p></div>
@@ -379,7 +393,16 @@
                     @endif
                 </section>
 
-                <section class="ir-panel" aria-labelledby="ir-evidence-title">
+                <section class="ir-panel" id="ir-chart-panel" role="tabpanel" aria-labelledby="ir-chart-tab" data-ir-view-panel="charts" hidden>
+                    <div class="ir-panel-head"><div><h2>Approved Think Tank contributions</h2><p>Numeric, finally approved source values for this indicator and report scope.</p></div><span class="ir-badge neutral">{{ $sourceChartRows->count() }} chartable values</span></div>
+                    @if($sourceChartRows->isNotEmpty())
+                        <div id="ir-source-chart" class="ir-chart ir-chart-tall" role="img" aria-label="Bar chart of approved Think Tank indicator contributions"></div>
+                    @else
+                        <div class="ir-empty"><span class="ir-empty-mark">CH</span><strong>No numeric approved contributions can be charted</strong><p>Open the data table for qualitative values or select a report scope with approved numeric Think Tank contributions.</p></div>
+                    @endif
+                </section>
+
+                <section class="ir-panel" aria-labelledby="ir-evidence-title" data-ir-view-panel="table">
                     <div class="ir-panel-head"><div><h2 id="ir-evidence-title">Evidence register and verification</h2><p>Evidence links supporting the selected indicator's approved source results.</p></div><span class="ir-badge {{ $evidenceRows->where('verified', false)->isNotEmpty() ? 'warning' : '' }}">{{ number_format($evidenceRows->where('verified', true)->count()) }}/{{ number_format($evidenceRows->count()) }} verified</span></div>
                     <div class="ir-panel-body">
                         @if($evidenceRows->isEmpty())
@@ -397,7 +420,13 @@
                     </div>
                 </section>
             @else
-                <div class="ir-grid">
+                <nav class="ir-analysis-tabs ir-no-print" role="tablist" aria-label="Indicator report data views">
+                    <button type="button" class="ir-analysis-tab active" role="tab" id="ir-data-tab" aria-controls="ir-register-panel" aria-selected="true" data-ir-view-tab="table"><i class="feather-table" aria-hidden="true"></i> Data table</button>
+                    <button type="button" class="ir-analysis-tab" role="tab" id="ir-submission-tab" aria-controls="ir-submission-ledger-panel" aria-selected="false" data-ir-view-tab="submissions"><i class="feather-inbox" aria-hidden="true"></i> Think Tank submissions</button>
+                    <button type="button" class="ir-analysis-tab" role="tab" id="ir-chart-tab" aria-controls="ir-chart-panel" aria-selected="false" data-ir-view-tab="charts"><i class="feather-bar-chart-2" aria-hidden="true"></i> Graphical analysis</button>
+                </nav>
+
+                <div class="ir-grid" id="ir-chart-panel" role="tabpanel" aria-labelledby="ir-chart-tab" data-ir-view-panel="charts" hidden>
                     <section class="ir-panel" aria-labelledby="ir-distribution-title">
                         <div class="ir-panel-head"><div><h2 id="ir-distribution-title">Indicator performance profile</h2><p>Filtered indicators grouped by the active framework's approved thresholds.</p></div><span class="ir-badge">{{ $indicatorRows->count() }} indicators</span></div>
                         @if($performanceDistribution->sum('count') > 0)<div id="ir-performance-chart" class="ir-chart" role="img" aria-label="Donut chart of indicator performance classifications"></div>@else<div class="ir-empty"><span class="ir-empty-mark">PD</span><strong>No performance classifications are available</strong><p>No rateable or qualitative indicator rows match this scope.</p></div>@endif
@@ -408,7 +437,7 @@
                     </section>
                 </div>
 
-                <section class="ir-panel" style="margin-top:1rem" aria-labelledby="ir-results-areas-title">
+                <section class="ir-panel" style="margin-top:1rem" aria-labelledby="ir-results-areas-title" data-ir-view-panel="charts" hidden>
                     <div class="ir-panel-head"><div><h2 id="ir-results-areas-title">Results-area summary</h2><p>Comparable scorecards by PDO or project component. Raw indicator values with unlike units are never summed.</p></div><span class="ir-badge neutral">{{ $projectRows->count() }} results areas</span></div>
                     @if($projectRows->isEmpty())
                         <div class="ir-empty"><span class="ir-empty-mark">RA</span><strong>No results-area summary is available</strong><p>The filtered indicators are not linked to an authorized project or PDO scope.</p></div>
@@ -427,7 +456,7 @@
                     @endif
                 </section>
 
-                <section class="ir-panel" style="margin-top:1rem" aria-labelledby="ir-register-title">
+                <section class="ir-panel" id="ir-register-panel" role="tabpanel" aria-labelledby="ir-data-tab" data-ir-view-panel="table">
                     <div class="ir-panel-head"><div><h2 id="ir-register-title">Consolidated indicator register</h2><p>Approved profiles, results, governed calculations and auditable source contributions for the filtered framework.</p></div><span class="ir-badge">{{ $indicatorRows->count() }} indicators</span></div>
                     <div class="ir-toolbar ir-no-print">
                         <div class="ir-toolbar-fields"><input class="form-control" type="search" placeholder="Search code, indicator, project or source" data-ir-search><select class="form-select" aria-label="Filter register by performance classification" data-ir-status><option value="">All performance statuses</option>@foreach($performanceDistribution as $item)<option value="{{ $item['code'] }}">{{ $item['label'] }} ({{ $item['count'] }})</option>@endforeach</select><button class="ir-btn ir-btn-secondary" type="button" data-ir-clear>Clear search</button></div>
@@ -492,7 +521,7 @@
                 </section>
             @endif
 
-            <section class="ir-panel" style="margin-top:1rem" aria-labelledby="ir-quality-title">
+            <section class="ir-panel" style="margin-top:1rem" aria-labelledby="ir-quality-title" data-ir-view-panel="table">
                 <div class="ir-panel-head"><div><h2 id="ir-quality-title">Evidence and data-quality disclosures</h2><p>Visible exceptions explain missing, non-additive, incomplete or not-yet-rateable report content.</p></div><span class="ir-badge {{ $qualityTotal > 0 ? 'warning' : '' }}">{{ $qualityTotal > 0 ? $qualityTotal.' signals' : 'All configured checks clear' }}</span></div>
                 <div class="ir-panel-body">
                     <div class="ir-quality-grid">
@@ -501,7 +530,7 @@
                 </div>
             </section>
 
-            <section class="ir-panel" style="margin-top:1rem" aria-labelledby="ir-report-rules-title">
+            <section class="ir-panel" style="margin-top:1rem" aria-labelledby="ir-report-rules-title" data-ir-view-panel="table">
                 <div class="ir-panel-head"><div><h2 id="ir-report-rules-title">Report methodology and audit trail</h2><p>Rules shared by the on-screen report and every Excel, CSV, PDF and print output.</p></div><span class="ir-badge neutral">Governed report</span></div>
                 <div class="ir-panel-body">
                     <div class="ir-method-list">
@@ -514,6 +543,126 @@
                 </div>
             </section>
         @endif
+
+        <section class="ir-panel ir-submission-ledger" id="ir-submission-ledger-panel" role="tabpanel" aria-labelledby="{{ $hasReportData ? 'ir-submission-tab ir-submission-ledger-title' : 'ir-submission-ledger-title' }}" data-ir-view-panel="submissions" @if($hasReportData) hidden @endif>
+            <div class="ir-panel-head">
+                <div><h2 id="ir-submission-ledger-title">Think Tank submission ledger</h2><p>Submitted form responses, workflow status, review history and evidence for the selected reporting scope. These records are shown for traceability and do not affect official totals until approved.</p></div>
+                <span class="ir-badge neutral">{{ number_format($thinkTankSubmissionRows->count()) }} submission {{ str('record')->plural($thinkTankSubmissionRows->count()) }}</span>
+            </div>
+            @if($thinkTankSubmissionRows->isEmpty())
+                <div class="ir-empty"><span class="ir-empty-mark">SUB</span><strong>No submitted Think Tank forms match this scope</strong><p>Choose an indicator and reporting period, or check the collection window and submission workflow status.</p></div>
+            @else
+                <div class="ir-toolbar ir-submission-toolbar ir-no-print">
+                    <div class="ir-toolbar-fields">
+                        <input class="form-control" type="search" placeholder="Search Think Tank, indicator, period or form" aria-label="Search Think Tank submissions" data-ir-submission-search>
+                        <select class="form-select" aria-label="Filter Think Tank submissions by workflow status" data-ir-submission-status>
+                            <option value="">All workflow statuses</option>
+                            @foreach($thinkTankSubmissionRows->pluck('status')->filter()->unique()->sort() as $submissionStatus)
+                                <option value="{{ $submissionStatus }}">{{ str($submissionStatus)->replace('_', ' ')->headline() }}</option>
+                            @endforeach
+                        </select>
+                        <button type="button" class="ir-btn ir-btn-secondary ir-btn-small" data-ir-submission-clear>Clear</button>
+                    </div>
+                    <span class="ir-row-count" role="status" aria-live="polite" data-ir-submission-count>Showing {{ $thinkTankSubmissionRows->count() }} submission {{ str('record')->plural($thinkTankSubmissionRows->count()) }}</span>
+                </div>
+                <div class="ir-table-wrap" role="region" aria-label="Think Tank submitted data and workflow status" tabindex="0">
+                    <table class="ir-source-table ir-submission-table">
+                        <thead><tr><th>Indicator</th><th>Think Tank / country</th><th>Reporting period</th><th>Submitted by / date</th><th>Reported value</th><th>Workflow status</th><th>Response detail</th></tr></thead>
+                        <tbody>
+                        @foreach($thinkTankSubmissionRows as $submissionRow)
+                            @php
+                                $submissionStatus = (string) ($submissionRow['status'] ?: 'submitted');
+                                $submissionStatusColor = match ($submissionStatus) {
+                                    'approved' => '#16815f',
+                                    'verified', 'under_review' => '#9a6818',
+                                    'returned', 'rejected' => '#b83d3a',
+                                    'submitted', 'resubmitted' => '#176b87',
+                                    default => '#64748b',
+                                };
+                                $submissionSearch = str(implode(' ', [
+                                    $submissionRow['indicator_code'] ?? '',
+                                    $submissionRow['indicator_name'] ?? '',
+                                    $submissionRow['think_tank'] ?? '',
+                                    $submissionRow['country'] ?? '',
+                                    $submissionRow['period'] ?? '',
+                                    $submissionRow['form_code'] ?? '',
+                                    $submissionRow['form_title'] ?? '',
+                                ]))->lower();
+                            @endphp
+                            <tr data-ir-submission-row data-search="{{ $submissionSearch }}" data-status="{{ $submissionStatus }}">
+                                <td><span class="ir-code">{{ $submissionRow['indicator_code'] ?: 'Uncoded' }}</span><span class="ir-title">{{ $submissionRow['indicator_name'] ?: 'Indicator unavailable' }}</span></td>
+                                <td><strong>{{ $submissionRow['think_tank'] }}</strong><span class="ir-meta">{{ $submissionRow['country'] ?: 'Country not recorded' }}</span></td>
+                                <td><strong>{{ $submissionRow['period'] ?: 'Period not recorded' }}</strong><span class="ir-meta">{{ $submissionRow['reporting_year'] ?: 'Year not recorded' }}</span></td>
+                                <td><strong>{{ $submissionRow['submitted_by'] ?: 'Submitter not recorded' }}</strong><span class="ir-meta">{{ $submissionRow['submitted_at'] ? $formatDate($submissionRow['submitted_at']) : 'Submission date not recorded' }}</span></td>
+                                <td><span class="ir-value">{{ $submissionRow['actual'] === null ? 'Form response available' : $formatValue($submissionRow['actual']) }}</span><span class="ir-meta">{{ count($submissionRow['answers']) }} response {{ str('field')->plural(count($submissionRow['answers'])) }}</span></td>
+                                <td><span class="ir-badge" style="color:{{ $submissionStatusColor }};background:{{ $submissionStatusColor }}18">{{ str($submissionStatus)->replace('_', ' ')->headline() }}</span><span class="ir-meta">Revision {{ $submissionRow['revision'] }}</span></td>
+                                <td>
+                                    <details class="ir-submission-details">
+                                        <summary class="ir-btn ir-btn-secondary ir-btn-small">View submission</summary>
+                                        <div class="ir-submission-detail-body">
+                                            <div class="ir-detail-facts">
+                                                <div class="ir-detail-fact"><small>Form and version</small><strong>{{ $submissionRow['form_title'] ?: 'Form not recorded' }}{{ $submissionRow['form_code'] ? ' · '.$submissionRow['form_code'] : '' }}{{ $submissionRow['form_version'] ? ' · v'.$submissionRow['form_version'] : '' }}</strong></div>
+                                                <div class="ir-detail-fact"><small>Reporting period</small><strong>{{ $submissionRow['period'] ?: 'Period not recorded' }}{{ $submissionRow['reporting_year'] ? ' · '.$submissionRow['reporting_year'] : '' }}{{ $submissionRow['period_start'] || $submissionRow['period_end'] ? ' · '.($submissionRow['period_start'] ?: '?').' to '.($submissionRow['period_end'] ?: '?') : '' }}</strong></div>
+                                                <div class="ir-detail-fact"><small>Submission ID / version</small><strong>{{ $submissionRow['submission_id'] }} · {{ $submissionRow['revision'] }}</strong></div>
+                                                <div class="ir-detail-fact"><small>Assigned</small><strong>{{ $submissionRow['assigned_at'] ? $formatDate($submissionRow['assigned_at']) : 'Not recorded' }}</strong></div>
+                                                <div class="ir-detail-fact"><small>Collection opens</small><strong>{{ $submissionRow['opens_at'] ? $formatDate($submissionRow['opens_at']) : 'Not recorded' }}</strong></div>
+                                                <div class="ir-detail-fact"><small>Submission deadline</small><strong>{{ $submissionRow['due_at'] ? $formatDate($submissionRow['due_at']) : 'Not recorded' }}</strong></div>
+                                                <div class="ir-detail-fact"><small>Collection closes</small><strong>{{ $submissionRow['closes_at'] ? $formatDate($submissionRow['closes_at']) : 'Not recorded' }}</strong></div>
+                                                <div class="ir-detail-fact"><small>Collection status</small><strong>{{ $submissionRow['collection_status'] ? str($submissionRow['collection_status'])->headline() : 'Not recorded' }}</strong></div>
+                                                <div class="ir-detail-fact"><small>Indicator result review</small><strong>{{ $submissionRow['result_review_status'] ? str($submissionRow['result_review_status'])->replace('_', ' ')->headline() : 'No indicator result generated' }}{{ $submissionRow['approved_at'] ? ' · '.$formatDate($submissionRow['approved_at']) : '' }}</strong></div>
+                                            </div>
+                                            @if(filled($submissionRow['collection_instructions']))<div class="ir-detail-fact ir-submission-instructions"><small>Collection instructions</small><strong>{{ $submissionRow['collection_instructions'] }}</strong></div>@endif
+
+                                            <h3 class="ir-submission-section-title">Submitted form responses</h3>
+                                            @if(collect($submissionRow['answers'])->isEmpty())
+                                                <p class="ir-meta">No answer fields are available for this submission.</p>
+                                            @else
+                                                <div class="ir-table-wrap"><table class="ir-source-table ir-answer-table"><thead><tr><th>Section</th><th>Question</th><th>Type</th><th>Submitted response</th></tr></thead><tbody>
+                                                    @foreach($submissionRow['answers'] as $answer)
+                                                        <tr><td>{{ $answer['section'] }}</td><td><strong>{{ $answer['label'] }}</strong></td><td>{{ str($answer['type'])->replace('_', ' ')->headline() }}</td><td class="ir-submission-answer">{{ $answer['value'] }}</td></tr>
+                                                    @endforeach
+                                                </tbody></table></div>
+                                            @endif
+
+                                            @if(filled($submissionRow['submission_notes']) || filled($submissionRow['review_notes']))
+                                                <div class="ir-detail-facts ir-submission-notes">
+                                                    @if(filled($submissionRow['submission_notes']))<div class="ir-detail-fact"><small>Think Tank submission note</small><strong>{{ $submissionRow['submission_notes'] }}</strong></div>@endif
+                                                    @if(filled($submissionRow['review_notes']))<div class="ir-detail-fact"><small>Latest review note</small><strong>{{ $submissionRow['review_notes'] }}</strong></div>@endif
+                                                </div>
+                                            @endif
+
+                                            <h3 class="ir-submission-section-title">Review history</h3>
+                                            @if(collect($submissionRow['reviews'])->isEmpty())
+                                                <p class="ir-meta">No review actions have been recorded.</p>
+                                            @else
+                                                <div class="ir-table-wrap"><table class="ir-source-table ir-answer-table"><thead><tr><th>Action</th><th>Status change</th><th>Reviewer</th><th>Date</th><th>Comments</th></tr></thead><tbody>
+                                                    @foreach($submissionRow['reviews'] as $review)
+                                                        <tr><td>{{ str($review['action'])->replace('_', ' ')->headline() }}</td><td>{{ $review['from_status'] ? str($review['from_status'])->replace('_', ' ')->headline().' → ' : '' }}{{ str($review['to_status'])->replace('_', ' ')->headline() }}</td><td>{{ $review['reviewer'] ?: 'Reviewer not recorded' }}</td><td>{{ $review['reviewed_at'] ? $formatDate($review['reviewed_at']) : 'Not recorded' }}</td><td>{{ $review['comments'] ?: 'No comments' }}</td></tr>
+                                                    @endforeach
+                                                </tbody></table></div>
+                                            @endif
+
+                                            <h3 class="ir-submission-section-title">Evidence links</h3>
+                                            @if(collect($submissionRow['evidence'])->isEmpty())
+                                                <p class="ir-meta">No evidence links were attached to this indicator submission.</p>
+                                            @else
+                                                <div class="ir-table-wrap"><table class="ir-source-table ir-answer-table"><thead><tr><th>Document</th><th>Verification status</th><th>File size</th><th>Added</th></tr></thead><tbody>
+                                                    @foreach($submissionRow['evidence'] as $evidence)
+                                                        <tr><td>{{ $evidence['title'] }}</td><td>{{ str($evidence['status'])->replace('_', ' ')->headline() }}</td><td>{{ $evidence['file_size'] ? number_format($evidence['file_size'] / 1024, 1).' KB' : 'Not recorded' }}</td><td>{{ $evidence['created_at'] ? $formatDate($evidence['created_at']) : 'Not recorded' }}</td></tr>
+                                                    @endforeach
+                                                </tbody></table></div>
+                                            @endif
+                                        </div>
+                                    </details>
+                                </td>
+                            </tr>
+                        @endforeach
+                        <tr data-ir-submission-empty hidden><td colspan="7"><div class="ir-empty" style="min-height:130px"><strong>No Think Tank submissions match this search</strong><p>Clear the search or workflow-status filter to show the full report scope.</p></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+        </section>
     @endif
 </div>
 @endsection
@@ -581,11 +730,88 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const distribution = @json($performanceDistribution->values()->all());
     const attainment = @json($attainmentRows->values()->all());
+    const sourceContributions = @json($sourceChartRows->values()->all());
     const base = { chart:{fontFamily:'Inter, Arial, sans-serif',foreColor:'#607582',toolbar:{show:false},animations:{speed:420}},grid:{borderColor:'#e2eaed',strokeDashArray:3},dataLabels:{style:{fontSize:'10px',fontWeight:700}},tooltip:{theme:'light'},legend:{fontSize:'11px',fontWeight:600} };
-    const render = function (selector, options) { const target=document.querySelector(selector); if(target && window.ApexCharts) new ApexCharts(target,options).render(); };
-    render('#ir-performance-chart',{...base,chart:{...base.chart,type:'donut',height:300},series:distribution.map(item=>Number(item.count)||0),labels:distribution.map(item=>item.label),colors:distribution.map(item=>item.color),stroke:{colors:['#fff'],width:3},plotOptions:{pie:{donut:{size:'68%',labels:{show:true,total:{show:true,label:'Indicators',formatter:()=>distribution.reduce((sum,item)=>sum+(Number(item.count)||0),0)}}}}},legend:{position:'bottom'},dataLabels:{enabled:false},noData:{text:'No performance classifications are available'}});
-    const attainmentMax = Math.max(100,...attainment.map(item=>Number(item.value)||0));
-    render('#ir-attainment-chart',{...base,chart:{...base.chart,type:'bar',height:Math.max(330,attainment.length*32)},series:[{name:'Target attainment',data:attainment.map(item=>item.value)}],colors:attainment.map(item=>item.color),plotOptions:{bar:{horizontal:true,distributed:true,borderRadius:4,barHeight:'58%'}},xaxis:{categories:attainment.map(item=>item.code),min:0,max:Math.ceil(attainmentMax/25)*25,labels:{formatter:value=>Number(value).toFixed(0)+'%'}},dataLabels:{enabled:true,formatter:value=>Number(value).toFixed(1)+'%'},legend:{show:false},tooltip:{y:{formatter:value=>Number(value).toFixed(1)+'%'}}});
+    const render = function (selector, options) {
+        const target = document.querySelector(selector);
+        if (!target || target.dataset.chartRendered === 'true') return;
+        if (!window.ApexCharts) {
+            target.dataset.chartRendered = 'true';
+            target.textContent = 'Charts are unavailable right now. Use the data table to review this report.';
+            target.setAttribute('role', 'status');
+            return;
+        }
+        target.dataset.chartRendered = 'true';
+        new window.ApexCharts(target, options).render();
+    };
+    const renderCharts = function () {
+        render('#ir-performance-chart',{...base,chart:{...base.chart,type:'donut',height:300},series:distribution.map(item=>Number(item.count)||0),labels:distribution.map(item=>item.label),colors:distribution.map(item=>item.color),stroke:{colors:['#fff'],width:3},plotOptions:{pie:{donut:{size:'68%',labels:{show:true,total:{show:true,label:'Indicators',formatter:()=>distribution.reduce((sum,item)=>sum+(Number(item.count)||0),0)}}}}},legend:{position:'bottom'},dataLabels:{enabled:false},noData:{text:'No performance classifications are available'}});
+        const attainmentMax = Math.max(100,...attainment.map(item=>Number(item.value)||0));
+        render('#ir-attainment-chart',{...base,chart:{...base.chart,type:'bar',height:Math.max(330,attainment.length*32)},series:[{name:'Target attainment',data:attainment.map(item=>item.value)}],colors:attainment.map(item=>item.color),plotOptions:{bar:{horizontal:true,distributed:true,borderRadius:4,barHeight:'58%'}},xaxis:{categories:attainment.map(item=>item.code),min:0,max:Math.ceil(attainmentMax/25)*25,labels:{formatter:value=>Number(value).toFixed(0)+'%'}},dataLabels:{enabled:true,formatter:value=>Number(value).toFixed(1)+'%'},legend:{show:false},tooltip:{y:{formatter:value=>Number(value).toFixed(1)+'%'}}});
+        render('#ir-source-chart',{...base,chart:{...base.chart,type:'bar',height:Math.max(300,sourceContributions.length*38)},series:[{name:'Approved contribution',data:sourceContributions.map(item=>Number(item.value)||0)}],colors:['#176b87'],plotOptions:{bar:{horizontal:true,borderRadius:4,barHeight:'58%'}},xaxis:{categories:sourceContributions.map(item=>item.label)},dataLabels:{enabled:true,formatter:value=>Number(value).toLocaleString()},legend:{show:false},tooltip:{y:{formatter:value=>Number(value).toLocaleString()}}});
+    };
+
+    const viewTabs = Array.from(document.querySelectorAll('[data-ir-view-tab]'));
+    const viewPanels = Array.from(document.querySelectorAll('[data-ir-view-panel]'));
+    const activateView = function (view) {
+        viewTabs.forEach(function (tab) {
+            const active = tab.dataset.irViewTab === view;
+            tab.classList.toggle('active', active);
+            tab.setAttribute('aria-selected', active ? 'true' : 'false');
+            tab.tabIndex = active ? 0 : -1;
+        });
+        viewPanels.forEach(function (panel) {
+            panel.hidden = panel.dataset.irViewPanel !== view;
+        });
+        if (view === 'charts') window.requestAnimationFrame(renderCharts);
+        if (view === 'submissions') window.requestAnimationFrame(() => {
+            document.querySelector('[data-ir-view-panel="submissions"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    };
+    viewTabs.forEach(function (tab, index) {
+        tab.addEventListener('click', function () { activateView(tab.dataset.irViewTab); });
+        tab.addEventListener('keydown', function (event) {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            const nextIndex = event.key === 'Home' ? 0
+                : event.key === 'End' ? viewTabs.length - 1
+                    : (index + (event.key === 'ArrowRight' ? 1 : viewTabs.length - 1)) % viewTabs.length;
+            viewTabs[nextIndex]?.focus();
+            activateView(viewTabs[nextIndex]?.dataset.irViewTab || 'table');
+        });
+    });
+    if (viewTabs.length > 0) {
+        const initialView = viewTabs.find(tab => tab.getAttribute('aria-selected') === 'true')?.dataset.irViewTab || 'table';
+        activateView(initialView);
+    }
+
+    const submissionRows = Array.from(document.querySelectorAll('[data-ir-submission-row]'));
+    const submissionSearch = document.querySelector('[data-ir-submission-search]');
+    const submissionStatus = document.querySelector('[data-ir-submission-status]');
+    const submissionClear = document.querySelector('[data-ir-submission-clear]');
+    const submissionCount = document.querySelector('[data-ir-submission-count]');
+    const submissionEmpty = document.querySelector('[data-ir-submission-empty]');
+    const filterSubmissions = function () {
+        const term = (submissionSearch?.value || '').trim().toLowerCase();
+        const selectedStatus = submissionStatus?.value || '';
+        let visible = 0;
+        submissionRows.forEach(function (row) {
+            const matches = (!term || (row.dataset.search || '').includes(term))
+                && (!selectedStatus || row.dataset.status === selectedStatus);
+            row.hidden = !matches;
+            if (matches) visible += 1;
+        });
+        if (submissionCount) submissionCount.textContent = 'Showing ' + visible + ' submission ' + (visible === 1 ? 'record' : 'records');
+        if (submissionEmpty) submissionEmpty.hidden = visible !== 0;
+    };
+    submissionSearch?.addEventListener('input', filterSubmissions);
+    submissionStatus?.addEventListener('change', filterSubmissions);
+    submissionClear?.addEventListener('click', function () {
+        if (submissionSearch) submissionSearch.value = '';
+        if (submissionStatus) submissionStatus.value = '';
+        filterSubmissions();
+        submissionSearch?.focus();
+    });
 });
 </script>
 @endpush
