@@ -32,6 +32,10 @@ use Throwable;
 
 class ThinkTankMeDataController extends Controller
 {
+    private const MAX_SUBMISSION_UPLOAD_FILES = 20;
+
+    private const MAX_SUBMISSION_UPLOAD_BYTES = 60 * 1024 * 1024;
+
     private const SECTION_GUIDANCE_FALLBACK = 'Complete the questions in this section using the most accurate information available. Review your answers before continuing to the next section.';
 
     private const SECTION_BACKGROUND_PALETTE = [
@@ -630,6 +634,26 @@ class ThinkTankMeDataController extends Controller
 
             throw ValidationException::withMessages([
                 'answers' => 'The response contains a field that is not part of this form.',
+            ]);
+        }
+
+        $submittedUploads = collect($this->uploadedFiles($uploaded));
+        $uploadField = $fields->first(fn (MeDataEntryFormField $field): bool => $field->isUpload());
+        $uploadErrorKey = $uploadField ? 'answers.'.$uploadField->id : 'answers';
+
+        if ($submittedUploads->count() > self::MAX_SUBMISSION_UPLOAD_FILES) {
+            throw ValidationException::withMessages([
+                $uploadErrorKey => 'A submission can include no more than '.self::MAX_SUBMISSION_UPLOAD_FILES.' uploaded files at a time.',
+            ]);
+        }
+
+        $combinedUploadSize = $submittedUploads->sum(
+            fn (UploadedFile $file): int => max(0, (int) $file->getSize())
+        );
+
+        if ($combinedUploadSize > self::MAX_SUBMISSION_UPLOAD_BYTES) {
+            throw ValidationException::withMessages([
+                $uploadErrorKey => 'The combined size of new files must not exceed 60MB per save.',
             ]);
         }
 

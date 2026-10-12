@@ -3,9 +3,11 @@
 use App\Exceptions\ThinkTankApiException;
 use App\Http\Controllers\Api\V1\ThinkTank\MonitoringAssignmentsController;
 use App\Http\Controllers\Api\V1\ThinkTank\MonitoringReportsController;
+use App\Http\Controllers\ThinkTankMeDataController;
 use App\Models\IndicatorTarget;
 use App\Models\MeDataCollection;
 use App\Models\MeDataCollectionAssignment;
+use App\Models\MeDataEntryFormField;
 use App\Models\MeDataSubmission;
 use App\Models\MePerformanceReport;
 use App\Models\MeReportingPeriod;
@@ -15,6 +17,7 @@ use App\Services\ThinkTankMonitoringResultsScopeService;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -31,6 +34,66 @@ function bootThinkTankMonitoringApiApplication(): array
 
     return [$application, true];
 }
+
+it('enforces aggregate file-count and byte limits on M&E form submissions', function () {
+    [, $bootedHere] = bootThinkTankMonitoringApiApplication();
+
+    try {
+        $controller = (new ReflectionClass(ThinkTankMeDataController::class))->newInstanceWithoutConstructor();
+        $validateAnswers = new ReflectionMethod(ThinkTankMeDataController::class, 'validateAnswers');
+        $field = static fn (string $id): MeDataEntryFormField => (new MeDataEntryFormField)->forceFill([
+            'id' => $id,
+            'field_type' => MeDataEntryFormField::TYPE_FILE,
+            'validation' => [
+                'allowed_extensions' => ['pdf'],
+                'max_file_size_mb' => 50,
+            ],
+        ]);
+        $validate = static function (array $fields, array $uploads) use ($controller, $validateAnswers): void {
+            $request = Request::create('/', 'POST', [], [], ['answers' => $uploads]);
+            $validateAnswers->invoke($controller, $request, collect($fields), false);
+        };
+
+        $tooManyFiles = [];
+        $manyFileFields = [];
+        for ($index = 1; $index <= 21; $index++) {
+            $fieldId = 'upload-'.$index;
+            $manyFileFields[] = $field($fieldId);
+            $tooManyFiles[$fieldId] = UploadedFile::fake()->create("evidence-{$index}.pdf", 1, 'application/pdf');
+        }
+
+        $countError = null;
+        try {
+            $validate($manyFileFields, $tooManyFiles);
+        } catch (ValidationException $exception) {
+            $countError = $exception;
+        }
+
+        expect($countError)->toBeInstanceOf(ValidationException::class)
+            ->and($countError->errors()['answers.upload-1'][0])->toContain('no more than 20');
+
+        $sizeError = null;
+        try {
+            $validate(
+                [$field('upload-size-1'), $field('upload-size-2')],
+                [
+                    'upload-size-1' => UploadedFile::fake()->create('large-one.pdf', 35 * 1024, 'application/pdf'),
+                    'upload-size-2' => UploadedFile::fake()->create('large-two.pdf', 35 * 1024, 'application/pdf'),
+                ]
+            );
+        } catch (ValidationException $exception) {
+            $sizeError = $exception;
+        }
+
+        expect($sizeError)->toBeInstanceOf(ValidationException::class)
+            ->and($sizeError->errors()['answers.upload-size-1'][0])->toContain('60MB');
+    } finally {
+        if ($bootedHere) {
+            restore_error_handler();
+            restore_exception_handler();
+        }
+    }
+});
 
 it('issues stable opaque lock and attachment tokens and rejects stale writes', function () {
     [, $bootedHere] = bootThinkTankMonitoringApiApplication();
