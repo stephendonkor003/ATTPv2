@@ -6,6 +6,22 @@ it('keeps every data-entry register separated and displays the linked indicator'
         $root.'/resources/views/me/data-entry/index.blade.php'
     );
     $controller = file_get_contents($root.'/app/Http/Controllers/MeDataEntryController.php');
+    preg_match('/<form[^>]*data-period-form.*?<\/form>/s', $view, $periodFormMatch);
+    $periodForm = $periodFormMatch[0] ?? '';
+
+    expect($periodForm)
+        ->toContain('name="portfolio_id"')
+        ->toContain('name="label"')
+        ->toContain('name="period_start"')
+        ->toContain('name="period_end"')
+        ->toContain('name="lifecycle_status"')
+        ->not->toContain('name="code"')
+        ->not->toContain('name="period_type"')
+        ->not->toContain('name="reporting_year"')
+        ->not->toContain('name="submission_opens_at"')
+        ->not->toContain('name="submission_deadline"')
+        ->not->toContain('name="review_deadline"')
+        ->not->toContain('name="instructions"');
 
     expect($view)
         ->toContain('Think Tanks Data Collections')
@@ -64,7 +80,7 @@ it('keeps every data-entry register separated and displays the linked indicator'
         ->toContain("private const TABS = ['collections', 'periods', 'forms', 'reports', 'submissions'];")
         ->toContain("\$tab === 'periods'")
         ->toContain('function duplicateForm(')
-        ->toContain("\$copy->status = MeDataEntryForm::STATUS_DRAFT")
+        ->toContain('$copy->status = MeDataEntryForm::STATUS_DRAFT')
         ->toContain('$section->replicate')
         ->toContain('$field->replicate')
         ->toContain("return \$this->redirectToTab('periods', 'Reporting period created.')")

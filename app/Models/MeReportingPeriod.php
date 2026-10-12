@@ -20,9 +20,13 @@ class MeReportingPeriod extends BaseModel
     public const TYPE_ANNUAL = 'annual';
 
     public const LIFECYCLE_PLANNED = 'planned';
+
     public const LIFECYCLE_OPEN = 'open';
+
     public const LIFECYCLE_CLOSED = 'closed';
+
     public const LIFECYCLE_UNDER_REVIEW = 'under_review';
+
     public const LIFECYCLE_COMPLETED = 'completed';
 
     public const STATUS_DRAFT = 'draft';
@@ -107,8 +111,22 @@ class MeReportingPeriod extends BaseModel
             return false;
         }
 
-        return (! $this->submission_opens_at || now()->greaterThanOrEqualTo($this->submission_opens_at))
-            && (! $this->submission_deadline || now()->lessThanOrEqualTo($this->submission_deadline));
+        $now = now();
+        $opensAt = $this->submissionWindowStartsAt();
+        $closesAt = $this->submissionWindowEndsAt();
+
+        return (! $opensAt || $now->greaterThanOrEqualTo($opensAt))
+            && (! $closesAt || $now->lessThanOrEqualTo($closesAt));
+    }
+
+    public function submissionWindowStartsAt(): ?\Illuminate\Support\Carbon
+    {
+        return $this->period_start?->copy()->startOfDay() ?? $this->submission_opens_at;
+    }
+
+    public function submissionWindowEndsAt(): ?\Illuminate\Support\Carbon
+    {
+        return $this->period_end?->copy()->endOfDay() ?? $this->submission_deadline;
     }
 
     public function isClosed(): bool

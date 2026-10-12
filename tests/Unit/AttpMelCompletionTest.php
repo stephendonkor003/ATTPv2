@@ -176,6 +176,29 @@ it('enforces reporting windows and editable correction states', function () {
     Carbon::setTestNow();
 });
 
+it('uses the reporting-period dates and workflow status as the Think Tank access window', function () {
+    Carbon::setTestNow('2026-10-06 23:59:59');
+    $period = new MeReportingPeriod;
+    $period->setRawAttributes([
+        'status' => MeReportingPeriod::STATUS_ACTIVE,
+        'lifecycle_status' => MeReportingPeriod::LIFECYCLE_OPEN,
+        'period_start' => '2026-10-07',
+        'period_end' => '2026-10-10',
+    ], true);
+    expect($period->isOpenForSubmission())->toBeFalse();
+
+    Carbon::setTestNow('2026-10-07 00:00:00');
+    expect($period->isOpenForSubmission())->toBeTrue();
+    Carbon::setTestNow('2026-10-10 23:59:59');
+    expect($period->isOpenForSubmission())->toBeTrue();
+    Carbon::setTestNow('2026-10-11 00:00:00');
+    expect($period->isOpenForSubmission())->toBeFalse();
+
+    $period->lifecycle_status = MeReportingPeriod::LIFECYCLE_PLANNED;
+    expect($period->isOpenForSubmission())->toBeFalse();
+    Carbon::setTestNow();
+});
+
 it('never treats reviewed or merely verified reports as official approval', function () {
     $report = new MePerformanceReport(['status' => MePerformanceReport::STATUS_REVIEWED]);
     expect($report->isApproved())->toBeFalse();

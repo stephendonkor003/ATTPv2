@@ -4,6 +4,8 @@ use App\Exceptions\ThinkTankApiException;
 use App\Http\Controllers\Api\V1\ThinkTank\MonitoringAssignmentsController;
 use App\Http\Controllers\Api\V1\ThinkTank\MonitoringReportsController;
 use App\Models\IndicatorTarget;
+use App\Models\MeDataCollection;
+use App\Models\MeDataCollectionAssignment;
 use App\Models\MeDataSubmission;
 use App\Models\MePerformanceReport;
 use App\Models\MeReportingPeriod;
@@ -14,6 +16,7 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -194,6 +197,34 @@ it('keeps reporting periods canonical and resolves tenant targets before project
         ->and($applicable->get('indicator-c')->pluck('target_scope')->all())->toBe(['think_tank'])
         ->and($targetYear->invoke($service, $applicable, 2026))->toBe(2)
         ->and($dominantYear->invoke($service, collect([2, 3])))->toBe(3);
+});
+
+it('shows planned and not-yet-started assignments as upcoming and opens only active periods in range', function () {
+    Carbon::setTestNow('2026-10-08 12:00:00');
+    $period = (new MeReportingPeriod)->forceFill([
+        'status' => MeReportingPeriod::STATUS_ACTIVE,
+        'lifecycle_status' => MeReportingPeriod::LIFECYCLE_PLANNED,
+        'period_start' => '2026-10-07',
+        'period_end' => '2026-10-10',
+    ]);
+    $collection = (new MeDataCollection)->forceFill([
+        'status' => MeDataCollection::STATUS_OPEN,
+        'opens_at' => Carbon::parse('2026-10-07 00:00:00'),
+        'due_at' => Carbon::parse('2026-10-10 23:59:59'),
+        'closes_at' => Carbon::parse('2026-10-10 23:59:59'),
+    ]);
+    $collection->setRelation('reportingPeriod', $period);
+    $assignment = new MeDataCollectionAssignment;
+    $assignment->setRelation('collection', $collection);
+    $assignment->setRelation('submission', null);
+    $service = new ThinkTankMeAssignmentService;
+
+    expect($service->stateFor($assignment))->toBe('upcoming');
+    $period->lifecycle_status = MeReportingPeriod::LIFECYCLE_OPEN;
+    expect($service->stateFor($assignment))->toBe('open');
+    $period->period_start = '2026-10-09';
+    expect($service->stateFor($assignment))->toBe('upcoming');
+    Carbon::setTestNow();
 });
 
 it('keeps archived Think Tank results opt-in and distinguishes open from historical periods', function () {

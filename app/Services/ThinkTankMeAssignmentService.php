@@ -108,10 +108,20 @@ class ThinkTankMeAssignmentService
         $collection = $assignment->collection;
         $period = $collection?->reportingPeriod;
 
-        if (! $collection
-            || $collection->status === MeDataCollection::STATUS_CLOSED
-            || ! $period?->isOpenForSubmission()
-            || ($collection->closes_at && $collection->closes_at->isPast())) {
+        if (! $collection || $collection->status === MeDataCollection::STATUS_CLOSED || ! $period) {
+            return 'closed';
+        }
+
+        if ($period->submissionWindowEndsAt()?->isPast()) {
+            return 'closed';
+        }
+
+        if ($period->lifecycle_status === MeReportingPeriod::LIFECYCLE_PLANNED
+            || $period->submissionWindowStartsAt()?->isFuture()) {
+            return 'upcoming';
+        }
+
+        if (! $period->isOpenForSubmission() || ($collection->closes_at && $collection->closes_at->isPast())) {
             return 'closed';
         }
 
@@ -156,6 +166,22 @@ class ThinkTankMeAssignmentService
         $indicator = $form->indicator;
         $period = $collection->reportingPeriod;
         $submission = $assignment->submission;
+        $opensAt = $collection->opens_at;
+        $dueAt = $collection->due_at;
+        $closesAt = $collection->closes_at;
+        $periodOpensAt = $period?->submissionWindowStartsAt();
+        $periodClosesAt = $period?->submissionWindowEndsAt();
+        if ($periodOpensAt && (! $opensAt || $periodOpensAt->gt($opensAt))) {
+            $opensAt = $periodOpensAt;
+        }
+        if ($periodClosesAt) {
+            if (! $dueAt || $periodClosesAt->lt($dueAt)) {
+                $dueAt = $periodClosesAt;
+            }
+            if (! $closesAt || $periodClosesAt->lt($closesAt)) {
+                $closesAt = $periodClosesAt;
+            }
+        }
         $canEdit = $canSubmit
             && $state === 'open'
             && (! $submission || $submission->isEditable())
@@ -176,9 +202,9 @@ class ThinkTankMeAssignmentService
             'period_label' => $period?->label ?: 'Reporting period',
             'period_start' => $period?->period_start,
             'period_end' => $period?->period_end,
-            'opens_at' => $collection->opens_at,
-            'due_at' => $collection->due_at,
-            'closes_at' => $collection->closes_at,
+            'opens_at' => $opensAt,
+            'due_at' => $dueAt,
+            'closes_at' => $closesAt,
             'is_overdue' => $collection->isPastDue() && $state === 'open',
             'submission_status' => $submission?->effectiveStatus(),
             'submission_status_label' => $this->statusLabel($submission?->effectiveStatus()),

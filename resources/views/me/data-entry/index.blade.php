@@ -2793,36 +2793,22 @@
                                     </select>
                                     @error('portfolio_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
                                 </div>
-                                <div class="col-lg-3">
-                                    <label class="form-label" for="period-code">Period code <span class="text-danger">*</span></label>
-                                    <input type="text" id="period-code" name="code" class="form-control text-uppercase @error('code') is-invalid @enderror" value="{{ old('code', $editingPeriod?->code) }}" maxlength="50" pattern="[A-Za-z0-9][A-Za-z0-9._-]*" placeholder="2026-Q3" required>
-                                    @error('code')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                </div>
-                                <div class="col-lg-3">
-                                    <label class="form-label" for="period-type">Period type <span class="text-danger">*</span></label>
-                                    <select id="period-type" name="period_type" class="form-select @error('period_type') is-invalid @enderror" required>
-                                        @foreach (['month' => 'Monthly', 'quarter' => 'Quarterly', 'semi_annual' => 'Semi-Annual', 'year' => 'Year', 'annual' => 'Annual', 'custom' => 'Custom'] as $typeValue => $typeLabel)
-                                            <option value="{{ $typeValue }}" @selected(old('period_type', $editingPeriod?->period_type ?? 'quarter') === $typeValue)>{{ $typeLabel }}</option>
-                                        @endforeach
-                                    </select>
-                                    @error('period_type')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                </div>
                                 <div class="col-lg-6">
                                     <label class="form-label" for="period-label">Display label <span class="text-danger">*</span></label>
                                     <input type="text" id="period-label" name="label" class="form-control @error('label') is-invalid @enderror" value="{{ old('label', $editingPeriod?->label) }}" maxlength="150" placeholder="Quarter 3, 2026" required>
                                     @error('label')<div class="invalid-feedback">{{ $message }}</div>@enderror
                                 </div>
-                                <div class="col-lg-2 col-md-4">
+                                <div class="col-lg-4 col-md-4">
                                     <label class="form-label" for="period-start">Start date <span class="text-danger">*</span></label>
                                     <input type="date" id="period-start" name="period_start" class="form-control @error('period_start') is-invalid @enderror" value="{{ old('period_start', $editingPeriod?->period_start?->format('Y-m-d')) }}" required>
                                     @error('period_start')<div class="invalid-feedback">{{ $message }}</div>@enderror
                                 </div>
-                                <div class="col-lg-2 col-md-4">
+                                <div class="col-lg-4 col-md-4">
                                     <label class="form-label" for="period-end">End date <span class="text-danger">*</span></label>
                                     <input type="date" id="period-end" name="period_end" class="form-control @error('period_end') is-invalid @enderror" value="{{ old('period_end', $editingPeriod?->period_end?->format('Y-m-d')) }}" required>
                                     @error('period_end')<div class="invalid-feedback">{{ $message }}</div>@enderror
                                 </div>
-                                <div class="col-lg-2 col-md-4">
+                                <div class="col-lg-4 col-md-4">
                                     <label class="form-label" for="period-status">Workflow status <span class="text-danger">*</span></label>
                                     <select id="period-status" name="lifecycle_status" class="form-select @error('lifecycle_status') is-invalid @enderror" required>
                                         @foreach (['planned' => 'Planned', 'open' => 'Open', 'closed' => 'Closed', 'under_review' => 'Under review', 'completed' => 'Completed'] as $statusValue => $statusLabel)
@@ -2830,31 +2816,6 @@
                                         @endforeach
                                     </select>
                                     @error('lifecycle_status')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                </div>
-                                <div class="col-lg-2 col-md-4">
-                                    <label class="form-label" for="period-year">Reporting year <span class="text-danger">*</span></label>
-                                    <input type="number" min="2000" max="2100" id="period-year" name="reporting_year" class="form-control @error('reporting_year') is-invalid @enderror" value="{{ old('reporting_year', $editingPeriod?->reporting_year ?? now()->year) }}" required>
-                                    @error('reporting_year')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                </div>
-                                <div class="col-lg-3 col-md-6">
-                                    <label class="form-label" for="submission-opens">Submission opens</label>
-                                    <input type="datetime-local" id="submission-opens" name="submission_opens_at" class="form-control @error('submission_opens_at') is-invalid @enderror" value="{{ old('submission_opens_at', $editingPeriod?->submission_opens_at?->format('Y-m-d\\TH:i')) }}">
-                                    @error('submission_opens_at')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                </div>
-                                <div class="col-lg-3 col-md-6">
-                                    <label class="form-label" for="submission-deadline">Submission deadline</label>
-                                    <input type="datetime-local" id="submission-deadline" name="submission_deadline" class="form-control @error('submission_deadline') is-invalid @enderror" value="{{ old('submission_deadline', $editingPeriod?->submission_deadline?->format('Y-m-d\\TH:i')) }}">
-                                    @error('submission_deadline')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                </div>
-                                <div class="col-lg-3 col-md-6">
-                                    <label class="form-label" for="review-deadline">Review deadline</label>
-                                    <input type="datetime-local" id="review-deadline" name="review_deadline" class="form-control @error('review_deadline') is-invalid @enderror" value="{{ old('review_deadline', $editingPeriod?->review_deadline?->format('Y-m-d\\TH:i')) }}">
-                                    @error('review_deadline')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                </div>
-                                <div class="col-lg-9">
-                                    <label class="form-label" for="period-instructions">Instructions</label>
-                                    <textarea id="period-instructions" name="instructions" class="form-control @error('instructions') is-invalid @enderror" rows="2" maxlength="5000" placeholder="Explain submission expectations, evidence requirements, and review timing.">{{ old('instructions', $editingPeriod?->instructions) }}</textarea>
-                                    @error('instructions')<div class="invalid-feedback">{{ $message }}</div>@enderror
                                 </div>
                             </div>
 
@@ -4851,16 +4812,10 @@
             if (periodForm) {
                 const periodStart = periodForm.querySelector('[name="period_start"]');
                 const periodEnd = periodForm.querySelector('[name="period_end"]');
-                const submissionOpens = periodForm.querySelector('[name="submission_opens_at"]');
-                const submissionDeadline = periodForm.querySelector('[name="submission_deadline"]');
-                const reviewDeadline = periodForm.querySelector('[name="review_deadline"]');
                 const updatePeriodDateLimits = () => {
                     if (periodEnd) periodEnd.min = periodStart?.value || '';
-                    if (submissionOpens) submissionOpens.min = periodStart?.value ? `${periodStart.value}T00:00` : '';
-                    if (submissionDeadline) submissionDeadline.min = submissionOpens?.value || (periodStart?.value ? `${periodStart.value}T00:00` : '');
-                    if (reviewDeadline) reviewDeadline.min = submissionDeadline?.value || (periodEnd?.value ? `${periodEnd.value}T00:00` : '');
                 };
-                [periodStart, periodEnd, submissionOpens, submissionDeadline].forEach((control) => control?.addEventListener('change', updatePeriodDateLimits));
+                [periodStart, periodEnd].forEach((control) => control?.addEventListener('change', updatePeriodDateLimits));
                 updatePeriodDateLimits();
             }
 

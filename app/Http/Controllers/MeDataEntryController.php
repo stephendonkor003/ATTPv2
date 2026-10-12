@@ -19,10 +19,11 @@ use App\Models\Project;
 use App\Models\Sector;
 use App\Models\SubActivity;
 use App\Models\User;
-use App\Services\MeReportingReadinessService;
 use App\Services\MeReportingNotificationService;
+use App\Services\MeReportingReadinessService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -1925,21 +1926,48 @@ class MeDataEntryController extends Controller
 
     private function validatedPeriodPayload(Request $request, ?MeReportingPeriod $period = null): array
     {
-        $request->merge(['code' => Str::upper(trim((string) $request->input('code')))]);
-        $lifecycleStatus = (string) $request->input('lifecycle_status', match ((string) $request->input('status')) {
+        $base = $request->validate([
+            'portfolio_id' => ['required', 'uuid', Rule::exists((new Sector)->getTable(), 'id')],
+            'label' => ['required', 'string', 'max:150'],
+            'period_start' => ['required', 'date'],
+            'period_end' => ['required', 'date', 'after_or_equal:period_start'],
+            'lifecycle_status' => ['nullable', Rule::in([
+                MeReportingPeriod::LIFECYCLE_PLANNED,
+                MeReportingPeriod::LIFECYCLE_OPEN,
+                MeReportingPeriod::LIFECYCLE_CLOSED,
+                MeReportingPeriod::LIFECYCLE_UNDER_REVIEW,
+                MeReportingPeriod::LIFECYCLE_COMPLETED,
+            ])],
+        ]);
+        $requestedStatus = $base['lifecycle_status'] ?? $request->input('status');
+        $lifecycleStatus = match ((string) $requestedStatus) {
+            MeReportingPeriod::STATUS_DRAFT => MeReportingPeriod::LIFECYCLE_PLANNED,
             MeReportingPeriod::STATUS_ACTIVE => MeReportingPeriod::LIFECYCLE_OPEN,
             MeReportingPeriod::STATUS_CLOSED => MeReportingPeriod::LIFECYCLE_CLOSED,
-            default => MeReportingPeriod::LIFECYCLE_PLANNED,
-        });
+            '' => MeReportingPeriod::LIFECYCLE_PLANNED,
+            default => (string) $requestedStatus,
+        };
         $legacyStatus = match ($lifecycleStatus) {
             MeReportingPeriod::LIFECYCLE_OPEN, MeReportingPeriod::LIFECYCLE_UNDER_REVIEW => MeReportingPeriod::STATUS_ACTIVE,
             MeReportingPeriod::LIFECYCLE_CLOSED, MeReportingPeriod::LIFECYCLE_COMPLETED => MeReportingPeriod::STATUS_CLOSED,
             default => MeReportingPeriod::STATUS_DRAFT,
         };
+        $start = Carbon::parse($base['period_start']);
+        $end = Carbon::parse($base['period_end']);
+        $reviewDeadline = $period?->review_deadline;
+        if ($reviewDeadline && $reviewDeadline->lt($end->copy()->endOfDay())) {
+            $reviewDeadline = null;
+        }
         $request->merge([
+            'code' => Str::upper(trim((string) ($period?->code ?: $this->nextReportingPeriodCode($base['label'], $end->year)))),
+            'period_type' => $period?->period_type ?: MeReportingPeriod::TYPE_CUSTOM,
             'lifecycle_status' => $lifecycleStatus,
             'status' => $legacyStatus,
-            'reporting_year' => $request->input('reporting_year') ?: substr((string) $request->input('period_end'), 0, 4),
+            'reporting_year' => $end->year,
+            'submission_opens_at' => $start->copy()->startOfDay(),
+            'submission_deadline' => $end->copy()->endOfDay(),
+            'review_deadline' => $reviewDeadline,
+            'instructions' => $period?->instructions,
         ]);
         $table = (new MeReportingPeriod)->getTable();
         $uniqueCode = Rule::unique($table, 'code');
@@ -1956,9 +1984,7 @@ class MeDataEntryController extends Controller
         }
 
         $validated = $request->validate([
-            'portfolio_id' => ['required', 'uuid', Rule::exists((new Sector)->getTable(), 'id')],
             'code' => ['required', 'string', 'max:50', 'regex:/^[A-Z0-9][A-Z0-9._-]*$/', $uniqueCode],
-            'label' => ['required', 'string', 'max:150'],
             'period_type' => ['required', Rule::in([
                 MeReportingPeriod::TYPE_YEAR,
                 MeReportingPeriod::TYPE_QUARTER,
@@ -1967,8 +1993,6 @@ class MeDataEntryController extends Controller
                 MeReportingPeriod::TYPE_SEMI_ANNUAL,
                 MeReportingPeriod::TYPE_ANNUAL,
             ])],
-            'period_start' => ['required', 'date'],
-            'period_end' => ['required', 'date', 'after_or_equal:period_start'],
             'status' => ['required', Rule::in([
                 MeReportingPeriod::STATUS_DRAFT,
                 MeReportingPeriod::STATUS_ACTIVE,
@@ -1978,19 +2002,29 @@ class MeDataEntryController extends Controller
             'submission_opens_at' => ['nullable', 'date'],
             'submission_deadline' => $submissionDeadlineRules,
             'review_deadline' => $reviewDeadlineRules,
-            'lifecycle_status' => ['required', Rule::in([
-                MeReportingPeriod::LIFECYCLE_PLANNED,
-                MeReportingPeriod::LIFECYCLE_OPEN,
-                MeReportingPeriod::LIFECYCLE_CLOSED,
-                MeReportingPeriod::LIFECYCLE_UNDER_REVIEW,
-                MeReportingPeriod::LIFECYCLE_COMPLETED,
-            ])],
             'instructions' => ['nullable', 'string', 'max:5000'],
         ]);
+        $validated = [...$base, ...$validated, 'lifecycle_status' => $lifecycleStatus];
 
         $this->assertPortfolioInScope($request, (string) $validated['portfolio_id']);
 
         return $validated;
+    }
+
+    private function nextReportingPeriodCode(string $label, int $year): string
+    {
+        $prefix = Str::upper(Str::slug($label, '-'));
+        $prefix = trim(Str::limit($prefix !== '' ? $prefix : 'PERIOD', 35, ''), '-');
+        $base = $prefix.'-'.$year;
+        $candidate = $base;
+        $suffix = 2;
+
+        while (MeReportingPeriod::query()->where('code', $candidate)->exists()) {
+            $candidate = Str::limit($base, 46, '').'-'.$suffix;
+            $suffix++;
+        }
+
+        return $candidate;
     }
 
     private function validatedCollectionPayload(Request $request, ?MeDataCollection $collection = null): array

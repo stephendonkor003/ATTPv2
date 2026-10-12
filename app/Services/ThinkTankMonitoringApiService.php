@@ -101,6 +101,22 @@ class ThinkTankMonitoringApiService
         $fieldOptions = collect($data['fieldOptions']);
         $uploadSettings = collect($data['fieldUploadSettings']);
         $attachments = collect($data['attachments']);
+        $opensAt = $collection->opens_at;
+        $dueAt = $collection->due_at;
+        $closesAt = $collection->closes_at;
+        $periodOpensAt = $period?->submissionWindowStartsAt();
+        $periodClosesAt = $period?->submissionWindowEndsAt();
+        if ($periodOpensAt && (! $opensAt || $periodOpensAt->gt($opensAt))) {
+            $opensAt = $periodOpensAt;
+        }
+        if ($periodClosesAt) {
+            if (! $dueAt || $periodClosesAt->lt($dueAt)) {
+                $dueAt = $periodClosesAt;
+            }
+            if (! $closesAt || $periodClosesAt->lt($closesAt)) {
+                $closesAt = $periodClosesAt;
+            }
+        }
 
         $card = [
             'assignment' => $assignment,
@@ -115,9 +131,9 @@ class ThinkTankMonitoringApiService
             'period_label' => $period?->label ?: 'Reporting period',
             'period_start' => $period?->period_start,
             'period_end' => $period?->period_end,
-            'opens_at' => $collection->opens_at,
-            'due_at' => $collection->due_at,
-            'closes_at' => $collection->closes_at,
+            'opens_at' => $opensAt,
+            'due_at' => $dueAt,
+            'closes_at' => $closesAt,
             'is_overdue' => $collection->isPastDue() && $data['assignmentState'] === 'open',
             'submission_status' => $submission?->effectiveStatus(),
             'submission_status_label' => $this->submissionStatusLabel($submission?->effectiveStatus()),
@@ -157,7 +173,7 @@ class ThinkTankMonitoringApiService
                 'type' => $period?->period_type ?: null,
                 'start' => $this->date($period?->period_start),
                 'end' => $this->date($period?->period_end),
-                'submissionDeadline' => $this->dateTime($period?->submission_deadline),
+                'submissionDeadline' => $this->dateTime($periodClosesAt),
             ],
             'sections' => collect($data['formSections'])->map(function (array $section) use ($fieldOptions, $uploadSettings): array {
                 return [
